@@ -1,6 +1,8 @@
 const BASE_STORAGE_KEY = "newcar-workbench-v1";
 const AUTH_PROFILE_KEY = "newcar-auth-profile";
 const INDICATOR_DEADLINE = new Date("2027-05-26T23:59:59+08:00");
+const INFO_IMAGE_MAX_EDGE = 1600;
+const INFO_IMAGE_QUALITY = 0.82;
 
 function makeId(prefix = "id") {
   if (globalThis.crypto && typeof globalThis.crypto.randomUUID === "function") {
@@ -206,7 +208,7 @@ let selectedCompare = new Set(state.selectedCompare?.length ? state.selectedComp
 
 const viewMeta = {
   dashboard: ["总览", "一眼看到当前最值得看的车、关键风险和今天该做什么。"],
-  garage: ["车源库", "记录备选车、车源类型、成本、权益、证据和推荐状态。"],
+  garage: ["车源库", "记录备选车、车源类型、成本、权益、信息和推荐状态。"],
   detail: ["车源详情", "围绕单台车回答：为什么便宜、是否接近 i6、风险是否值得折价。"],
   compare: ["对比", "按真实成本、i6体感、权益明确度和风险做取舍。"],
   drives: ["试驾", "记录前排舒适、静谧、底盘、车机、智驾和相对 i6 结论。"],
@@ -304,12 +306,24 @@ function normalizeEvidence(item) {
   return {
     id: item.id || makeId("ev"),
     carId: item.carId,
-    title: item.title || "未命名证据",
+    title: item.title || "未命名信息",
     type: item.type || "other",
     status: item.status || "pending",
     url: item.url || "",
     notes: item.notes || "",
+    attachments: Array.isArray(item.attachments) ? item.attachments.map(normalizeAttachment).filter(Boolean) : [],
     createdAt: item.createdAt || new Date().toISOString().slice(0, 10)
+  };
+}
+
+function normalizeAttachment(attachment) {
+  if (!attachment?.dataUrl) return null;
+  return {
+    id: attachment.id || makeId("att"),
+    name: attachment.name || "图片",
+    type: attachment.type || "image/jpeg",
+    size: numberOrBlank(attachment.size),
+    dataUrl: attachment.dataUrl
   };
 }
 
@@ -333,7 +347,11 @@ function normalizeDrive(drive) {
 function saveState() {
   state.selectedCarId = selectedCarId;
   state.selectedCompare = [...selectedCompare];
-  localStorage.setItem(getStorageKey(), JSON.stringify(state, null, 2));
+  try {
+    localStorage.setItem(getStorageKey(), JSON.stringify(state, null, 2));
+  } catch {
+    showToast("本机存储空间不足，建议少量分批上传图片，或先压缩截图。", "danger");
+  }
 }
 
 function getStorageKey() {
@@ -611,6 +629,7 @@ function recommendationClass(value) {
 
 function evidenceTypeLabel(type) {
   return {
+    note: "自由记录",
     listing: "车源截图",
     config: "配置单",
     report: "检测报告",
@@ -652,6 +671,10 @@ function getCarEvidence(carId) {
   return state.evidence.filter((item) => item.carId === carId);
 }
 
+function hasInfoValue(item) {
+  return Boolean(item.title || item.notes || item.url || item.attachments?.length || item.status === "valid");
+}
+
 function costProfile(car) {
   const oneTime = num(car.costs.insurance) + num(car.costs.transport) + num(car.costs.inspection) + num(car.costs.reconditioning);
   const monthly = num(car.batteryMonthly) + num(car.costs.adasMonthly) + num(car.costs.subscriptionMonthly);
@@ -681,7 +704,7 @@ function fitScore(car) {
   const i6 = i6Score(car) * 0.55;
   const comfortBonus = /理想|蔚来|奥迪/i.test(car.name) ? 16 : /极氪|智己/i.test(car.name) ? 8 : 4;
   const sizeScore = /ES8|L80|大型|六座|七座/i.test(`${car.name} ${car.trim}`) ? 4 : 10;
-  const evidenceScore = Math.min(8, getCarEvidence(car.id).filter((item) => item.status === "valid").length * 3);
+  const evidenceScore = Math.min(8, getCarEvidence(car.id).filter(hasInfoValue).length * 3);
   return Math.round(Math.max(0, rangeScore + valueScore + ownershipScore + i6 + comfortBonus + sizeScore + evidenceScore - risk * 0.22));
 }
 
@@ -704,7 +727,7 @@ function analyzeCar(car) {
   const text = `${car.name} ${car.trim} ${car.issues} ${car.notes} ${car.rightsNotes}`;
   const isNio = /蔚来|ES6|ES8|EC6|ET5/i.test(text);
   const evidence = getCarEvidence(car.id);
-  const validEvidenceCount = evidence.filter((item) => item.status === "valid").length;
+  const validEvidenceCount = evidence.filter(hasInfoValue).length;
 
   if (car.battery === "unknown") {
     risks.push({
@@ -808,9 +831,9 @@ function analyzeCar(car) {
   if (validEvidenceCount === 0) {
     risks.push({
       level: "medium",
-      title: "缺少有效证据",
-      detail: "当前没有标记为有效的证据，后续容易被口头承诺带偏。",
-      question: "先补车源页、检测报告、权益截图和客服回复。"
+      title: "缺少关键信息",
+      detail: "当前信息墙里还没有记录，后续容易被口头承诺带偏。",
+      question: "先补车源页、检测报告、权益截图、聊天截图或自己的判断。"
     });
   }
 
@@ -897,7 +920,7 @@ function renderDashboard() {
     <div>
       <div class="eyebrow">当前判断</div>
       <h2>${best ? `${escapeHtml(best.name)} ${escapeHtml(best.trim || "")}：${recommendationLabel(deriveRecommendation(best))}` : "先添加一台车源"}</h2>
-      <p>${best ? escapeHtml(best.nextAction || "补齐证据、成本和试驾记录后再做最终判断。") : "系统会自动生成风险和核验清单。"}</p>
+      <p>${best ? escapeHtml(best.nextAction || "补齐信息、成本和试驾记录后再做最终判断。") : "系统会自动生成风险和核验清单。"}</p>
     </div>
     <div class="deadline-pill">
       <span>指标到期</span>
@@ -1087,7 +1110,7 @@ function renderDetail() {
     <div class="decision-row"><span>i6标尺</span><strong>${i6Score(car)}/100</strong></div>
     <div class="decision-row"><span>3年成本</span><strong>${formatWan(cost.year3)}</strong></div>
     <div class="decision-row"><span>月固定成本</span><strong>${formatNumber(cost.monthly, "元")}</strong></div>
-    <p class="muted">${escapeHtml(car.nextAction || "补齐风险证据后再推进。")}</p>
+    <p class="muted">${escapeHtml(car.nextAction || "补齐关键信息后再推进。")}</p>
   `;
 
   document.querySelector("#costPanel").innerHTML = renderCostPanel(car);
@@ -1179,16 +1202,38 @@ function renderEvidenceWall(car) {
         </div>
         <div class="chip-row tight">
           <span class="chip">${evidenceTypeLabel(item.type)}</span>
-          <span class="chip ${item.status === "valid" ? "ok" : item.status === "conflict" ? "danger" : "warn"}">${evidenceStatusLabel(item.status)}</span>
+          ${item.status && item.status !== "valid" ? `<span class="chip ${item.status === "conflict" ? "danger" : "warn"}">${evidenceStatusLabel(item.status)}</span>` : ""}
+          ${item.attachments?.length ? `<span class="chip info">${item.attachments.length} 张图</span>` : ""}
         </div>
-        <p class="muted">${escapeHtml(item.notes || "暂无说明。")}</p>
+        ${renderInfoAttachments(item)}
+        <p class="muted info-note">${escapeHtml(item.notes || "暂无说明。")}</p>
       </div>
       <div class="evidence-foot">
         <span>${escapeHtml(item.createdAt || "")}</span>
         ${item.url ? `<a href="${escapeAttr(item.url)}" target="_blank" rel="noreferrer">打开</a>` : ""}
       </div>
     </article>
-  `).join("") || `<div class="muted">还没有证据。先把车源截图、检测报告、客服回复放进来。</div>`;
+  `).join("") || `<div class="muted">还没有信息。可以直接写一段判断，或上传车源截图、聊天截图、检测报告照片。</div>`;
+}
+
+function renderInfoAttachments(item) {
+  const attachments = item.attachments || [];
+  const linkedImage = isImageUrl(item.url) ? [{ id: "url", name: "链接图片", dataUrl: item.url }] : [];
+  const images = [...attachments, ...linkedImage];
+  if (!images.length) return "";
+  return `
+    <div class="info-attachments">
+      ${images.map((image) => `
+        <a href="${escapeAttr(image.dataUrl)}" target="_blank" rel="noreferrer" aria-label="${escapeAttr(image.name)}">
+          <img src="${escapeAttr(image.dataUrl)}" alt="${escapeAttr(image.name)}">
+        </a>
+      `).join("")}
+    </div>
+  `;
+}
+
+function isImageUrl(url) {
+  return /^data:image\//.test(url || "") || /\.(png|jpe?g|webp|gif|heic|heif)(\?.*)?$/i.test(url || "");
 }
 
 function renderRiskCard(risk) {
@@ -1524,23 +1569,75 @@ function saveCarFromForm() {
   showToast(index >= 0 ? "车源已更新。" : "车源已添加。", "ok");
 }
 
-function addEvidenceFromForm() {
+async function addEvidenceFromForm() {
   if (!selectedCarId) return;
   const title = getValue("#evidenceTitle");
-  if (!title) return;
+  const url = getValue("#evidenceUrl");
+  const notes = getValue("#evidenceNotes");
+  const files = document.querySelector("#evidenceFiles")?.files;
+  let attachments = [];
+  try {
+    attachments = await filesToInfoAttachments(files);
+  } catch {
+    showToast("有图片读取失败，换一张截图或保存为 JPG/PNG 后再试。", "danger");
+    return;
+  }
+  if (!title && !url && !notes && !attachments.length) {
+    showToast("先写一点信息，或上传照片/截图。", "warn");
+    return;
+  }
+  const fallbackTitle = notes ? notes.slice(0, 24) : attachments[0]?.name || url || "未命名信息";
   state.evidence.unshift({
     id: makeId("ev"),
     carId: selectedCarId,
-    title,
-    type: getValue("#evidenceType"),
-    status: getValue("#evidenceStatus"),
-    url: getValue("#evidenceUrl"),
-    notes: getValue("#evidenceNotes"),
+    title: title || fallbackTitle,
+    type: "note",
+    status: "valid",
+    url,
+    notes,
+    attachments,
     createdAt: new Date().toISOString().slice(0, 10)
   });
   ["#evidenceTitle", "#evidenceUrl", "#evidenceNotes"].forEach((selector) => setValue(selector, ""));
+  if (document.querySelector("#evidenceFiles")) document.querySelector("#evidenceFiles").value = "";
   render();
-  showToast("证据已加入当前车源。", "ok");
+  showToast("信息已加入当前车源。", "ok");
+}
+
+async function filesToInfoAttachments(fileList) {
+  const files = [...(fileList || [])].filter((file) => file.type.startsWith("image/"));
+  return Promise.all(files.map(compressInfoImage));
+}
+
+function compressInfoImage(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("图片读取失败"));
+    reader.onload = () => {
+      const image = new Image();
+      image.onerror = () => reject(new Error("图片解析失败"));
+      image.onload = () => {
+        const scale = Math.min(1, INFO_IMAGE_MAX_EDGE / Math.max(image.width, image.height));
+        const width = Math.max(1, Math.round(image.width * scale));
+        const height = Math.max(1, Math.round(image.height * scale));
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const context = canvas.getContext("2d");
+        context.drawImage(image, 0, 0, width, height);
+        const dataUrl = canvas.toDataURL("image/jpeg", INFO_IMAGE_QUALITY);
+        resolve({
+          id: makeId("att"),
+          name: file.name || "图片",
+          type: "image/jpeg",
+          size: Math.round((dataUrl.length * 3) / 4),
+          dataUrl
+        });
+      };
+      image.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
 }
 
 function exportChecklist() {
@@ -1560,8 +1657,8 @@ function exportChecklist() {
     "## 核验清单",
     ...getChecklist(car).map((item) => `- [ ] ${item}`),
     "",
-    "## 证据",
-    ...getCarEvidence(car.id).map((item) => `- ${evidenceTypeLabel(item.type)} / ${evidenceStatusLabel(item.status)}：${item.title} ${item.url || ""}`)
+    "## 信息墙",
+    ...getCarEvidence(car.id).map((item) => `- ${item.title}${item.url ? ` ${item.url}` : ""}${item.attachments?.length ? `（${item.attachments.length} 张图）` : ""}`)
   ].join("\n");
   const blob = new Blob([content], { type: "text/markdown" });
   const url = URL.createObjectURL(blob);
@@ -1641,10 +1738,10 @@ document.body.addEventListener("click", (event) => {
     render();
   }
   if (deleteEvidenceId) {
-    if (!window.confirm("确定删除这条证据吗？")) return;
+    if (!window.confirm("确定删除这条信息吗？")) return;
     state.evidence = state.evidence.filter((item) => item.id !== deleteEvidenceId);
     render();
-    showToast("证据已删除。", "warn");
+    showToast("信息已删除。", "warn");
   }
   if (shouldAddEvidence) {
     addEvidenceFromForm();
@@ -1669,7 +1766,7 @@ document.querySelector("#carForm").addEventListener("submit", (event) => {
 document.querySelector("#deleteCar").addEventListener("click", () => {
   const id = getValue("#carId");
   const car = state.cars.find((item) => item.id === id);
-  if (car && !window.confirm(`确定删除「${car.name}」吗？相关证据和试驾记录也会删除。`)) return;
+  if (car && !window.confirm(`确定删除「${car.name}」吗？相关信息和试驾记录也会删除。`)) return;
   state.cars = state.cars.filter((car) => car.id !== id);
   state.evidence = state.evidence.filter((item) => item.carId !== id);
   state.drives = state.drives.filter((item) => item.carId !== id);
