@@ -1,21 +1,31 @@
 const STORAGE_KEY = "newcar-workbench-v1";
+const INDICATOR_DEADLINE = new Date("2027-05-26T23:59:59+08:00");
 
-function makeId() {
+function makeId(prefix = "id") {
   if (globalThis.crypto && typeof globalThis.crypto.randomUUID === "function") {
-    return globalThis.crypto.randomUUID();
+    return `${prefix}-${globalThis.crypto.randomUUID()}`;
   }
-  return `car-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+  return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
+
+const seedIds = {
+  es6: makeId("car"),
+  es8: makeId("car"),
+  i6: makeId("car"),
+  g7: makeId("car")
+};
 
 const seedCars = [
   {
-    id: makeId(),
+    id: seedIds.es6,
     name: "蔚来 ES6",
     trim: "2026款 四驱 原厂定制版",
     stage: "contacted",
+    recommendation: "worthViewing",
     url: "https://www.dongchedi.com/usedcar/23944721",
     price: 25.49,
     newPrice: 36.37,
+    targetPrice: 24.3,
     landing: 26.5,
     battery: "buyout",
     batteryMonthly: 0,
@@ -31,19 +41,27 @@ const seedCars = [
     interior: "浅色",
     nop: "unknown",
     report: "basic",
-    image: "http://p9-dcd.byteimg.com/tos-cn-i-dcdx/feffe1ceb54d462ab4c050ad15104810~tplv-f042mdwyw7-original:480:0.image?psm=motor.pc_sh.api",
+    certified: "unknown",
+    image: "https://p9-dcd.byteimg.com/tos-cn-i-dcdx/feffe1ceb54d462ab4c050ad15104810~tplv-f042mdwyw7-original:480:0.image?psm=motor.pc_sh.api",
+    costs: { insurance: 0.75, transport: 0.18, inspection: 0.18, reconditioning: 0.25, adasMonthly: 0, subscriptionMonthly: 0 },
+    experience: { seat: 9, nvh: 8, chassis: 8, cockpit: 7, adas: 7, highway: 8, exterior: 8, interior: 9 },
     options: "主驾零重力座椅、女王副驾、NOMI Mate 3.0，合计约2.57万选装。",
     issues: "准新车1次过户；电池买断和首任权益需要蔚来系统截图确认；公开页是基础检测。",
-    notes: "重点核验电池产权、过户原因、NOP+、完整检测和底盘电池包。"
+    rightsNotes: "重点确认电池产权、NOP+、质保和官方认证状态。",
+    sellerNotes: "懂车帝自营，仍需看完整检测和合同保障条款。",
+    nextAction: "索要电池产权截图、NOP+权益截图、完整检测报告，约第三方复检。",
+    notes: "目前最接近“舒适 + 价格 + 二手可控”的方向，但不能只看放心检分数。"
   },
   {
-    id: makeId(),
+    id: seedIds.es8,
     name: "蔚来 ES8",
     trim: "2026款 六座行政豪华版 BaaS",
     stage: "watching",
+    recommendation: "bargainOnly",
     url: "https://www.dongchedi.com/usedcar/23939227",
     price: 26.89,
     newPrice: 30.67,
+    targetPrice: 25.5,
     landing: 28.2,
     battery: "baas",
     batteryMonthly: 1128,
@@ -59,19 +77,27 @@ const seedCars = [
     interior: "浅色",
     nop: "unknown",
     report: "basic",
-    image: "http://p3-dcd.byteimg.com/tos-cn-i-dcdx/3ee6d8e17f414ad9b5a4546607ec9877~tplv-f042mdwyw7-original:480:0.image?psm=motor.pc_sh.api",
+    certified: "unknown",
+    image: "https://p3-dcd.byteimg.com/tos-cn-i-dcdx/3ee6d8e17f414ad9b5a4546607ec9877~tplv-f042mdwyw7-original:480:0.image?psm=motor.pc_sh.api",
+    costs: { insurance: 0.9, transport: 0.18, inspection: 0.18, reconditioning: 0.3, adasMonthly: 0, subscriptionMonthly: 0 },
+    experience: { seat: 9, nvh: 9, chassis: 9, cockpit: 7, adas: 7, highway: 9, exterior: 7, interior: 9 },
     options: "车顶行李架导轨、NOMI Mate 3.0，合计约0.79万选装。",
     issues: "BaaS月租长期成本高；车衣和颜色变更需看膜下漆面；NOP+大概率不随车。",
-    notes: "车很舒服但对两人用车偏大。按3-5年持有成本看。"
+    rightsNotes: "租电合同、换电权益、NOP+和二手车主权益必须逐条确认。",
+    sellerNotes: "懂车帝自营，关注预售车合同、平台担保和退换承诺是否写入订单。",
+    nextAction: "按3/5年成本压价，不把26.89万当真实价格。",
+    notes: "很舒服，但两人用车偏大，适合价格足够低时捡漏。"
   },
   {
-    id: makeId(),
+    id: seedIds.i6,
     name: "理想 i6",
     trim: "2025款 两驱标准版",
     stage: "watching",
+    recommendation: "waitDrop",
     url: "",
     price: 22.46,
     newPrice: 24.98,
+    targetPrice: 21.3,
     landing: 23.3,
     battery: "buyout",
     batteryMonthly: 0,
@@ -87,19 +113,27 @@ const seedCars = [
     interior: "深色",
     nop: "included",
     report: "basic",
+    certified: "unknown",
     image: "",
+    costs: { insurance: 0.7, transport: 0.18, inspection: 0.18, reconditioning: 0.25, adasMonthly: 0, subscriptionMonthly: 0 },
+    experience: { seat: 10, nvh: 10, chassis: 10, cockpit: 10, adas: 9, highway: 9, exterior: 8, interior: 9 },
     options: "两驱标准版。",
     issues: "价格接近新车权益后成交价；你已观察到疑似修复项较多。",
-    notes: "只有干净车况且压到21万左右才值得继续看。"
+    rightsNotes: "理想辅助驾驶随车状态较清晰，但仍要确认官方认证、质保和维修记录。",
+    sellerNotes: "懂车帝自营，重点看修复项目明细和复检结果。",
+    nextAction: "除非价格到21万附近且复检干净，否则继续等。",
+    notes: "体感标尺车。作为 benchmark，而不是急着买。"
   },
   {
-    id: makeId(),
+    id: seedIds.g7,
     name: "小鹏 G7",
     trim: "2025款 702 Ultra",
     stage: "watching",
+    recommendation: "watch",
     url: "",
     price: 17.19,
     newPrice: 22.58,
+    targetPrice: 16.5,
     landing: 18.0,
     battery: "buyout",
     batteryMonthly: 0,
@@ -115,43 +149,215 @@ const seedCars = [
     interior: "浅色",
     nop: "included",
     report: "basic",
+    certified: "unknown",
     image: "",
+    costs: { insurance: 0.58, transport: 0.2, inspection: 0.18, reconditioning: 0.2, adasMonthly: 0, subscriptionMonthly: 0 },
+    experience: { seat: 7, nvh: 7, chassis: 7, cockpit: 8, adas: 9, highway: 8, exterior: 7, interior: 7 },
     options: "Ultra智驾版本。",
     issues: "舒适、静谧和内饰高级感弱于理想/蔚来。",
-    notes: "作为性价比和智驾备选很强。"
+    rightsNotes: "智驾能力强，但要确认二手权益和官方质保。",
+    sellerNotes: "懂车帝自营武汉店，可作为性价比对照样本。",
+    nextAction: "只在预算明显收紧或智驾优先时继续看。",
+    notes: "性价比强，但不是最贴近你偏好的舒适取向。"
   }
 ];
 
-let state = loadState();
+const seedEvidence = [
+  {
+    id: makeId("ev"),
+    carId: seedIds.es6,
+    title: "懂车帝车源页截图",
+    type: "listing",
+    status: "valid",
+    url: "https://www.dongchedi.com/usedcar/23944721",
+    notes: "25.49万，2026款 ES6 买断，1次过户，基础检测。",
+    createdAt: "2026-05-29"
+  },
+  {
+    id: makeId("ev"),
+    carId: seedIds.es6,
+    title: "NOP+权益待确认",
+    type: "rights",
+    status: "pending",
+    url: "",
+    notes: "需要蔚来官方 App 或客服书面确认。",
+    createdAt: "2026-05-29"
+  },
+  {
+    id: makeId("ev"),
+    carId: seedIds.i6,
+    title: "重庆 i6 疑似修复项",
+    type: "report",
+    status: "conflict",
+    url: "",
+    notes: "用户主观判断修复地方较多，需要完整检测和复检。",
+    createdAt: "2026-05-29"
+  }
+];
+
+let state = normalizeState(loadState());
 let activeView = "dashboard";
-let selectedCompare = new Set(state.cars.slice(0, 3).map((car) => car.id));
+let selectedCarId = state.selectedCarId || state.cars[0]?.id || "";
+let selectedCompare = new Set(state.selectedCompare?.length ? state.selectedCompare : state.cars.slice(0, 3).map((car) => car.id));
 
 const viewMeta = {
-  dashboard: ["总览", "北京纯电指标，围绕舒适、续航、智能和车况风险筛车。"],
-  garage: ["车库", "记录备选车、车源、价格、权益和检测信息。"],
-  compare: ["对比", "把候选车放在同一张表里看真实取舍。"],
-  drives: ["试驾", "记录前排舒适、静谧、底盘、车机和智驾体验。"],
-  risks: ["风险", "按车源信息自动提示可能存在的坑。"]
+  dashboard: ["总览", "一眼看到当前最值得看的车、关键风险和今天该做什么。"],
+  garage: ["车源库", "记录备选车、车源类型、成本、权益、证据和推荐状态。"],
+  detail: ["车源详情", "围绕单台车回答：为什么便宜、是否接近 i6、风险是否值得折价。"],
+  compare: ["对比", "按真实成本、i6体感、权益明确度和风险做取舍。"],
+  drives: ["试驾", "记录前排舒适、静谧、底盘、车机、智驾和相对 i6 结论。"],
+  risks: ["风险", "按车源信息自动提示二手新能源可能存在的坑。"],
+  sellers: ["商家", "聚合卖家身份、承诺、保障和车源风险。"],
+  timeline: ["时间线", "跟踪指标到期、降价目标、复检和试驾节奏。"]
 };
 
 function loadState() {
   const raw = localStorage.getItem(STORAGE_KEY);
   if (!raw) {
-    return { cars: seedCars, drives: [] };
+    return { cars: seedCars, evidence: seedEvidence, drives: [] };
   }
   try {
-    const parsed = JSON.parse(raw);
-    return {
-      cars: Array.isArray(parsed.cars) ? parsed.cars : seedCars,
-      drives: Array.isArray(parsed.drives) ? parsed.drives : []
-    };
+    return JSON.parse(raw);
   } catch {
-    return { cars: seedCars, drives: [] };
+    return { cars: seedCars, evidence: seedEvidence, drives: [] };
   }
 }
 
+function normalizeState(rawState) {
+  const cars = Array.isArray(rawState.cars) && rawState.cars.length ? rawState.cars.map(normalizeCar) : seedCars.map(normalizeCar);
+  const carIds = new Set(cars.map((car) => car.id));
+  const evidence = Array.isArray(rawState.evidence)
+    ? rawState.evidence.filter((item) => carIds.has(item.carId)).map(normalizeEvidence)
+    : seedEvidence.filter((item) => carIds.has(item.carId)).map(normalizeEvidence);
+  const drives = Array.isArray(rawState.drives) ? rawState.drives.map(normalizeDrive) : [];
+  return {
+    cars,
+    evidence,
+    drives,
+    selectedCarId: rawState.selectedCarId || cars[0]?.id || "",
+    selectedCompare: Array.isArray(rawState.selectedCompare) ? rawState.selectedCompare.filter((id) => carIds.has(id)) : []
+  };
+}
+
+function normalizeCar(car) {
+  const experience = car.experience || {};
+  const costs = car.costs || {};
+  return {
+    id: car.id || makeId("car"),
+    name: car.name || "",
+    trim: car.trim || "",
+    stage: car.stage || "watching",
+    recommendation: car.recommendation || "auto",
+    url: car.url || "",
+    price: numberOrBlank(car.price),
+    newPrice: numberOrBlank(car.newPrice),
+    targetPrice: numberOrBlank(car.targetPrice),
+    landing: numberOrBlank(car.landing),
+    battery: car.battery || "unknown",
+    batteryMonthly: numberOrBlank(car.batteryMonthly),
+    batterySize: numberOrBlank(car.batterySize),
+    range: numberOrBlank(car.range),
+    mileage: numberOrBlank(car.mileage),
+    plateDate: car.plateDate || "",
+    transfers: numberOrBlank(car.transfers),
+    city: car.city || "",
+    source: car.source || "",
+    seller: car.seller || "",
+    exterior: car.exterior || "",
+    interior: car.interior || "",
+    nop: car.nop || "unknown",
+    report: car.report || "basic",
+    certified: car.certified || "unknown",
+    image: car.image || "",
+    costs: {
+      insurance: numberOrBlank(costs.insurance),
+      transport: numberOrBlank(costs.transport),
+      inspection: numberOrBlank(costs.inspection),
+      reconditioning: numberOrBlank(costs.reconditioning),
+      adasMonthly: numberOrBlank(costs.adasMonthly),
+      subscriptionMonthly: numberOrBlank(costs.subscriptionMonthly)
+    },
+    experience: {
+      seat: numberOrDefault(experience.seat, brandDefault(car, "seat")),
+      nvh: numberOrDefault(experience.nvh, brandDefault(car, "nvh")),
+      chassis: numberOrDefault(experience.chassis, brandDefault(car, "chassis")),
+      cockpit: numberOrDefault(experience.cockpit, brandDefault(car, "cockpit")),
+      adas: numberOrDefault(experience.adas, brandDefault(car, "adas")),
+      highway: numberOrDefault(experience.highway, brandDefault(car, "highway")),
+      exterior: numberOrDefault(experience.exterior, 8),
+      interior: numberOrDefault(experience.interior, brandDefault(car, "interior"))
+    },
+    options: car.options || "",
+    issues: car.issues || "",
+    rightsNotes: car.rightsNotes || "",
+    sellerNotes: car.sellerNotes || "",
+    nextAction: car.nextAction || "",
+    notes: car.notes || ""
+  };
+}
+
+function normalizeEvidence(item) {
+  return {
+    id: item.id || makeId("ev"),
+    carId: item.carId,
+    title: item.title || "未命名证据",
+    type: item.type || "other",
+    status: item.status || "pending",
+    url: item.url || "",
+    notes: item.notes || "",
+    createdAt: item.createdAt || new Date().toISOString().slice(0, 10)
+  };
+}
+
+function normalizeDrive(drive) {
+  return {
+    id: drive.id || makeId("drive"),
+    carId: drive.carId || "",
+    date: drive.date || "",
+    place: drive.place || "",
+    seat: numberOrDefault(drive.seat, 8),
+    nvh: numberOrDefault(drive.nvh, 8),
+    chassis: numberOrDefault(drive.chassis, 8),
+    cockpit: numberOrDefault(drive.cockpit, 8),
+    adas: numberOrDefault(drive.adas, 8),
+    highway: numberOrDefault(drive.highway ?? drive.parking, 8),
+    relative: drive.relative || "similar",
+    notes: drive.notes || ""
+  };
+}
+
 function saveState() {
+  state.selectedCarId = selectedCarId;
+  state.selectedCompare = [...selectedCompare];
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state, null, 2));
+}
+
+function numberOrBlank(value) {
+  if (value === "" || value === undefined || value === null || Number.isNaN(Number(value))) return "";
+  return Number(value);
+}
+
+function numberOrDefault(value, fallback) {
+  const parsed = numberOrBlank(value);
+  return parsed === "" ? fallback : parsed;
+}
+
+function num(value) {
+  return Number(value || 0);
+}
+
+function brandDefault(car, key) {
+  const text = `${car.name || ""} ${car.trim || ""}`;
+  const presets = {
+    "理想": { seat: 10, nvh: 10, chassis: 10, cockpit: 10, adas: 9, highway: 9, interior: 9 },
+    "蔚来": { seat: 9, nvh: 9, chassis: 9, cockpit: 7, adas: 7, highway: 9, interior: 9 },
+    "小鹏": { seat: 7, nvh: 7, chassis: 7, cockpit: 8, adas: 9, highway: 8, interior: 7 },
+    "极氪": { seat: 8, nvh: 8, chassis: 8, cockpit: 7, adas: 7, highway: 8, interior: 8 },
+    "智己": { seat: 8, nvh: 8, chassis: 8, cockpit: 7, adas: 7, highway: 8, interior: 8 },
+    "奥迪": { seat: 8, nvh: 9, chassis: 9, cockpit: 7, adas: 7, highway: 9, interior: 9 }
+  };
+  const matched = Object.keys(presets).find((brand) => text.includes(brand));
+  return matched ? presets[matched][key] || 8 : 8;
 }
 
 function formatWan(value) {
@@ -164,12 +370,20 @@ function formatNumber(value, suffix = "") {
   return `${Number(value).toLocaleString("zh-CN")}${suffix}`;
 }
 
+function formatPct(value) {
+  return value === null || value === undefined ? "-" : `${value.toFixed(1)}%`;
+}
+
 function monthsSince(plateDate) {
   if (!plateDate) return null;
-  const date = new Date(`${plateDate}-01`);
+  const date = new Date(`${plateDate}-01T00:00:00+08:00`);
   if (Number.isNaN(date.getTime())) return null;
   const now = new Date();
   return Math.max(0, (now.getFullYear() - date.getFullYear()) * 12 + now.getMonth() - date.getMonth());
+}
+
+function daysUntilDeadline() {
+  return Math.max(0, Math.ceil((INDICATOR_DEADLINE.getTime() - Date.now()) / 86400000));
 }
 
 function getDiscountPct(car) {
@@ -193,12 +407,14 @@ function stageLabel(stage) {
     contacted: "已联系",
     "test-drive": "已试驾",
     negotiating: "谈价",
-    rejected: "排除"
+    recheck: "待复检",
+    rejected: "排除",
+    purchased: "已成交"
   }[stage] || "观察";
 }
 
 function batteryLabel(type) {
-  return { buyout: "买断", baas: "租电", unknown: "待确认" }[type] || "待确认";
+  return { buyout: "买断", baas: "租电/BaaS", unknown: "待确认" }[type] || "待确认";
 }
 
 function nopLabel(nop) {
@@ -218,77 +434,295 @@ function reportLabel(report) {
   }[report] || "待确认";
 }
 
-function analyzeCar(car) {
-  const risks = [];
-  const ageMonths = monthsSince(car.plateDate);
-  const discount = getDiscountPct(car);
-  const isNio = /蔚来|ES6|ES8|EC6|ET5/i.test(`${car.name} ${car.trim}`);
+function certifiedLabel(certified) {
+  return {
+    unknown: "认证待确认",
+    yes: "官方认证",
+    no: "非官方认证"
+  }[certified] || "认证待确认";
+}
 
-  if (car.battery === "unknown") {
-    risks.push({ level: "high", title: "电池产权未确认", detail: "蔚来/新能源二手车必须先确认买断、BaaS、月租和是否欠费。" });
-  }
+function recommendationLabel(value) {
+  return {
+    auto: "自动判断",
+    worthViewing: "值得看",
+    watch: "继续观察",
+    waitDrop: "等降价",
+    bargainOnly: "压价捡漏",
+    reject: "排除"
+  }[value] || "继续观察";
+}
 
-  if (isNio && car.battery === "buyout" && car.price && car.newPrice && discount > 24 && ageMonths !== null && ageMonths <= 3) {
-    risks.push({ level: "high", title: "准新买断车折价异常", detail: "刚上牌、低里程、买断电池却大幅折价，需解释来源和过户原因。" });
-  }
+function recommendationClass(value) {
+  return {
+    worthViewing: "ok",
+    watch: "info",
+    waitDrop: "warn",
+    bargainOnly: "warn",
+    reject: "danger",
+    auto: "info"
+  }[value] || "info";
+}
 
-  if (car.transfers > 0 && ageMonths !== null && ageMonths <= 6) {
-    risks.push({ level: "high", title: "准新车已有过户", detail: "需要确认是否展车、试驾车、公司户、渠道车、退订车、抵押或手续流转车。" });
-  }
+function evidenceTypeLabel(type) {
+  return {
+    listing: "车源截图",
+    config: "配置单",
+    report: "检测报告",
+    chat: "客服回复",
+    contract: "合同条款",
+    rights: "权益截图",
+    repair: "维修记录",
+    other: "其他"
+  }[type] || "其他";
+}
 
-  if (car.report !== "full") {
-    risks.push({ level: car.report === "none" ? "high" : "medium", title: "检测颗粒度不足", detail: "基础检测不足以判断钣喷、拆装、底盘、电池包和维修细节。" });
-  }
+function evidenceStatusLabel(status) {
+  return {
+    pending: "待核验",
+    valid: "有效",
+    conflict: "有冲突",
+    expired: "已过期"
+  }[status] || "待核验";
+}
 
-  if (isNio && car.nop === "unknown") {
-    risks.push({ level: "medium", title: "NOP+权益待确认", detail: "二手蔚来不要默认继承NOP+。按需订阅会增加长期成本。" });
-  }
+function relativeLabel(value) {
+  return {
+    better: "优于 i6",
+    similar: "接近 i6",
+    worse: "弱于 i6",
+    unknown: "还不确定"
+  }[value] || "还不确定";
+}
 
-  if (isNio && car.nop === "not-included") {
-    risks.push({ level: "medium", title: "首任智驾权益缺失", detail: "NOP+若不随车，可按未来订阅成本压价。" });
-  }
+function sourceBucket(source) {
+  const text = source || "";
+  if (/自营|官方|认证|懂车帝/.test(text)) return "official";
+  if (/个人/.test(text)) return "personal";
+  if (/车商|专营|新能源|二手/.test(text)) return "dealer";
+  return "dealer";
+}
 
-  if (car.battery === "baas") {
-    risks.push({ level: "medium", title: "BaaS长期成本", detail: `月租${formatNumber(car.batteryMonthly || 0, "元")}会影响3-5年持有成本和二手流通。` });
-  }
+function getCarEvidence(carId) {
+  return state.evidence.filter((item) => item.carId === carId);
+}
 
-  if (car.exterior && /其他|改色|车衣|贴膜|变更/.test(car.exterior + car.issues + car.notes)) {
-    risks.push({ level: "medium", title: "外观颜色或车衣需复核", detail: "检查登记证颜色、膜下漆面、边角包覆、拆装和局部补漆。" });
-  }
+function costProfile(car) {
+  const oneTime = num(car.costs.insurance) + num(car.costs.transport) + num(car.costs.inspection) + num(car.costs.reconditioning);
+  const monthly = num(car.batteryMonthly) + num(car.costs.adasMonthly) + num(car.costs.subscriptionMonthly);
+  const base = num(car.price);
+  const totalForYears = (years) => base + oneTime + (monthly * 12 * years) / 10000;
+  return {
+    base,
+    oneTime,
+    monthly,
+    year1: totalForYears(1),
+    year3: totalForYears(3),
+    year5: totalForYears(5)
+  };
+}
 
-  if (car.city && !/北京/.test(car.city)) {
-    risks.push({ level: "low", title: "异地车源", detail: "确认电子转籍、北京上牌、运输、临牌和补贴领取条件。" });
-  }
-
-  if (!car.url) {
-    risks.push({ level: "low", title: "车源链接缺失", detail: "补充链接后便于追踪价格变化、收藏状态和报告。" });
-  }
-
-  const score = risks.reduce((sum, item) => {
-    return sum + ({ high: 34, medium: 18, low: 8 }[item.level] || 0);
-  }, 0);
-  const cappedScore = Math.min(100, score);
-  return { risks, score: cappedScore, level: riskLevelFromScore(cappedScore) };
+function i6Score(car) {
+  const values = Object.values(car.experience || {}).map(Number).filter((value) => !Number.isNaN(value));
+  if (!values.length) return 0;
+  return Math.round(values.reduce((sum, value) => sum + value, 0) / values.length * 10);
 }
 
 function fitScore(car) {
   const risk = analyzeCar(car).score;
-  const rangeScore = Math.min(20, ((car.range || 0) / 720) * 20);
-  const comfortScore = /理想|蔚来|奥迪/i.test(car.name) ? 22 : /小鹏|极氪/i.test(car.name) ? 16 : 14;
-  const cityScore = /ES8|L80|大型/i.test(`${car.name} ${car.trim}`) ? 10 : 18;
-  const valueScore = Math.min(20, (getDiscountPct(car) || 0) * 0.8);
-  const ownershipScore = car.battery === "buyout" ? 12 : car.battery === "baas" ? 6 : 0;
-  return Math.round(Math.max(0, rangeScore + comfortScore + cityScore + valueScore + ownershipScore - risk * 0.28));
+  const rangeScore = Math.min(14, ((car.range || 0) / 720) * 14);
+  const valueScore = Math.min(10, (getDiscountPct(car) || 0) * 0.45);
+  const ownershipScore = car.battery === "buyout" ? 10 : car.battery === "baas" ? 3 : 0;
+  const i6 = i6Score(car) * 0.55;
+  const comfortBonus = /理想|蔚来|奥迪/i.test(car.name) ? 16 : /极氪|智己/i.test(car.name) ? 8 : 4;
+  const sizeScore = /ES8|L80|大型|六座|七座/i.test(`${car.name} ${car.trim}`) ? 4 : 10;
+  const evidenceScore = Math.min(8, getCarEvidence(car.id).filter((item) => item.status === "valid").length * 3);
+  return Math.round(Math.max(0, rangeScore + valueScore + ownershipScore + i6 + comfortBonus + sizeScore + evidenceScore - risk * 0.22));
+}
+
+function deriveRecommendation(car) {
+  if (car.recommendation && car.recommendation !== "auto") return car.recommendation;
+  if (car.stage === "rejected") return "reject";
+  const risk = analyzeCar(car);
+  const discount = getDiscountPct(car) || 0;
+  if (risk.score >= 82) return "reject";
+  if (risk.score >= 62) return "bargainOnly";
+  if (car.targetPrice && car.price && car.price > car.targetPrice * 1.04) return "waitDrop";
+  if (i6Score(car) >= 78 && risk.level !== "high" && discount >= 18) return "worthViewing";
+  return "watch";
+}
+
+function analyzeCar(car) {
+  const risks = [];
+  const ageMonths = monthsSince(car.plateDate);
+  const discount = getDiscountPct(car);
+  const text = `${car.name} ${car.trim} ${car.issues} ${car.notes} ${car.rightsNotes}`;
+  const isNio = /蔚来|ES6|ES8|EC6|ET5/i.test(text);
+  const evidence = getCarEvidence(car.id);
+  const validEvidenceCount = evidence.filter((item) => item.status === "valid").length;
+
+  if (car.battery === "unknown") {
+    risks.push({
+      level: "high",
+      title: "电池产权未确认",
+      detail: "买断、BaaS、月租、欠费和转移规则必须在付款前确认。",
+      question: "请提供官方 App 中电池产权/租用状态截图。"
+    });
+  }
+
+  if (isNio && car.battery === "buyout" && car.price && car.newPrice && discount > 24 && ageMonths !== null && ageMonths <= 3) {
+    risks.push({
+      level: "high",
+      title: "准新买断车折价异常",
+      detail: "刚上牌、低里程、买断电池却大幅折价，需要解释来源和过户原因。",
+      question: "这台车是展车、试驾车、退订车、公司户还是渠道流转车？"
+    });
+  }
+
+  if (car.transfers > 0 && ageMonths !== null && ageMonths <= 8) {
+    risks.push({
+      level: "high",
+      title: "准新车已有过户",
+      detail: "准新车过户会影响来源判断、质保和后续流通。",
+      question: "请把过户原因写入合同附件，并提供登记证流转页。"
+    });
+  }
+
+  if (car.report !== "full") {
+    risks.push({
+      level: car.report === "none" ? "high" : "medium",
+      title: "检测颗粒度不足",
+      detail: "基础检测不足以判断钣喷、拆装、底盘、电池包和维修细节。",
+      question: "是否支持查博士/第三方复检，能否举升检查底盘和电池包？"
+    });
+  }
+
+  if (isNio && car.nop === "unknown") {
+    risks.push({
+      level: "medium",
+      title: "NOP+权益待确认",
+      detail: "二手蔚来不要默认继承 NOP+。若需订阅，会增加长期成本。",
+      question: "请提供 NOP+ 是否随车的官方截图或客服书面回复。"
+    });
+  }
+
+  if (car.nop === "not-included" || car.nop === "subscription") {
+    risks.push({
+      level: "medium",
+      title: "智驾权益会增加持有成本",
+      detail: "智驾订阅或缺失应进入真实成本模型，也可作为压价依据。",
+      question: "请确认订阅价格、可否按月购买、二手车主是否同价。"
+    });
+  }
+
+  if (car.battery === "baas") {
+    risks.push({
+      level: "medium",
+      title: "BaaS长期成本",
+      detail: `月租${formatNumber(car.batteryMonthly || 0, "元")}会影响3/5年持有成本和二手流通。`,
+      question: "请确认租约转移、后续买断规则、违约责任和月租优惠是否继承。"
+    });
+  }
+
+  if (/车衣|贴膜|改色|颜色变更/.test(`${car.exterior} ${car.issues} ${car.notes}`)) {
+    risks.push({
+      level: "medium",
+      title: "车衣或改色遮蔽漆面",
+      detail: "需要检查膜下漆面、登记证颜色、边角包覆、拆装和局部补漆。",
+      question: "能否揭开边角或用漆膜仪复核膜下漆面？"
+    });
+  }
+
+  if (car.certified !== "yes" && /官方认证/.test(`${car.source} ${car.seller} ${car.sellerNotes}`)) {
+    risks.push({
+      level: "medium",
+      title: "官方认证表述待固化",
+      detail: "图片或商家口径里的官方认证要落到品牌系统或合同条款。",
+      question: "请提供品牌官方认证二手车页面、订单或合同条款。"
+    });
+  }
+
+  if (car.city && !/北京/.test(car.city)) {
+    risks.push({
+      level: "low",
+      title: "异地车源",
+      detail: "需要确认电子转籍、北京上牌、运输、临牌和补贴领取条件。",
+      question: "请确认是否可直接迁入北京，以及运输/临牌费用。"
+    });
+  }
+
+  if (car.price && car.targetPrice && car.price > car.targetPrice * 1.05) {
+    risks.push({
+      level: "low",
+      title: "未到目标成交价",
+      detail: `当前报价比目标价高 ${formatWan(car.price - car.targetPrice)}，适合继续观察或压价。`,
+      question: "可否按目标价谈？是否还有平台券、金融返现或整备减免？"
+    });
+  }
+
+  if (validEvidenceCount === 0) {
+    risks.push({
+      level: "medium",
+      title: "缺少有效证据",
+      detail: "当前没有标记为有效的证据，后续容易被口头承诺带偏。",
+      question: "先补车源页、检测报告、权益截图和客服回复。"
+    });
+  }
+
+  if (!car.url) {
+    risks.push({
+      level: "low",
+      title: "车源链接缺失",
+      detail: "补充链接后便于追踪价格变化、收藏状态和报告。",
+      question: "补充懂车帝或官方车源链接。"
+    });
+  }
+
+  const score = Math.min(100, risks.reduce((sum, item) => sum + ({ high: 34, medium: 18, low: 8 }[item.level] || 0), 0));
+  return { risks, score, level: riskLevelFromScore(score) };
+}
+
+function getChecklist(car) {
+  const isNio = /蔚来|ES6|ES8|EC6|ET5/i.test(`${car.name} ${car.trim}`);
+  const isLi = /理想|i6|L6|L7|L8|L9/i.test(`${car.name} ${car.trim}`);
+  const items = [
+    "完整出险记录、维保记录、第三方检测报告。",
+    "漆膜检测：前后杠、四门、翼子板、后围板、ABC柱。",
+    "举升检查：底盘、电池包外壳、悬架、轮毂和轮胎。",
+    "手续核验：发票、登记证、是否抵押、是否营运、是否可正常迁入北京。",
+    "把商家承诺写进合同或订单附件，不只保留口头承诺。"
+  ];
+  if (isNio) {
+    items.unshift("蔚来系统截图：电池产权、是否 BaaS、是否欠费、是否可过户。");
+    items.push("蔚来系统截图：NOP+、车联网、质保、道路救援和二手车主权益。");
+  }
+  if (isLi) {
+    items.push("理想官方 App/客服确认：是否官方认证、辅助驾驶权益、保修和维修记录。");
+  }
+  if (car.transfers > 0) items.push("解释准新车过户原因，并写入合同附件。");
+  if (car.battery === "baas") items.push("核实 BaaS 月租、租约转移、后续买断规则和违约责任。");
+  if (car.report !== "full") items.push("付款前约第三方复检，重点看底盘、电池包和结构件。");
+  return items;
 }
 
 function render() {
+  ensureSelectedCar();
   renderNav();
   renderDashboard();
   renderGarage();
+  renderDetail();
   renderCompare();
   renderDrives();
   renderRisks();
+  renderSellers();
+  renderTimeline();
   saveState();
+}
+
+function ensureSelectedCar() {
+  if (!state.cars.some((car) => car.id === selectedCarId)) {
+    selectedCarId = state.cars[0]?.id || "";
+  }
 }
 
 function renderNav() {
@@ -299,7 +733,7 @@ function renderNav() {
   document.querySelector("#viewTitle").textContent = title;
   document.querySelector("#viewSubtitle").textContent = subtitle;
   document.querySelectorAll(".view").forEach((view) => view.classList.remove("active"));
-  document.querySelector(`#${activeView}View`).classList.add("active");
+  document.querySelector(`#${activeView}View`)?.classList.add("active");
 }
 
 function renderDashboard() {
@@ -307,47 +741,73 @@ function renderDashboard() {
   const highCount = risks.filter((risk) => risk.level === "high").length;
   const avgRisk = risks.length ? Math.round(risks.reduce((sum, item) => sum + item.score, 0) / risks.length) : 0;
   const best = [...state.cars].sort((a, b) => fitScore(b) - fitScore(a))[0];
-  const monthly = state.cars.reduce((sum, car) => sum + Number(car.batteryMonthly || 0), 0);
+  const monthly = state.cars.reduce((sum, car) => sum + costProfile(car).monthly, 0);
+
+  document.querySelector("#decisionSummary").innerHTML = `
+    <div>
+      <div class="eyebrow">当前判断</div>
+      <h2>${best ? `${escapeHtml(best.name)} ${escapeHtml(best.trim || "")}：${recommendationLabel(deriveRecommendation(best))}` : "先添加一台车源"}</h2>
+      <p>${best ? escapeHtml(best.nextAction || "补齐证据、成本和试驾记录后再做最终判断。") : "系统会自动生成风险和核验清单。"}</p>
+    </div>
+    <div class="deadline-pill">
+      <span>指标到期</span>
+      <strong>${daysUntilDeadline()} 天</strong>
+    </div>
+  `;
 
   document.querySelector("#metricsGrid").innerHTML = [
-    metric("候选车", state.cars.length, "当前车库数量"),
+    metric("候选车", state.cars.length, best ? `最高匹配：${best.name}` : "当前车库数量"),
     metric("高风险", highCount, "需要先问清楚"),
     metric("平均风险", avgRisk, "0低 100高"),
-    metric("月固定成本", `${monthly.toLocaleString("zh-CN")}元`, "所有租电候选合计")
+    metric("月固定成本", `${monthly.toLocaleString("zh-CN")}元`, "BaaS + 订阅合计")
   ].join("");
 
   const mode = document.querySelector("#rankMode").value;
   const ranked = [...state.cars].sort((a, b) => {
     if (mode === "risk") return analyzeCar(a).score - analyzeCar(b).score;
     if (mode === "value") return (getDiscountPct(b) || 0) - (getDiscountPct(a) || 0);
+    if (mode === "i6") return i6Score(b) - i6Score(a);
+    if (mode === "cost") return costProfile(a).year3 - costProfile(b).year3;
     return fitScore(b) - fitScore(a);
   });
   document.querySelector("#rankedCars").innerHTML = ranked.map((car, index) => {
     const risk = analyzeCar(car);
+    const rec = deriveRecommendation(car);
+    const score = mode === "risk" ? risk.score : mode === "i6" ? i6Score(car) : mode === "cost" ? formatWan(costProfile(car).year3) : fitScore(car);
     return `
-      <div class="rank-item">
+      <button class="rank-item" data-detail="${car.id}">
         <div class="rank-index">${index + 1}</div>
         <div>
           <div class="car-name">${escapeHtml(car.name)}</div>
           <div class="car-trim">${escapeHtml(car.trim || "")}</div>
+          <div class="chip-row tight">
+            <span class="chip ${recommendationClass(rec)}">${recommendationLabel(rec)}</span>
+            <span class="chip ${risk.level}">${riskLabel(risk.level)} ${risk.score}</span>
+          </div>
         </div>
-        <div class="fit-score">${mode === "risk" ? risk.score : fitScore(car)}</div>
-      </div>
+        <div class="fit-score">${score}</div>
+      </button>
     `;
   }).join("");
 
   const actions = state.cars.flatMap((car) => analyzeCar(car).risks.slice(0, 2).map((risk) => ({ car, risk })));
   document.querySelector("#actionList").innerHTML = actions.slice(0, 8).map(({ car, risk }) => `
-    <div class="action-item ${risk.level}">
+    <button class="action-item ${risk.level}" data-detail="${car.id}">
       <strong>${escapeHtml(car.name)}</strong>
       <div>${escapeHtml(risk.title)}</div>
-      <div class="muted">${escapeHtml(risk.detail)}</div>
-    </div>
+      <div class="muted">${escapeHtml(risk.question || risk.detail)}</div>
+    </button>
   `).join("") || `<div class="muted">暂无风险项。</div>`;
 
-  if (best) {
-    document.querySelector(".metric-card:nth-child(1) .metric-foot").textContent = `当前最高匹配：${best.name}`;
-  }
+  document.querySelector("#timelinePreview").innerHTML = buildTimelineItems().slice(0, 6).map((item) => `
+    <div class="timeline-item ${item.level || ""}">
+      <div class="timeline-date">${escapeHtml(item.date)}</div>
+      <div>
+        <strong>${escapeHtml(item.title)}</strong>
+        <p class="muted">${escapeHtml(item.detail)}</p>
+      </div>
+    </div>
+  `).join("");
 }
 
 function metric(label, value, foot) {
@@ -355,7 +815,7 @@ function metric(label, value, foot) {
     <div class="metric-card">
       <div class="metric-label">${label}</div>
       <div class="metric-value">${value}</div>
-      <div class="metric-foot">${foot}</div>
+      <div class="metric-foot">${escapeHtml(foot)}</div>
     </div>
   `;
 }
@@ -364,13 +824,17 @@ function getFilteredCars() {
   const query = document.querySelector("#searchInput")?.value.trim().toLowerCase() || "";
   const stage = document.querySelector("#stageFilter")?.value || "all";
   const risk = document.querySelector("#riskFilter")?.value || "all";
+  const battery = document.querySelector("#batteryFilter")?.value || "all";
+  const source = document.querySelector("#sourceFilter")?.value || "all";
   return state.cars.filter((car) => {
-    const haystack = `${car.name} ${car.trim} ${car.city} ${car.seller} ${car.source}`.toLowerCase();
+    const haystack = `${car.name} ${car.trim} ${car.city} ${car.seller} ${car.source} ${car.notes} ${car.issues}`.toLowerCase();
     const matchesQuery = !query || haystack.includes(query);
     const matchesStage = stage === "all" || car.stage === stage;
     const riskLevel = analyzeCar(car).level;
     const matchesRisk = risk === "all" || riskLevel === risk;
-    return matchesQuery && matchesStage && matchesRisk;
+    const matchesBattery = battery === "all" || car.battery === battery;
+    const matchesSource = source === "all" || sourceBucket(car.source) === source;
+    return matchesQuery && matchesStage && matchesRisk && matchesBattery && matchesSource;
   });
 }
 
@@ -379,6 +843,8 @@ function renderGarage() {
   document.querySelector("#carGrid").innerHTML = cars.map((car) => {
     const risk = analyzeCar(car);
     const discount = getDiscountPct(car);
+    const cost = costProfile(car);
+    const rec = deriveRecommendation(car);
     return `
       <article class="car-card">
         <div class="car-photo">${car.image ? `<img src="${escapeAttr(car.image)}" alt="${escapeAttr(car.name)}">` : `<span>${escapeHtml(car.name)}</span>`}</div>
@@ -391,31 +857,197 @@ function renderGarage() {
             <div class="price">${formatWan(car.price)}</div>
           </div>
           <div class="chip-row">
+            <span class="chip ${recommendationClass(rec)}">${recommendationLabel(rec)}</span>
             <span class="chip ${risk.level}">${riskLabel(risk.level)} ${risk.score}</span>
             <span class="chip">${stageLabel(car.stage)}</span>
             <span class="chip">${batteryLabel(car.battery)}</span>
             ${discount !== null ? `<span class="chip">折让 ${discount.toFixed(1)}%</span>` : ""}
           </div>
           <div class="car-meta">
-            <div class="meta-cell"><div class="meta-label">里程</div><div class="meta-value">${formatNumber(car.mileage, "万km")}</div></div>
-            <div class="meta-cell"><div class="meta-label">续航</div><div class="meta-value">${formatNumber(car.range, "km")}</div></div>
-            <div class="meta-cell"><div class="meta-label">过户</div><div class="meta-value">${formatNumber(car.transfers, "次")}</div></div>
+            <div class="meta-cell"><div class="meta-label">3年成本</div><div class="meta-value">${formatWan(cost.year3)}</div></div>
+            <div class="meta-cell"><div class="meta-label">i6标尺</div><div class="meta-value">${i6Score(car)}/100</div></div>
+            <div class="meta-cell"><div class="meta-label">目标价</div><div class="meta-value">${formatWan(car.targetPrice)}</div></div>
           </div>
           <div class="chip-row">
             <span class="chip">${escapeHtml(car.city || "未知城市")}</span>
             <span class="chip">${escapeHtml(car.source || "未知车源")}</span>
             <span class="chip">${reportLabel(car.report)}</span>
+            <span class="chip">${nopLabel(car.nop)}</span>
           </div>
+          <p class="card-note">${escapeHtml(car.nextAction || analyzeCar(car).risks[0]?.question || "补齐车源信息后再判断。")}</p>
           <div class="card-actions">
+            <button data-detail="${car.id}">详情</button>
             <button data-edit="${car.id}">编辑</button>
             <button data-risk="${car.id}">风险</button>
-            <button data-compare="${car.id}">${selectedCompare.has(car.id) ? "移出对比" : "加入对比"}</button>
+            <button data-compare="${car.id}">${selectedCompare.has(car.id) ? "移出" : "对比"}</button>
             ${car.url ? `<a href="${escapeAttr(car.url)}" target="_blank" rel="noreferrer">打开</a>` : ""}
           </div>
         </div>
       </article>
     `;
   }).join("") || `<div class="muted">没有符合条件的车源。</div>`;
+}
+
+function renderDetail() {
+  const select = document.querySelector("#detailCarSelect");
+  if (!select) return;
+  select.innerHTML = state.cars.map((car) => `<option value="${car.id}">${escapeHtml(car.name)} ${escapeHtml(car.trim || "")}</option>`).join("");
+  if (selectedCarId) select.value = selectedCarId;
+  const car = state.cars.find((item) => item.id === selectedCarId);
+  if (!car) {
+    document.querySelector("#detailHero").innerHTML = `<div class="muted">暂无车源。</div>`;
+    return;
+  }
+  const risk = analyzeCar(car);
+  const rec = deriveRecommendation(car);
+  const cost = costProfile(car);
+  const discount = getDiscountPct(car);
+
+  document.querySelector("#detailHero").innerHTML = `
+    <div class="detail-hero">
+      <div class="detail-image">${car.image ? `<img src="${escapeAttr(car.image)}" alt="${escapeAttr(car.name)}">` : `<span>${escapeHtml(car.name)}</span>`}</div>
+      <div>
+        <div class="chip-row tight">
+          <span class="chip ${recommendationClass(rec)}">${recommendationLabel(rec)}</span>
+          <span class="chip ${risk.level}">${riskLabel(risk.level)} ${risk.score}</span>
+          <span class="chip">${stageLabel(car.stage)}</span>
+        </div>
+        <h2>${escapeHtml(car.name)} ${escapeHtml(car.trim || "")}</h2>
+        <p class="muted">${escapeHtml(car.city || "未知城市")} · ${escapeHtml(car.source || "未知车源")} · ${escapeHtml(car.seller || "未知商家")}</p>
+        <div class="hero-facts">
+          <div><span>售价</span><strong>${formatWan(car.price)}</strong></div>
+          <div><span>新车参考</span><strong>${formatWan(car.newPrice)}</strong></div>
+          <div><span>折价</span><strong>${formatPct(discount)}</strong></div>
+          <div><span>目标价</span><strong>${formatWan(car.targetPrice)}</strong></div>
+        </div>
+        <p class="detail-note">${escapeHtml(car.notes || "暂无备注。")}</p>
+      </div>
+    </div>
+  `;
+
+  document.querySelector("#detailDecision").innerHTML = `
+    <div class="decision-score ${risk.level}">
+      <div>
+        <span>风险分</span>
+        <strong>${risk.score}</strong>
+      </div>
+      <span class="chip ${recommendationClass(rec)}">${recommendationLabel(rec)}</span>
+    </div>
+    <div class="decision-row"><span>综合匹配</span><strong>${fitScore(car)}</strong></div>
+    <div class="decision-row"><span>i6标尺</span><strong>${i6Score(car)}/100</strong></div>
+    <div class="decision-row"><span>3年成本</span><strong>${formatWan(cost.year3)}</strong></div>
+    <div class="decision-row"><span>月固定成本</span><strong>${formatNumber(cost.monthly, "元")}</strong></div>
+    <p class="muted">${escapeHtml(car.nextAction || "补齐风险证据后再推进。")}</p>
+  `;
+
+  document.querySelector("#costPanel").innerHTML = renderCostPanel(car);
+  document.querySelector("#i6Matrix").innerHTML = renderI6Matrix(car);
+  renderEvidenceWall(car);
+  document.querySelector("#whyCheap").innerHTML = risk.risks.map((item) => renderRiskCard(item)).join("") || `<div class="muted">暂无自动风险项。</div>`;
+  document.querySelector("#detailChecklist").innerHTML = getChecklist(car).map((item) => `
+    <div class="check-item">
+      <div class="check-dot"></div>
+      <div>${escapeHtml(item)}</div>
+    </div>
+  `).join("");
+}
+
+function renderCostPanel(car) {
+  const cost = costProfile(car);
+  const rows = [
+    ["车价", cost.base, "成交/报价"],
+    ["一次性成本", cost.oneTime, "保险、运输、复检、整备"],
+    ["1年总成本", cost.year1, `${formatNumber(cost.monthly, "元/月")}`],
+    ["3年总成本", cost.year3, "核心比较口径"],
+    ["5年总成本", cost.year5, "长期持有口径"]
+  ];
+  const max = Math.max(...rows.map((row) => row[1]), 1);
+  return `
+    <div class="cost-grid">
+      ${rows.map(([label, value, hint]) => `
+        <div class="cost-row">
+          <div>
+            <strong>${label}</strong>
+            <span>${escapeHtml(hint)}</span>
+          </div>
+          <div class="cost-bar"><span style="width:${Math.max(6, Math.min(100, value / max * 100))}%"></span></div>
+          <div class="cost-value">${formatWan(value)}</div>
+        </div>
+      `).join("")}
+    </div>
+    <div class="cost-breakdown">
+      <span>保险 ${formatWan(car.costs.insurance)}</span>
+      <span>运输 ${formatWan(car.costs.transport)}</span>
+      <span>检测 ${formatWan(car.costs.inspection)}</span>
+      <span>整备 ${formatWan(car.costs.reconditioning)}</span>
+      <span>BaaS ${formatNumber(car.batteryMonthly, "元/月")}</span>
+      <span>智驾订阅 ${formatNumber(car.costs.adasMonthly, "元/月")}</span>
+    </div>
+  `;
+}
+
+function renderI6Matrix(car) {
+  const rows = [
+    ["前排座椅", car.experience.seat, "座椅支撑、通风、按摩、腿托"],
+    ["静谧性", car.experience.nvh, "低速胎噪、高速风噪、电机声"],
+    ["底盘滤震", car.experience.chassis, "井盖、减速带、连续破损路"],
+    ["车机", car.experience.cockpit, "语音、导航、空调、座椅和媒体"],
+    ["智驾", car.experience.adas, "高速 NOA、变道、接管频率"],
+    ["高速稳定", car.experience.highway, "120km/h 稳定性和信心"],
+    ["外观接受度", car.experience.exterior, "大气耐看、不浮夸"],
+    ["内饰高级感", car.experience.interior, "用料、设计、耐看程度"]
+  ];
+  return `
+    <table class="matrix-table">
+      <thead>
+        <tr><th>维度</th><th>评分</th><th>相对 i6</th><th>核验提示</th></tr>
+      </thead>
+      <tbody>
+        ${rows.map(([label, score, hint]) => `
+          <tr>
+            <td>${label}</td>
+            <td><strong>${score}/10</strong></td>
+            <td>${score >= 9 ? "优于/接近 i6" : score >= 7 ? "接近但需试驾确认" : "弱于 i6"}</td>
+            <td class="muted">${hint}</td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>
+  `;
+}
+
+function renderEvidenceWall(car) {
+  const evidence = getCarEvidence(car.id);
+  document.querySelector("#evidenceWall").innerHTML = evidence.map((item) => `
+    <article class="evidence-card ${item.status}">
+      <div>
+        <div class="panel-head compact-head">
+          <strong>${escapeHtml(item.title)}</strong>
+          <button class="mini-button" data-delete-evidence="${item.id}" type="button">删除</button>
+        </div>
+        <div class="chip-row tight">
+          <span class="chip">${evidenceTypeLabel(item.type)}</span>
+          <span class="chip ${item.status === "valid" ? "ok" : item.status === "conflict" ? "danger" : "warn"}">${evidenceStatusLabel(item.status)}</span>
+        </div>
+        <p class="muted">${escapeHtml(item.notes || "暂无说明。")}</p>
+      </div>
+      <div class="evidence-foot">
+        <span>${escapeHtml(item.createdAt || "")}</span>
+        ${item.url ? `<a href="${escapeAttr(item.url)}" target="_blank" rel="noreferrer">打开</a>` : ""}
+      </div>
+    </article>
+  `).join("") || `<div class="muted">还没有证据。先把车源截图、检测报告、客服回复放进来。</div>`;
+}
+
+function renderRiskCard(risk) {
+  return `
+    <article class="risk-card ${risk.level}">
+      <div class="chip-row tight"><span class="chip ${risk.level}">${riskLabel(risk.level)}</span></div>
+      <h3>${escapeHtml(risk.title)}</h3>
+      <p class="muted">${escapeHtml(risk.detail)}</p>
+      <p class="risk-question">${escapeHtml(risk.question || "")}</p>
+    </article>
+  `;
 }
 
 function renderCompare() {
@@ -426,20 +1058,26 @@ function renderCompare() {
     return;
   }
   const rows = [
+    ["推荐结论", (car) => recommendationLabel(deriveRecommendation(car))],
     ["售价", (car) => formatWan(car.price)],
+    ["目标价", (car) => formatWan(car.targetPrice)],
     ["新车同配置", (car) => formatWan(car.newPrice)],
-    ["折让", (car) => getDiscountPct(car) === null ? "-" : `${getDiscountPct(car).toFixed(1)}%`],
-    ["落地估算", (car) => formatWan(car.landing)],
+    ["折让", (car) => formatPct(getDiscountPct(car))],
+    ["3年成本", (car) => formatWan(costProfile(car).year3)],
+    ["5年成本", (car) => formatWan(costProfile(car).year5)],
+    ["月固定成本", (car) => formatNumber(costProfile(car).monthly, "元")],
+    ["i6体感", (car) => `${i6Score(car)}/100`],
+    ["前排/静谧/底盘", (car) => `${car.experience.seat}/${car.experience.nvh}/${car.experience.chassis}`],
+    ["车机/智驾", (car) => `${car.experience.cockpit}/${car.experience.adas}`],
     ["电池", (car) => `${batteryLabel(car.battery)}${car.batteryMonthly ? ` / ${car.batteryMonthly}元月` : ""}`],
     ["续航", (car) => formatNumber(car.range, "km")],
     ["里程", (car) => formatNumber(car.mileage, "万km")],
     ["过户", (car) => formatNumber(car.transfers, "次")],
-    ["城市", (car) => car.city || "-"],
-    ["内饰", (car) => car.interior || "-"],
+    ["车源", (car) => `${car.city || "-"} · ${car.source || "-"}`],
     ["NOP/智驾", (car) => nopLabel(car.nop)],
     ["检测", (car) => reportLabel(car.report)],
     ["风险", (car) => `${riskLabel(analyzeCar(car).level)} ${analyzeCar(car).score}`],
-    ["备注", (car) => car.notes || "-"]
+    ["下一步", (car) => car.nextAction || "-"]
   ];
   document.querySelector("#compareTableWrap").innerHTML = `
     <table>
@@ -458,12 +1096,12 @@ function renderDrives() {
   select.innerHTML = state.cars.map((car) => `<option value="${car.id}">${escapeHtml(car.name)} ${escapeHtml(car.trim || "")}</option>`).join("");
   document.querySelector("#driveList").innerHTML = state.drives.map((drive) => {
     const car = state.cars.find((item) => item.id === drive.carId);
-    const avg = Math.round((drive.seat + drive.nvh + drive.chassis + drive.cockpit + drive.adas + drive.parking) / 6);
+    const avg = Math.round((drive.seat + drive.nvh + drive.chassis + drive.cockpit + drive.adas + drive.highway) / 6);
     return `
       <article class="drive-card">
-        <div class="panel-head">
+        <div class="panel-head compact-head">
           <h3>${escapeHtml(car ? car.name : "已删除车辆")}</h3>
-          <span class="chip">${avg}/10</span>
+          <span class="chip ${avg >= 8 ? "ok" : avg >= 7 ? "warn" : "danger"}">${avg}/10 · ${relativeLabel(drive.relative)}</span>
         </div>
         <div class="muted">${escapeHtml(drive.date || "-")} · ${escapeHtml(drive.place || "-")}</div>
         <div class="chip-row">
@@ -472,7 +1110,7 @@ function renderDrives() {
           <span class="chip">底盘 ${drive.chassis}</span>
           <span class="chip">车机 ${drive.cockpit}</span>
           <span class="chip">智驾 ${drive.adas}</span>
-          <span class="chip">停车 ${drive.parking}</span>
+          <span class="chip">高速 ${drive.highway}</span>
         </div>
         <p class="drive-notes">${escapeHtml(drive.notes || "")}</p>
       </article>
@@ -482,7 +1120,7 @@ function renderDrives() {
 
 function renderRisks() {
   const select = document.querySelector("#riskCarSelect");
-  const current = select.value || state.cars[0]?.id;
+  const current = select.value || selectedCarId || state.cars[0]?.id;
   select.innerHTML = state.cars.map((car) => `<option value="${car.id}">${escapeHtml(car.name)} ${escapeHtml(car.trim || "")}</option>`).join("");
   if (current && state.cars.some((car) => car.id === current)) select.value = current;
   const car = state.cars.find((item) => item.id === select.value) || state.cars[0];
@@ -496,23 +1134,18 @@ function renderRisks() {
     <div class="risk-summary">
       <div class="risk-dial ${result.level}">${result.score}</div>
       <div>
-        <h3>${escapeHtml(car.name)}</h3>
-        <div class="muted">${escapeHtml(car.trim || "")}</div>
+        <h3>${escapeHtml(car.name)} ${escapeHtml(car.trim || "")}</h3>
+        <div class="muted">${escapeHtml(car.seller || "-")} · ${escapeHtml(car.city || "-")}</div>
         <div class="chip-row">
           <span class="chip ${result.level}">${riskLabel(result.level)}</span>
           <span class="chip">${batteryLabel(car.battery)}</span>
           <span class="chip">${nopLabel(car.nop)}</span>
+          <span class="chip">${reportLabel(car.report)}</span>
         </div>
       </div>
     </div>
     <div class="risk-list">
-      ${result.risks.map((risk) => `
-        <article class="risk-card ${risk.level}">
-          <div class="chip-row"><span class="chip ${risk.level}">${riskLabel(risk.level)}</span></div>
-          <h3>${escapeHtml(risk.title)}</h3>
-          <p class="muted">${escapeHtml(risk.detail)}</p>
-        </article>
-      `).join("") || `<div class="muted">暂无自动风险项。</div>`}
+      ${result.risks.map(renderRiskCard).join("") || `<div class="muted">暂无自动风险项。</div>`}
     </div>
   `;
   document.querySelector("#checklist").innerHTML = getChecklist(car).map((item) => `
@@ -523,24 +1156,102 @@ function renderRisks() {
   `).join("");
 }
 
-function getChecklist(car) {
-  const isNio = /蔚来|ES6|ES8|EC6|ET5/i.test(`${car.name} ${car.trim}`);
+function renderSellers() {
+  const sellers = groupSellers();
+  document.querySelector("#sellerGrid").innerHTML = sellers.map((seller) => {
+    const avgRisk = seller.cars.length ? Math.round(seller.cars.reduce((sum, car) => sum + analyzeCar(car).score, 0) / seller.cars.length) : 0;
+    const level = riskLevelFromScore(avgRisk);
+    return `
+      <article class="seller-card">
+        <div class="panel-head compact-head">
+          <div>
+            <h3>${escapeHtml(seller.name)}</h3>
+            <div class="muted">${escapeHtml(seller.type)} · ${seller.cars.length} 台车源</div>
+          </div>
+          <span class="chip ${level}">均值 ${avgRisk}</span>
+        </div>
+        <div class="seller-cars">
+          ${seller.cars.map((car) => `
+            <button data-detail="${car.id}">
+              <strong>${escapeHtml(car.name)}</strong>
+              <span>${formatWan(car.price)} · ${recommendationLabel(deriveRecommendation(car))}</span>
+            </button>
+          `).join("")}
+        </div>
+        <p class="muted">${escapeHtml(seller.notes || "暂无背调备注。")}</p>
+      </article>
+    `;
+  }).join("") || `<div class="muted">暂无商家。</div>`;
+}
+
+function groupSellers() {
+  const map = new Map();
+  state.cars.forEach((car) => {
+    const name = car.seller || car.source || "未知商家";
+    if (!map.has(name)) {
+      map.set(name, {
+        name,
+        type: car.source || "未知类型",
+        notes: car.sellerNotes || "",
+        cars: []
+      });
+    }
+    const entry = map.get(name);
+    entry.cars.push(car);
+    if (!entry.notes && car.sellerNotes) entry.notes = car.sellerNotes;
+  });
+  return [...map.values()].sort((a, b) => b.cars.length - a.cars.length);
+}
+
+function renderTimeline() {
+  document.querySelector("#timelineBoard").innerHTML = buildTimelineItems().map((item) => `
+    <div class="timeline-item ${item.level || ""}">
+      <div class="timeline-date">${escapeHtml(item.date)}</div>
+      <div>
+        <strong>${escapeHtml(item.title)}</strong>
+        <p class="muted">${escapeHtml(item.detail)}</p>
+      </div>
+      ${item.carId ? `<button class="mini-button" data-detail="${item.carId}">详情</button>` : ""}
+    </div>
+  `).join("");
+}
+
+function buildTimelineItems() {
   const items = [
-    "完整出险记录、维保记录、第三方检测报告",
-    "漆膜检测，重点看前后杠、四门、翼子板、后围板",
-    "举升检查底盘、电池包外壳、悬架、轮毂和轮胎",
-    "确认发票、登记证、是否抵押、是否营运、是否可正常迁入北京"
+    {
+      date: "2026-05-26",
+      title: "北京新能源指标下发",
+      detail: `最晚 2027-05-26 前完成登记，当前剩余 ${daysUntilDeadline()} 天。`,
+      level: "ok"
+    }
   ];
-  if (isNio) {
-    items.unshift("蔚来系统截图：电池产权、是否BaaS、是否欠费、是否可过户");
-    items.push("蔚来系统截图：NOP+、车联网、质保、道路救援剩余权益");
-  }
-  if (car.transfers > 0) {
-    items.push("解释准新车过户原因，并写入合同附件");
-  }
-  if (car.battery === "baas") {
-    items.push("核实BaaS月租、租约转移、后续买断规则和违约责任");
-  }
+  state.cars.forEach((car) => {
+    if (car.targetPrice && car.price) {
+      const diff = car.price - car.targetPrice;
+      items.push({
+        date: "价格观察",
+        title: `${car.name} 目标价 ${formatWan(car.targetPrice)}`,
+        detail: diff > 0 ? `当前还高 ${formatWan(diff)}，适合继续等或压价。` : "已经达到目标价，优先核验车况。",
+        level: diff > 0 ? "warn" : "ok",
+        carId: car.id
+      });
+    }
+    if (car.nextAction) {
+      items.push({
+        date: stageLabel(car.stage),
+        title: `${car.name} 下一步`,
+        detail: car.nextAction,
+        level: analyzeCar(car).level,
+        carId: car.id
+      });
+    }
+  });
+  items.push({
+    date: "2027-05-26",
+    title: "指标有效期截止",
+    detail: "购车、验车、转籍和上牌流程都要给自己留冗余。",
+    level: daysUntilDeadline() < 60 ? "high" : "warn"
+  });
   return items;
 }
 
@@ -548,43 +1259,26 @@ function openCarDialog(carId = null) {
   const car = carId ? state.cars.find((item) => item.id === carId) : null;
   document.querySelector("#dialogTitle").textContent = car ? "编辑车源" : "新增车源";
   document.querySelector("#deleteCar").style.display = car ? "inline-block" : "none";
-  const defaults = {
-    id: "",
-    name: "",
-    trim: "",
-    stage: "watching",
-    url: "",
-    price: "",
-    newPrice: "",
-    landing: "",
-    battery: "unknown",
-    batteryMonthly: "",
-    batterySize: "",
-    range: "",
-    mileage: "",
-    plateDate: "",
-    transfers: 0,
-    city: "",
-    source: "",
-    seller: "",
-    exterior: "",
-    interior: "",
-    nop: "unknown",
-    report: "basic",
-    image: "",
-    options: "",
-    issues: "",
-    notes: ""
-  };
-  const data = { ...defaults, ...(car || {}) };
-  setValue("#carId", data.id);
+  const data = normalizeCar(car || {});
+  setValue("#carId", car ? data.id : "");
   setValue("#carName", data.name);
   setValue("#carTrim", data.trim);
   setValue("#carStage", data.stage);
+  setValue("#carRecommendation", data.recommendation);
   setValue("#carUrl", data.url);
+  setValue("#carImage", data.image);
+  setValue("#carCity", data.city);
+  setValue("#carSource", data.source);
+  setValue("#carSeller", data.seller);
+  setValue("#carTargetPrice", data.targetPrice);
   setValue("#carPrice", data.price);
   setValue("#carNewPrice", data.newPrice);
   setValue("#carLanding", data.landing);
+  setValue("#carInsurance", data.costs.insurance);
+  setValue("#carTransport", data.costs.transport);
+  setValue("#carInspection", data.costs.inspection);
+  setValue("#carReconditioning", data.costs.reconditioning);
+  setValue("#carAdasMonthly", data.costs.adasMonthly);
   setValue("#carBattery", data.battery);
   setValue("#carBatteryMonthly", data.batteryMonthly);
   setValue("#carBatterySize", data.batterySize);
@@ -592,44 +1286,55 @@ function openCarDialog(carId = null) {
   setValue("#carMileage", data.mileage);
   setValue("#carPlateDate", data.plateDate);
   setValue("#carTransfers", data.transfers);
-  setValue("#carCity", data.city);
-  setValue("#carSource", data.source);
-  setValue("#carSeller", data.seller);
   setValue("#carExterior", data.exterior);
   setValue("#carInterior", data.interior);
   setValue("#carNop", data.nop);
   setValue("#carReport", data.report);
-  setValue("#carImage", data.image);
+  setValue("#carCertified", data.certified);
+  setValue("#carSeatScore", data.experience.seat);
+  setValue("#carNvhScore", data.experience.nvh);
+  setValue("#carChassisScore", data.experience.chassis);
+  setValue("#carCockpitScore", data.experience.cockpit);
+  setValue("#carAdasScore", data.experience.adas);
+  setValue("#carHighwayScore", data.experience.highway);
+  setValue("#carExteriorScore", data.experience.exterior);
+  setValue("#carInteriorScore", data.experience.interior);
   setValue("#carOptions", data.options);
   setValue("#carIssues", data.issues);
+  setValue("#carRightsNotes", data.rightsNotes);
+  setValue("#carSellerNotes", data.sellerNotes);
+  setValue("#carNextAction", data.nextAction);
   setValue("#carNotes", data.notes);
   document.querySelector("#carDialog").showModal();
 }
 
-function setValue(selector, value) {
-  document.querySelector(selector).value = value ?? "";
-}
-
-function getValue(selector) {
-  return document.querySelector(selector).value.trim();
-}
-
-function numberValue(selector) {
-  const value = getValue(selector);
-  return value === "" ? "" : Number(value);
-}
-
 function saveCarFromForm() {
-  const id = getValue("#carId") || makeId();
-  const car = {
+  const id = getValue("#carId") || makeId("car");
+  const existing = state.cars.find((item) => item.id === id);
+  const car = normalizeCar({
+    ...(existing || {}),
     id,
     name: getValue("#carName"),
     trim: getValue("#carTrim"),
     stage: getValue("#carStage"),
+    recommendation: getValue("#carRecommendation"),
     url: getValue("#carUrl"),
+    image: getValue("#carImage"),
+    city: getValue("#carCity"),
+    source: getValue("#carSource"),
+    seller: getValue("#carSeller"),
+    targetPrice: numberValue("#carTargetPrice"),
     price: numberValue("#carPrice"),
     newPrice: numberValue("#carNewPrice"),
     landing: numberValue("#carLanding"),
+    costs: {
+      insurance: numberValue("#carInsurance"),
+      transport: numberValue("#carTransport"),
+      inspection: numberValue("#carInspection"),
+      reconditioning: numberValue("#carReconditioning"),
+      adasMonthly: numberValue("#carAdasMonthly"),
+      subscriptionMonthly: existing?.costs?.subscriptionMonthly || 0
+    },
     battery: getValue("#carBattery"),
     batteryMonthly: numberValue("#carBatteryMonthly"),
     batterySize: numberValue("#carBatterySize"),
@@ -637,21 +1342,99 @@ function saveCarFromForm() {
     mileage: numberValue("#carMileage"),
     plateDate: getValue("#carPlateDate"),
     transfers: numberValue("#carTransfers"),
-    city: getValue("#carCity"),
-    source: getValue("#carSource"),
-    seller: getValue("#carSeller"),
     exterior: getValue("#carExterior"),
     interior: getValue("#carInterior"),
     nop: getValue("#carNop"),
     report: getValue("#carReport"),
-    image: getValue("#carImage"),
+    certified: getValue("#carCertified"),
+    experience: {
+      seat: numberValue("#carSeatScore"),
+      nvh: numberValue("#carNvhScore"),
+      chassis: numberValue("#carChassisScore"),
+      cockpit: numberValue("#carCockpitScore"),
+      adas: numberValue("#carAdasScore"),
+      highway: numberValue("#carHighwayScore"),
+      exterior: numberValue("#carExteriorScore"),
+      interior: numberValue("#carInteriorScore")
+    },
     options: getValue("#carOptions"),
     issues: getValue("#carIssues"),
+    rightsNotes: getValue("#carRightsNotes"),
+    sellerNotes: getValue("#carSellerNotes"),
+    nextAction: getValue("#carNextAction"),
     notes: getValue("#carNotes")
-  };
+  });
   const index = state.cars.findIndex((item) => item.id === id);
   if (index >= 0) state.cars[index] = car;
   else state.cars.unshift(car);
+  selectedCarId = id;
+  render();
+}
+
+function addEvidenceFromForm() {
+  if (!selectedCarId) return;
+  const title = getValue("#evidenceTitle");
+  if (!title) return;
+  state.evidence.unshift({
+    id: makeId("ev"),
+    carId: selectedCarId,
+    title,
+    type: getValue("#evidenceType"),
+    status: getValue("#evidenceStatus"),
+    url: getValue("#evidenceUrl"),
+    notes: getValue("#evidenceNotes"),
+    createdAt: new Date().toISOString().slice(0, 10)
+  });
+  ["#evidenceTitle", "#evidenceUrl", "#evidenceNotes"].forEach((selector) => setValue(selector, ""));
+  render();
+}
+
+function exportChecklist() {
+  const car = state.cars.find((item) => item.id === selectedCarId);
+  if (!car) return;
+  const risk = analyzeCar(car);
+  const content = [
+    `# ${car.name} ${car.trim} 核验清单`,
+    "",
+    `建议：${recommendationLabel(deriveRecommendation(car))}`,
+    `风险：${riskLabel(risk.level)} ${risk.score}`,
+    `目标价：${formatWan(car.targetPrice)}，当前价：${formatWan(car.price)}`,
+    "",
+    "## 主要风险",
+    ...risk.risks.map((item) => `- [${riskLabel(item.level)}] ${item.title}：${item.question || item.detail}`),
+    "",
+    "## 核验清单",
+    ...getChecklist(car).map((item) => `- [ ] ${item}`),
+    "",
+    "## 证据",
+    ...getCarEvidence(car.id).map((item) => `- ${evidenceTypeLabel(item.type)} / ${evidenceStatusLabel(item.status)}：${item.title} ${item.url || ""}`)
+  ].join("\n");
+  const blob = new Blob([content], { type: "text/markdown" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `${car.name}-${new Date().toISOString().slice(0, 10)}-checklist.md`;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function setValue(selector, value) {
+  const element = document.querySelector(selector);
+  if (element) element.value = value ?? "";
+}
+
+function getValue(selector) {
+  return document.querySelector(selector)?.value.trim() || "";
+}
+
+function numberValue(selector) {
+  const value = getValue(selector);
+  return value === "" ? "" : Number(value);
+}
+
+function switchToDetail(carId) {
+  selectedCarId = carId;
+  activeView = "detail";
   render();
 }
 
@@ -675,11 +1458,36 @@ document.querySelectorAll(".nav-button").forEach((button) => {
   });
 });
 
-document.querySelectorAll("[data-view-link]").forEach((button) => {
-  button.addEventListener("click", () => {
-    activeView = button.dataset.viewLink;
+document.body.addEventListener("click", (event) => {
+  const viewLink = event.target.closest("[data-view-link]")?.dataset.viewLink;
+  const detailId = event.target.closest("[data-detail]")?.dataset.detail;
+  const editId = event.target.closest("[data-edit]")?.dataset.edit;
+  const riskId = event.target.closest("[data-risk]")?.dataset.risk;
+  const compareId = event.target.closest("[data-compare]")?.dataset.compare;
+  const deleteEvidenceId = event.target.closest("[data-delete-evidence]")?.dataset.deleteEvidence;
+
+  if (viewLink) {
+    activeView = viewLink;
     render();
-  });
+  }
+  if (detailId) switchToDetail(detailId);
+  if (editId) openCarDialog(editId);
+  if (riskId) {
+    selectedCarId = riskId;
+    activeView = "risks";
+    render();
+    document.querySelector("#riskCarSelect").value = riskId;
+    renderRisks();
+  }
+  if (compareId) {
+    if (selectedCompare.has(compareId)) selectedCompare.delete(compareId);
+    else selectedCompare.add(compareId);
+    render();
+  }
+  if (deleteEvidenceId) {
+    state.evidence = state.evidence.filter((item) => item.id !== deleteEvidenceId);
+    render();
+  }
 });
 
 document.querySelector("#addCar").addEventListener("click", () => openCarDialog());
@@ -694,37 +1502,45 @@ document.querySelector("#carForm").addEventListener("submit", (event) => {
 document.querySelector("#deleteCar").addEventListener("click", () => {
   const id = getValue("#carId");
   state.cars = state.cars.filter((car) => car.id !== id);
+  state.evidence = state.evidence.filter((item) => item.carId !== id);
+  state.drives = state.drives.filter((item) => item.carId !== id);
   selectedCompare.delete(id);
+  if (selectedCarId === id) selectedCarId = state.cars[0]?.id || "";
   document.querySelector("#carDialog").close();
   render();
 });
 
-document.querySelector("#carGrid").addEventListener("click", (event) => {
-  const editId = event.target.dataset.edit;
-  const riskId = event.target.dataset.risk;
-  const compareId = event.target.dataset.compare;
-  if (editId) openCarDialog(editId);
-  if (riskId) {
-    activeView = "risks";
+[
+  "#searchInput",
+  "#stageFilter",
+  "#riskFilter",
+  "#batteryFilter",
+  "#sourceFilter",
+  "#rankMode",
+  "#riskCarSelect",
+  "#detailCarSelect"
+].forEach((selector) => {
+  document.querySelector(selector)?.addEventListener("input", (event) => {
+    if (selector === "#detailCarSelect") selectedCarId = event.target.value;
     render();
-    document.querySelector("#riskCarSelect").value = riskId;
-    renderRisks();
-  }
-  if (compareId) {
-    if (selectedCompare.has(compareId)) selectedCompare.delete(compareId);
-    else selectedCompare.add(compareId);
-    render();
-  }
+  });
 });
 
-["#searchInput", "#stageFilter", "#riskFilter", "#rankMode", "#riskCarSelect"].forEach((selector) => {
-  document.querySelector(selector)?.addEventListener("input", render);
+document.querySelector("#editCurrentCar").addEventListener("click", () => {
+  if (selectedCarId) openCarDialog(selectedCarId);
+});
+
+document.querySelector("#exportChecklist").addEventListener("click", exportChecklist);
+
+document.querySelector("#evidenceForm").addEventListener("submit", (event) => {
+  event.preventDefault();
+  addEvidenceFromForm();
 });
 
 document.querySelector("#driveForm").addEventListener("submit", (event) => {
   event.preventDefault();
   state.drives.unshift({
-    id: makeId(),
+    id: makeId("drive"),
     carId: getValue("#driveCar"),
     date: getValue("#driveDate"),
     place: getValue("#drivePlace"),
@@ -733,10 +1549,11 @@ document.querySelector("#driveForm").addEventListener("submit", (event) => {
     chassis: Number(document.querySelector("#scoreChassis").value),
     cockpit: Number(document.querySelector("#scoreCockpit").value),
     adas: Number(document.querySelector("#scoreAdas").value),
-    parking: Number(document.querySelector("#scoreParking").value),
+    highway: Number(document.querySelector("#scoreHighway").value),
+    relative: getValue("#driveRelative"),
     notes: getValue("#driveNotes")
   });
-  document.querySelector("#driveNotes").value = "";
+  setValue("#driveNotes", "");
   render();
 });
 
@@ -755,16 +1572,31 @@ document.querySelector("#importData").addEventListener("change", async (event) =
   if (!file) return;
   const text = await file.text();
   const parsed = JSON.parse(text);
-  state = {
-    cars: Array.isArray(parsed.cars) ? parsed.cars : [],
-    drives: Array.isArray(parsed.drives) ? parsed.drives : []
-  };
-  selectedCompare = new Set(state.cars.slice(0, 3).map((car) => car.id));
+  state = normalizeState(parsed);
+  selectedCarId = state.selectedCarId || state.cars[0]?.id || "";
+  selectedCompare = new Set(state.selectedCompare?.length ? state.selectedCompare : state.cars.slice(0, 3).map((car) => car.id));
   render();
 });
 
 document.querySelector("#resetSeed").addEventListener("click", () => {
-  state = { cars: seedCars.map((car) => ({ ...car, id: makeId() })), drives: [] };
+  const freshIds = {
+    es6: makeId("car"),
+    es8: makeId("car"),
+    i6: makeId("car"),
+    g7: makeId("car")
+  };
+  const idMap = {
+    [seedIds.es6]: freshIds.es6,
+    [seedIds.es8]: freshIds.es8,
+    [seedIds.i6]: freshIds.i6,
+    [seedIds.g7]: freshIds.g7
+  };
+  state = normalizeState({
+    cars: seedCars.map((car) => ({ ...car, id: idMap[car.id] || makeId("car") })),
+    evidence: seedEvidence.map((item) => ({ ...item, id: makeId("ev"), carId: idMap[item.carId] || item.carId })),
+    drives: []
+  });
+  selectedCarId = state.cars[0]?.id || "";
   selectedCompare = new Set(state.cars.slice(0, 3).map((car) => car.id));
   render();
 });

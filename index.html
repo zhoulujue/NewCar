@@ -13,15 +13,17 @@
           <div class="mark">NC</div>
           <div>
             <div class="brand-title">NewCar</div>
-            <div class="brand-subtitle">购车工作台</div>
+            <div class="brand-subtitle">购车决策工作台</div>
           </div>
         </div>
         <nav class="nav-list" aria-label="主导航">
           <button class="nav-button active" data-view="dashboard">总览</button>
-          <button class="nav-button" data-view="garage">车库</button>
+          <button class="nav-button" data-view="garage">车源库</button>
           <button class="nav-button" data-view="compare">对比</button>
           <button class="nav-button" data-view="drives">试驾</button>
           <button class="nav-button" data-view="risks">风险</button>
+          <button class="nav-button" data-view="sellers">商家</button>
+          <button class="nav-button" data-view="timeline">时间线</button>
         </nav>
         <div class="side-footer">
           <button class="ghost-button" id="exportData">导出 JSON</button>
@@ -36,7 +38,7 @@
         <header class="topbar">
           <div>
             <h1 id="viewTitle">总览</h1>
-            <p id="viewSubtitle">北京纯电指标，围绕舒适、续航、智能和车况风险筛车。</p>
+            <p id="viewSubtitle">围绕真实成本、i6 体感标尺、证据链和二手新能源风险做决策。</p>
           </div>
           <div class="topbar-actions">
             <button class="secondary-button" id="resetSeed">恢复样例</button>
@@ -45,8 +47,9 @@
         </header>
 
         <section class="view active" id="dashboardView">
+          <section class="decision-strip" id="decisionSummary"></section>
           <div class="metrics-grid" id="metricsGrid"></div>
-          <div class="two-column">
+          <div class="three-column dashboard-grid">
             <section class="panel">
               <div class="panel-head">
                 <h2>候选排序</h2>
@@ -54,30 +57,41 @@
                   <option value="fit">综合匹配</option>
                   <option value="risk">风险最低</option>
                   <option value="value">价格折让</option>
+                  <option value="i6">最接近 i6</option>
+                  <option value="cost">3年成本最低</option>
                 </select>
               </div>
               <div id="rankedCars" class="rank-list"></div>
             </section>
             <section class="panel">
               <div class="panel-head">
-                <h2>近期动作</h2>
+                <h2>今日待办</h2>
                 <button class="text-button" data-view-link="risks">查看风险</button>
               </div>
               <div id="actionList" class="action-list"></div>
+            </section>
+            <section class="panel">
+              <div class="panel-head">
+                <h2>价格与时间</h2>
+                <button class="text-button" data-view-link="timeline">时间线</button>
+              </div>
+              <div id="timelinePreview" class="timeline-list"></div>
             </section>
           </div>
         </section>
 
         <section class="view" id="garageView">
           <div class="toolbar">
-            <input id="searchInput" class="search" type="search" placeholder="搜索车型、商家、城市">
+            <input id="searchInput" class="search" type="search" placeholder="搜索车型、商家、城市、备注">
             <select id="stageFilter" class="select">
               <option value="all">全部阶段</option>
               <option value="watching">观察</option>
               <option value="contacted">已联系</option>
               <option value="test-drive">已试驾</option>
               <option value="negotiating">谈价</option>
+              <option value="recheck">待复检</option>
               <option value="rejected">排除</option>
+              <option value="purchased">已成交</option>
             </select>
             <select id="riskFilter" class="select">
               <option value="all">全部风险</option>
@@ -85,14 +99,102 @@
               <option value="medium">中风险</option>
               <option value="high">高风险</option>
             </select>
+            <select id="batteryFilter" class="select">
+              <option value="all">全部电池</option>
+              <option value="buyout">买断</option>
+              <option value="baas">租电/BaaS</option>
+              <option value="unknown">待确认</option>
+            </select>
+            <select id="sourceFilter" class="select">
+              <option value="all">全部车源</option>
+              <option value="official">官方/自营</option>
+              <option value="personal">个人</option>
+              <option value="dealer">第三方车商</option>
+            </select>
           </div>
           <div id="carGrid" class="car-grid"></div>
+        </section>
+
+        <section class="view" id="detailView">
+          <div class="detail-topline">
+            <label>
+              当前车源
+              <select id="detailCarSelect" class="select"></select>
+            </label>
+            <div class="detail-actions">
+              <button class="secondary-button" id="editCurrentCar">编辑车源</button>
+              <button class="secondary-button" id="exportChecklist">导出核验清单</button>
+            </div>
+          </div>
+          <div class="detail-layout">
+            <div class="detail-stack">
+              <section id="detailHero" class="panel"></section>
+              <section class="panel">
+                <div class="panel-head">
+                  <h2>真实成本</h2>
+                  <span class="muted">含一次性费用、BaaS、智驾订阅和 3/5 年持有成本</span>
+                </div>
+                <div id="costPanel"></div>
+              </section>
+              <section class="panel">
+                <div class="panel-head">
+                  <h2>i6 体感标尺</h2>
+                  <span class="muted">以你试过的理想 i6 为主观基准</span>
+                </div>
+                <div id="i6Matrix"></div>
+              </section>
+              <section class="panel">
+                <div class="panel-head">
+                  <h2>证据墙</h2>
+                  <span class="muted">车源截图、检测报告、客服承诺、权益截图</span>
+                </div>
+                <form id="evidenceForm" class="evidence-form">
+                  <input id="evidenceTitle" class="input" placeholder="证据标题，如 NOP+ 客服回复">
+                  <select id="evidenceType" class="input">
+                    <option value="listing">车源截图</option>
+                    <option value="config">配置单</option>
+                    <option value="report">检测报告</option>
+                    <option value="chat">客服回复</option>
+                    <option value="contract">合同条款</option>
+                    <option value="rights">权益截图</option>
+                    <option value="repair">维修记录</option>
+                    <option value="other">其他</option>
+                  </select>
+                  <select id="evidenceStatus" class="input">
+                    <option value="pending">待核验</option>
+                    <option value="valid">有效</option>
+                    <option value="conflict">有冲突</option>
+                    <option value="expired">已过期</option>
+                  </select>
+                  <input id="evidenceUrl" class="input" placeholder="图片/网页 URL，可留空">
+                  <textarea id="evidenceNotes" class="input" rows="2" placeholder="补充说明"></textarea>
+                  <button class="primary-button" type="submit">添加证据</button>
+                </form>
+                <div id="evidenceWall" class="evidence-grid"></div>
+              </section>
+            </div>
+            <aside class="decision-rail">
+              <section id="detailDecision" class="panel"></section>
+              <section class="panel">
+                <div class="panel-head">
+                  <h2>为什么便宜</h2>
+                </div>
+                <div id="whyCheap" class="risk-list compact"></div>
+              </section>
+              <section class="panel">
+                <div class="panel-head">
+                  <h2>下一步核验</h2>
+                </div>
+                <div id="detailChecklist" class="check-list"></div>
+              </section>
+            </aside>
+          </div>
         </section>
 
         <section class="view" id="compareView">
           <section class="panel">
             <div class="panel-head">
-              <h2>车辆对比</h2>
+              <h2>取舍对比</h2>
               <div class="muted" id="compareHint"></div>
             </div>
             <div id="compareTableWrap" class="table-wrap"></div>
@@ -104,6 +206,7 @@
             <section class="panel">
               <div class="panel-head">
                 <h2>试驾记录</h2>
+                <span class="muted">每项都和 i6 对齐记录</span>
               </div>
               <form id="driveForm" class="stack-form">
                 <label>
@@ -126,10 +229,19 @@
                   <label>底盘<input id="scoreChassis" type="range" min="1" max="10" value="8"></label>
                   <label>车机<input id="scoreCockpit" type="range" min="1" max="10" value="8"></label>
                   <label>智驾<input id="scoreAdas" type="range" min="1" max="10" value="8"></label>
-                  <label>停车便利<input id="scoreParking" type="range" min="1" max="10" value="8"></label>
+                  <label>高速稳定<input id="scoreHighway" type="range" min="1" max="10" value="8"></label>
                 </div>
                 <label>
-                  记录
+                  相对 i6 结论
+                  <select id="driveRelative" class="input">
+                    <option value="similar">接近 i6</option>
+                    <option value="better">优于 i6</option>
+                    <option value="worse">弱于 i6</option>
+                    <option value="unknown">还不确定</option>
+                  </select>
+                </label>
+                <label>
+                  不能接受点 / 惊喜点
                   <textarea id="driveNotes" class="input" rows="5"></textarea>
                 </label>
                 <button class="primary-button" type="submit">保存试驾</button>
@@ -161,6 +273,26 @@
             </section>
           </div>
         </section>
+
+        <section class="view" id="sellersView">
+          <div class="panel">
+            <div class="panel-head">
+              <h2>商家背调</h2>
+              <span class="muted">按商家聚合车源、承诺和风险</span>
+            </div>
+            <div id="sellerGrid" class="seller-grid"></div>
+          </div>
+        </section>
+
+        <section class="view" id="timelineView">
+          <section class="panel">
+            <div class="panel-head">
+              <h2>购车时间线</h2>
+              <span class="muted">指标窗口、目标价、试驾和复检节奏</span>
+            </div>
+            <div id="timelineBoard" class="timeline-board"></div>
+          </section>
+        </section>
       </main>
     </div>
 
@@ -169,11 +301,12 @@
         <div class="dialog-head">
           <div>
             <h2 id="dialogTitle">新增车源</h2>
-            <p class="muted">字段越完整，风险提示越准。</p>
+            <p class="muted">字段越完整，成本、风险和证据链越准。</p>
           </div>
           <button type="button" class="icon-button" id="closeDialog" aria-label="关闭">×</button>
         </div>
         <input type="hidden" id="carId">
+        <div class="form-section-title">基础信息</div>
         <div class="form-grid">
           <label>车型名称<input id="carName" class="input" required></label>
           <label>版本配置<input id="carTrim" class="input"></label>
@@ -183,13 +316,43 @@
               <option value="contacted">已联系</option>
               <option value="test-drive">已试驾</option>
               <option value="negotiating">谈价</option>
+              <option value="recheck">待复检</option>
               <option value="rejected">排除</option>
+              <option value="purchased">已成交</option>
+            </select>
+          </label>
+          <label>建议
+            <select id="carRecommendation" class="input">
+              <option value="auto">自动判断</option>
+              <option value="worthViewing">值得看</option>
+              <option value="watch">继续观察</option>
+              <option value="waitDrop">等降价</option>
+              <option value="bargainOnly">压价捡漏</option>
+              <option value="reject">排除</option>
             </select>
           </label>
           <label>车源 URL<input id="carUrl" class="input" type="url"></label>
+          <label>图片 URL<input id="carImage" class="input" type="url"></label>
+          <label>城市<input id="carCity" class="input"></label>
+          <label>车源类型<input id="carSource" class="input" placeholder="懂车帝自营/个人/第三方车商/品牌官方"></label>
+          <label>商家<input id="carSeller" class="input"></label>
+          <label>目标成交价/万元<input id="carTargetPrice" class="input" type="number" step="0.01"></label>
+        </div>
+
+        <div class="form-section-title">价格与成本</div>
+        <div class="form-grid">
           <label>售价/万元<input id="carPrice" class="input" type="number" step="0.01"></label>
           <label>新车同配置/万元<input id="carNewPrice" class="input" type="number" step="0.01"></label>
           <label>落地估算/万元<input id="carLanding" class="input" type="number" step="0.01"></label>
+          <label>保险/万元<input id="carInsurance" class="input" type="number" step="0.01"></label>
+          <label>运输/万元<input id="carTransport" class="input" type="number" step="0.01"></label>
+          <label>检测/万元<input id="carInspection" class="input" type="number" step="0.01"></label>
+          <label>整备/万元<input id="carReconditioning" class="input" type="number" step="0.01"></label>
+          <label>智驾订阅/元月<input id="carAdasMonthly" class="input" type="number" step="1"></label>
+        </div>
+
+        <div class="form-section-title">车辆与权益</div>
+        <div class="form-grid">
           <label>电池
             <select id="carBattery" class="input">
               <option value="buyout">买断</option>
@@ -203,9 +366,6 @@
           <label>里程/万公里<input id="carMileage" class="input" type="number" step="0.01"></label>
           <label>上牌年月<input id="carPlateDate" class="input" placeholder="2026-05"></label>
           <label>过户次数<input id="carTransfers" class="input" type="number" step="1"></label>
-          <label>城市<input id="carCity" class="input"></label>
-          <label>车源类型<input id="carSource" class="input" placeholder="懂车帝自营/个人/车商"></label>
-          <label>商家<input id="carSeller" class="input"></label>
           <label>外观<input id="carExterior" class="input"></label>
           <label>内饰<input id="carInterior" class="input"></label>
           <label>NOP/智驾权益
@@ -223,10 +383,32 @@
               <option value="none">暂无</option>
             </select>
           </label>
-          <label>图片 URL<input id="carImage" class="input" type="url"></label>
+          <label>官方认证
+            <select id="carCertified" class="input">
+              <option value="unknown">待确认</option>
+              <option value="yes">确认官方认证</option>
+              <option value="no">非官方认证</option>
+            </select>
+          </label>
         </div>
+
+        <div class="form-section-title">i6 体感标尺</div>
+        <div class="score-grid form-score-grid">
+          <label>前排座椅<input id="carSeatScore" type="range" min="1" max="10" value="8"></label>
+          <label>静谧性<input id="carNvhScore" type="range" min="1" max="10" value="8"></label>
+          <label>底盘滤震<input id="carChassisScore" type="range" min="1" max="10" value="8"></label>
+          <label>车机<input id="carCockpitScore" type="range" min="1" max="10" value="8"></label>
+          <label>智驾<input id="carAdasScore" type="range" min="1" max="10" value="8"></label>
+          <label>高速稳定<input id="carHighwayScore" type="range" min="1" max="10" value="8"></label>
+          <label>外观接受度<input id="carExteriorScore" type="range" min="1" max="10" value="8"></label>
+          <label>内饰高级感<input id="carInteriorScore" type="range" min="1" max="10" value="8"></label>
+        </div>
+
         <label>选装/亮点<textarea id="carOptions" class="input" rows="3"></textarea></label>
         <label>已知问题<textarea id="carIssues" class="input" rows="3"></textarea></label>
+        <label>权益/检测备注<textarea id="carRightsNotes" class="input" rows="3"></textarea></label>
+        <label>商家背调<textarea id="carSellerNotes" class="input" rows="3"></textarea></label>
+        <label>下一步动作<textarea id="carNextAction" class="input" rows="2"></textarea></label>
         <label>备注<textarea id="carNotes" class="input" rows="4"></textarea></label>
         <div class="dialog-actions">
           <button type="button" class="danger-button" id="deleteCar">删除</button>
