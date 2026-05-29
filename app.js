@@ -872,10 +872,14 @@ function ensureSelectedCar() {
 }
 
 function renderNav() {
+  const activeNavView = activeView === "detail" ? "garage" : activeView;
   document.querySelectorAll(".nav-button").forEach((button) => {
-    button.classList.toggle("active", button.dataset.view === activeView);
+    const isActive = button.dataset.view === activeNavView;
+    button.classList.toggle("active", isActive);
+    button.toggleAttribute("aria-current", isActive);
   });
   const [title, subtitle] = viewMeta[activeView];
+  document.body.dataset.view = activeView;
   document.querySelector("#viewTitle").textContent = title;
   document.querySelector("#viewSubtitle").textContent = subtitle;
   document.querySelectorAll(".view").forEach((view) => view.classList.remove("active"));
