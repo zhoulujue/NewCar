@@ -1,4 +1,5 @@
-const STORAGE_KEY = "newcar-workbench-v1";
+const BASE_STORAGE_KEY = "newcar-workbench-v1";
+const AUTH_PROFILE_KEY = "newcar-auth-profile";
 const INDICATOR_DEADLINE = new Date("2027-05-26T23:59:59+08:00");
 
 function makeId(prefix = "id") {
@@ -195,6 +196,9 @@ const seedEvidence = [
   }
 ];
 
+let currentUser = loadAuthProfile();
+let googleAuthReady = false;
+let googleAuthAttempts = 0;
 let state = normalizeState(loadState());
 let activeView = "dashboard";
 let selectedCarId = state.selectedCarId || state.cars[0]?.id || "";
@@ -212,7 +216,7 @@ const viewMeta = {
 };
 
 function loadState() {
-  const raw = localStorage.getItem(STORAGE_KEY);
+  const raw = localStorage.getItem(getStorageKey());
   if (!raw) {
     return { cars: seedCars, evidence: seedEvidence, drives: [] };
   }
@@ -329,7 +333,131 @@ function normalizeDrive(drive) {
 function saveState() {
   state.selectedCarId = selectedCarId;
   state.selectedCompare = [...selectedCompare];
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state, null, 2));
+  localStorage.setItem(getStorageKey(), JSON.stringify(state, null, 2));
+}
+
+function getStorageKey() {
+  return currentUser?.sub ? `${BASE_STORAGE_KEY}:user:${currentUser.sub}` : BASE_STORAGE_KEY;
+}
+
+function loadAuthProfile() {
+  try {
+    const raw = localStorage.getItem(AUTH_PROFILE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveAuthProfile(profile) {
+  if (profile) localStorage.setItem(AUTH_PROFILE_KEY, JSON.stringify(profile));
+  else localStorage.removeItem(AUTH_PROFILE_KEY);
+}
+
+function getGoogleClientId() {
+  return (window.NEWCAR_AUTH_CONFIG?.googleClientId || "").trim();
+}
+
+function initGoogleAuth() {
+  renderAuth();
+  const clientId = getGoogleClientId();
+  const buttonRoot = document.querySelector("#googleSignInButton");
+  if (currentUser || !buttonRoot || !clientId) return;
+  if (!window.google?.accounts?.id) {
+    googleAuthAttempts += 1;
+    if (googleAuthAttempts < 30) {
+      window.setTimeout(initGoogleAuth, 300);
+    } else {
+      document.querySelector("#authSetupNotice").textContent = "Google 登录组件加载失败，请检查网络或脚本拦截。";
+    }
+    return;
+  }
+  if (googleAuthReady) return;
+  window.google.accounts.id.initialize({
+    client_id: clientId,
+    callback: handleGoogleCredential,
+    auto_select: false,
+    cancel_on_tap_outside: true
+  });
+  buttonRoot.innerHTML = "";
+  window.google.accounts.id.renderButton(buttonRoot, {
+    theme: "outline",
+    size: "large",
+    shape: "rectangular",
+    text: "signin_with",
+    width: 220
+  });
+  googleAuthReady = true;
+  renderAuth();
+}
+
+function renderAuth() {
+  const signedOut = document.querySelector("#authSignedOut");
+  const signedIn = document.querySelector("#authSignedIn");
+  const setupNotice = document.querySelector("#authSetupNotice");
+  if (!signedOut || !signedIn || !setupNotice) return;
+  const clientId = getGoogleClientId();
+  signedOut.hidden = Boolean(currentUser);
+  signedIn.hidden = !currentUser;
+  if (!currentUser) {
+    setupNotice.textContent = clientId
+      ? "Google 登录用于身份识别；当前版本数据仍保存在本机浏览器。"
+      : "尚未配置 Google Client ID。请在 auth-config.js 中填入 OAuth Web Client ID。";
+    return;
+  }
+  document.querySelector("#authName").textContent = currentUser.name || "Google 用户";
+  document.querySelector("#authEmail").textContent = currentUser.email || "";
+  document.querySelector("#authScope").textContent = "已启用账号数据分区";
+  const avatar = document.querySelector("#authAvatar");
+  avatar.src = currentUser.picture || "";
+  avatar.hidden = !currentUser.picture;
+}
+
+function handleGoogleCredential(response) {
+  try {
+    const claims = decodeJwtPayload(response.credential);
+    if (!claims.sub) throw new Error("missing sub");
+    const previousState = state;
+    currentUser = {
+      sub: claims.sub,
+      email: claims.email || "",
+      name: claims.name || claims.given_name || claims.email || "Google 用户",
+      picture: claims.picture || "",
+      signedInAt: new Date().toISOString()
+    };
+    saveAuthProfile(currentUser);
+    const existing = localStorage.getItem(getStorageKey());
+    state = existing ? normalizeState(JSON.parse(existing)) : normalizeState(previousState);
+    selectedCarId = state.selectedCarId || state.cars[0]?.id || "";
+    selectedCompare = new Set(state.selectedCompare?.length ? state.selectedCompare : state.cars.slice(0, 3).map((car) => car.id));
+    saveState();
+    render();
+  } catch {
+    document.querySelector("#authSetupNotice").textContent = "Google 登录返回数据无法解析，请重试。";
+  }
+}
+
+function decodeJwtPayload(token) {
+  const payload = token.split(".")[1];
+  const base64 = payload.replace(/-/g, "+").replace(/_/g, "/");
+  const json = decodeURIComponent(atob(base64).split("").map((char) => {
+    return `%${(`00${char.charCodeAt(0).toString(16)}`).slice(-2)}`;
+  }).join(""));
+  return JSON.parse(json);
+}
+
+function signOut() {
+  if (window.google?.accounts?.id) {
+    window.google.accounts.id.disableAutoSelect();
+  }
+  currentUser = null;
+  saveAuthProfile(null);
+  state = normalizeState(loadState());
+  selectedCarId = state.selectedCarId || state.cars[0]?.id || "";
+  selectedCompare = new Set(state.selectedCompare?.length ? state.selectedCompare : state.cars.slice(0, 3).map((car) => car.id));
+  googleAuthReady = false;
+  render();
+  initGoogleAuth();
 }
 
 function numberOrBlank(value) {
@@ -707,6 +835,7 @@ function getChecklist(car) {
 
 function render() {
   ensureSelectedCar();
+  renderAuth();
   renderNav();
   renderDashboard();
   renderGarage();
@@ -1491,6 +1620,7 @@ document.body.addEventListener("click", (event) => {
 });
 
 document.querySelector("#addCar").addEventListener("click", () => openCarDialog());
+document.querySelector("#signOut").addEventListener("click", signOut);
 document.querySelector("#closeDialog").addEventListener("click", () => document.querySelector("#carDialog").close());
 document.querySelector("#cancelCar").addEventListener("click", () => document.querySelector("#carDialog").close());
 document.querySelector("#carForm").addEventListener("submit", (event) => {
@@ -1602,3 +1732,4 @@ document.querySelector("#resetSeed").addEventListener("click", () => {
 });
 
 render();
+initGoogleAuth();

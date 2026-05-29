@@ -29,6 +29,10 @@ body {
   overflow-x: hidden;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 button,
 input,
 select,
@@ -185,6 +189,53 @@ h3 {
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
+}
+
+.topbar-right {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.auth-card {
+  min-width: 260px;
+  max-width: 360px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.auth-signed-out,
+.auth-signed-in {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.auth-signed-out p,
+.auth-signed-in p {
+  margin-top: 3px;
+}
+
+.auth-signed-in img {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: #e9eef3;
+}
+
+.google-button {
+  min-height: 40px;
+  min-width: 220px;
+}
+
+.auth-setup {
+  flex-basis: 100%;
 }
 
 .primary-button {
@@ -1159,6 +1210,7 @@ th {
 
 @media (max-width: 640px) {
   .topbar,
+  .topbar-right,
   .decision-strip,
   .detail-topline,
   .cost-row,
@@ -1192,6 +1244,12 @@ th {
     display: grid;
     grid-template-columns: 1fr;
     align-items: stretch;
+  }
+
+  .auth-card,
+  .google-button {
+    width: 100%;
+    max-width: none;
   }
 
   .topbar-actions button,

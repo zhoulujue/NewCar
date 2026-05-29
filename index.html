@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>NewCar 购车工作台</title>
     <link rel="stylesheet" href="./styles.css">
+    <script src="./auth-config.js"></script>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
   </head>
   <body>
     <div class="app-shell">
@@ -40,9 +42,30 @@
             <h1 id="viewTitle">总览</h1>
             <p id="viewSubtitle">围绕真实成本、i6 体感标尺、证据链和二手新能源风险做决策。</p>
           </div>
-          <div class="topbar-actions">
-            <button class="secondary-button" id="resetSeed">恢复样例</button>
-            <button class="primary-button" id="addCar">新增车源</button>
+          <div class="topbar-right">
+            <section class="auth-card" aria-label="账号">
+              <div id="authSignedOut" class="auth-signed-out">
+                <div>
+                  <strong>账号</strong>
+                  <p class="muted">登录后按 Google 账号隔离本机数据。</p>
+                </div>
+                <div id="googleSignInButton" class="google-button"></div>
+                <div id="authSetupNotice" class="auth-setup muted"></div>
+              </div>
+              <div id="authSignedIn" class="auth-signed-in" hidden>
+                <img id="authAvatar" alt="">
+                <div>
+                  <strong id="authName">已登录</strong>
+                  <p id="authEmail" class="muted"></p>
+                  <p id="authScope" class="muted"></p>
+                </div>
+                <button class="secondary-button" id="signOut" type="button">退出</button>
+              </div>
+            </section>
+            <div class="topbar-actions">
+              <button class="secondary-button" id="resetSeed">恢复样例</button>
+              <button class="primary-button" id="addCar">新增车源</button>
+            </div>
           </div>
         </header>
 
