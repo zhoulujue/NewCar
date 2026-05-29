@@ -354,6 +354,20 @@ function saveAuthProfile(profile) {
   else localStorage.removeItem(AUTH_PROFILE_KEY);
 }
 
+let toastTimer = null;
+
+function showToast(message, tone = "ok") {
+  const toast = document.querySelector("#toast");
+  if (!toast) return;
+  toast.textContent = message;
+  toast.className = `toast ${tone}`;
+  toast.hidden = false;
+  window.clearTimeout(toastTimer);
+  toastTimer = window.setTimeout(() => {
+    toast.hidden = true;
+  }, 2600);
+}
+
 function getGoogleClientId() {
   return (window.NEWCAR_AUTH_CONFIG?.googleClientId || "").trim();
 }
@@ -432,8 +446,10 @@ function handleGoogleCredential(response) {
     selectedCompare = new Set(state.selectedCompare?.length ? state.selectedCompare : state.cars.slice(0, 3).map((car) => car.id));
     saveState();
     render();
+    showToast(`已登录：${currentUser.email || currentUser.name}`, "ok");
   } catch {
     document.querySelector("#authSetupNotice").textContent = "Google 登录返回数据无法解析，请重试。";
+    showToast("Google 登录失败，请重试。", "danger");
   }
 }
 
@@ -458,6 +474,7 @@ function signOut() {
   googleAuthReady = false;
   render();
   initGoogleAuth();
+  showToast("已退出账号，切回本地数据。", "ok");
 }
 
 function numberOrBlank(value) {
@@ -1498,6 +1515,7 @@ function saveCarFromForm() {
   else state.cars.unshift(car);
   selectedCarId = id;
   render();
+  showToast(index >= 0 ? "车源已更新。" : "车源已添加。", "ok");
 }
 
 function addEvidenceFromForm() {
@@ -1516,6 +1534,7 @@ function addEvidenceFromForm() {
   });
   ["#evidenceTitle", "#evidenceUrl", "#evidenceNotes"].forEach((selector) => setValue(selector, ""));
   render();
+  showToast("证据已加入当前车源。", "ok");
 }
 
 function exportChecklist() {
@@ -1545,6 +1564,7 @@ function exportChecklist() {
   link.download = `${car.name}-${new Date().toISOString().slice(0, 10)}-checklist.md`;
   link.click();
   URL.revokeObjectURL(url);
+  showToast("核验清单已导出。", "ok");
 }
 
 function setValue(selector, value) {
@@ -1594,6 +1614,7 @@ document.body.addEventListener("click", (event) => {
   const riskId = event.target.closest("[data-risk]")?.dataset.risk;
   const compareId = event.target.closest("[data-compare]")?.dataset.compare;
   const deleteEvidenceId = event.target.closest("[data-delete-evidence]")?.dataset.deleteEvidence;
+  const shouldAddEvidence = Boolean(event.target.closest("[data-add-evidence]"));
 
   if (viewLink) {
     activeView = viewLink;
@@ -1614,8 +1635,13 @@ document.body.addEventListener("click", (event) => {
     render();
   }
   if (deleteEvidenceId) {
+    if (!window.confirm("确定删除这条证据吗？")) return;
     state.evidence = state.evidence.filter((item) => item.id !== deleteEvidenceId);
     render();
+    showToast("证据已删除。", "warn");
+  }
+  if (shouldAddEvidence) {
+    addEvidenceFromForm();
   }
 });
 
@@ -1623,6 +1649,11 @@ document.querySelector("#addCar").addEventListener("click", () => openCarDialog(
 document.querySelector("#signOut").addEventListener("click", signOut);
 document.querySelector("#closeDialog").addEventListener("click", () => document.querySelector("#carDialog").close());
 document.querySelector("#cancelCar").addEventListener("click", () => document.querySelector("#carDialog").close());
+document.querySelector("#carDialog").addEventListener("click", (event) => {
+  if (event.target.id === "carDialog") {
+    document.querySelector("#carDialog").close();
+  }
+});
 document.querySelector("#carForm").addEventListener("submit", (event) => {
   event.preventDefault();
   saveCarFromForm();
@@ -1631,6 +1662,8 @@ document.querySelector("#carForm").addEventListener("submit", (event) => {
 
 document.querySelector("#deleteCar").addEventListener("click", () => {
   const id = getValue("#carId");
+  const car = state.cars.find((item) => item.id === id);
+  if (car && !window.confirm(`确定删除「${car.name}」吗？相关证据和试驾记录也会删除。`)) return;
   state.cars = state.cars.filter((car) => car.id !== id);
   state.evidence = state.evidence.filter((item) => item.carId !== id);
   state.drives = state.drives.filter((item) => item.carId !== id);
@@ -1638,6 +1671,7 @@ document.querySelector("#deleteCar").addEventListener("click", () => {
   if (selectedCarId === id) selectedCarId = state.cars[0]?.id || "";
   document.querySelector("#carDialog").close();
   render();
+  showToast("车源已删除。", "warn");
 });
 
 [
@@ -1695,6 +1729,7 @@ document.querySelector("#exportData").addEventListener("click", () => {
   link.download = `newcar-${new Date().toISOString().slice(0, 10)}.json`;
   link.click();
   URL.revokeObjectURL(url);
+  showToast("数据 JSON 已导出。", "ok");
 });
 
 document.querySelector("#importData").addEventListener("change", async (event) => {
@@ -1706,9 +1741,11 @@ document.querySelector("#importData").addEventListener("change", async (event) =
   selectedCarId = state.selectedCarId || state.cars[0]?.id || "";
   selectedCompare = new Set(state.selectedCompare?.length ? state.selectedCompare : state.cars.slice(0, 3).map((car) => car.id));
   render();
+  showToast("数据已导入。", "ok");
 });
 
 document.querySelector("#resetSeed").addEventListener("click", () => {
+  if (!window.confirm("确定恢复样例数据吗？当前账号/本机数据会被样例覆盖。")) return;
   const freshIds = {
     es6: makeId("car"),
     es8: makeId("car"),
@@ -1729,6 +1766,7 @@ document.querySelector("#resetSeed").addEventListener("click", () => {
   selectedCarId = state.cars[0]?.id || "";
   selectedCompare = new Set(state.cars.slice(0, 3).map((car) => car.id));
   render();
+  showToast("已恢复样例数据。", "warn");
 });
 
 render();

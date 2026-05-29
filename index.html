@@ -191,7 +191,7 @@
                   </select>
                   <input id="evidenceUrl" class="input" placeholder="图片/网页 URL，可留空">
                   <textarea id="evidenceNotes" class="input" rows="2" placeholder="补充说明"></textarea>
-                  <button class="primary-button" type="submit">添加证据</button>
+                  <button class="primary-button" type="button" data-add-evidence>添加证据</button>
                 </form>
                 <div id="evidenceWall" class="evidence-grid"></div>
               </section>
@@ -318,6 +318,8 @@
         </section>
       </main>
     </div>
+
+    <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
     <dialog id="carDialog" class="dialog">
       <form id="carForm" method="dialog" class="dialog-body">
