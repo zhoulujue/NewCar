@@ -1144,21 +1144,23 @@ function renderI6Matrix(car) {
     ["内饰高级感", car.experience.interior, "用料、设计、耐看程度"]
   ];
   return `
-    <table class="matrix-table">
-      <thead>
-        <tr><th>维度</th><th>评分</th><th>相对 i6</th><th>核验提示</th></tr>
-      </thead>
-      <tbody>
-        ${rows.map(([label, score, hint]) => `
-          <tr>
-            <td>${label}</td>
-            <td><strong>${score}/10</strong></td>
-            <td>${score >= 9 ? "优于/接近 i6" : score >= 7 ? "接近但需试驾确认" : "弱于 i6"}</td>
-            <td class="muted">${hint}</td>
-          </tr>
-        `).join("")}
-      </tbody>
-    </table>
+    <div class="table-wrap compact-table">
+      <table class="matrix-table">
+        <thead>
+          <tr><th>维度</th><th>评分</th><th>相对 i6</th><th>核验提示</th></tr>
+        </thead>
+        <tbody>
+          ${rows.map(([label, score, hint]) => `
+            <tr>
+              <td>${label}</td>
+              <td><strong>${score}/10</strong></td>
+              <td>${score >= 9 ? "优于/接近 i6" : score >= 7 ? "接近但需试驾确认" : "弱于 i6"}</td>
+              <td class="muted">${hint}</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    </div>
   `;
 }
 
