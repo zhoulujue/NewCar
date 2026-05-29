@@ -1,0 +1,667 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>NewCar V1.1 线框原型</title>
+    <style>
+      :root {
+        --bg: #f5f7f9;
+        --panel: #ffffff;
+        --ink: #14212b;
+        --muted: #647080;
+        --line: #dfe5ec;
+        --nav: #101820;
+        --primary: #0f766e;
+        --blue: #2563eb;
+        --red: #b42318;
+        --orange: #b54708;
+        --green: #167145;
+        --radius: 8px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+        letter-spacing: 0;
+      }
+
+      .shell {
+        min-height: 100vh;
+        display: grid;
+        grid-template-columns: 240px minmax(0, 1fr);
+      }
+
+      .sidebar {
+        background: var(--nav);
+        color: #fff;
+        padding: 24px 18px;
+        display: flex;
+        flex-direction: column;
+        gap: 22px;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .mark {
+        width: 42px;
+        height: 42px;
+        display: grid;
+        place-items: center;
+        border-radius: var(--radius);
+        background: #172331;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        font-weight: 760;
+      }
+
+      .brand-title {
+        font-size: 18px;
+        font-weight: 760;
+      }
+
+      .brand-subtitle {
+        margin-top: 2px;
+        color: rgba(255, 255, 255, 0.62);
+        font-size: 13px;
+      }
+
+      .nav {
+        display: grid;
+        gap: 8px;
+      }
+
+      .nav button {
+        border: 0;
+        border-radius: var(--radius);
+        background: transparent;
+        color: rgba(255, 255, 255, 0.74);
+        text-align: left;
+        padding: 12px 14px;
+        font: inherit;
+      }
+
+      .nav button.active {
+        background: rgba(255, 255, 255, 0.1);
+        color: #fff;
+      }
+
+      .main {
+        padding: 28px;
+        min-width: 0;
+      }
+
+      .topbar {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 18px;
+        margin-bottom: 18px;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+
+      h1 {
+        font-size: 28px;
+      }
+
+      h2 {
+        font-size: 17px;
+      }
+
+      h3 {
+        font-size: 15px;
+      }
+
+      .muted {
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .button {
+        border: 0;
+        border-radius: var(--radius);
+        padding: 10px 14px;
+        background: var(--primary);
+        color: #fff;
+        font: inherit;
+      }
+
+      .button.secondary {
+        background: #e9eef3;
+        color: var(--ink);
+      }
+
+      .summary {
+        display: grid;
+        grid-template-columns: 1.3fr repeat(3, minmax(0, 1fr));
+        gap: 14px;
+        margin-bottom: 14px;
+      }
+
+      .panel,
+      .card,
+      .decision {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+      }
+
+      .panel,
+      .decision {
+        padding: 16px;
+      }
+
+      .decision {
+        border-left: 4px solid var(--primary);
+      }
+
+      .kpi {
+        padding: 16px;
+      }
+
+      .kpi .value {
+        margin-top: 8px;
+        font-size: 24px;
+        font-weight: 760;
+      }
+
+      .content-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 340px;
+        gap: 14px;
+      }
+
+      .section-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 12px;
+      }
+
+      .car-list {
+        display: grid;
+        gap: 10px;
+      }
+
+      .car-card {
+        padding: 14px;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 12px;
+      }
+
+      .car-title {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 8px;
+      }
+
+      .tag {
+        display: inline-flex;
+        align-items: center;
+        min-height: 24px;
+        border-radius: 999px;
+        padding: 3px 9px;
+        font-size: 12px;
+        background: #eef2f6;
+        color: var(--muted);
+      }
+
+      .tag.good {
+        background: #e8f5ef;
+        color: var(--green);
+      }
+
+      .tag.warn {
+        background: #fff4e6;
+        color: var(--orange);
+      }
+
+      .tag.bad {
+        background: #fdecec;
+        color: var(--red);
+      }
+
+      .facts {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .price {
+        text-align: right;
+      }
+
+      .price strong {
+        display: block;
+        font-size: 22px;
+      }
+
+      .detail-shell {
+        margin-top: 14px;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 320px;
+        gap: 14px;
+      }
+
+      .detail-stack {
+        display: grid;
+        gap: 14px;
+      }
+
+      .matrix {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+      }
+
+      .matrix th,
+      .matrix td {
+        padding: 10px;
+        text-align: left;
+        border-bottom: 1px solid var(--line);
+        vertical-align: top;
+      }
+
+      .matrix th {
+        color: var(--muted);
+        font-weight: 650;
+        background: #f9fafb;
+      }
+
+      .cost-bars {
+        display: grid;
+        gap: 10px;
+      }
+
+      .bar-row {
+        display: grid;
+        grid-template-columns: 90px minmax(0, 1fr) 80px;
+        align-items: center;
+        gap: 10px;
+        font-size: 13px;
+      }
+
+      .bar {
+        height: 10px;
+        border-radius: 999px;
+        background: #e9eef3;
+        overflow: hidden;
+      }
+
+      .bar span {
+        display: block;
+        height: 100%;
+        background: var(--primary);
+      }
+
+      .evidence-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .evidence {
+        padding: 12px;
+        min-height: 112px;
+        background: #f9fafb;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+      }
+
+      .decision-panel {
+        position: sticky;
+        top: 18px;
+        align-self: start;
+        display: grid;
+        gap: 12px;
+      }
+
+      .score {
+        font-size: 36px;
+        font-weight: 780;
+      }
+
+      .checklist {
+        display: grid;
+        gap: 8px;
+      }
+
+      .check {
+        padding: 10px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: #f9fafb;
+        font-size: 13px;
+      }
+
+      @media (max-width: 960px) {
+        .shell {
+          grid-template-columns: 1fr;
+        }
+
+        .sidebar {
+          position: sticky;
+          top: 0;
+          z-index: 2;
+          padding: 14px;
+        }
+
+        .nav {
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+        }
+
+        .nav button {
+          text-align: center;
+          padding: 10px 8px;
+        }
+
+        .summary,
+        .content-grid,
+        .detail-shell {
+          grid-template-columns: 1fr;
+        }
+
+        .evidence-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .decision-panel {
+          position: static;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="mark">NC</div>
+          <div>
+            <div class="brand-title">NewCar</div>
+            <div class="brand-subtitle">V1.1 决策工作台</div>
+          </div>
+        </div>
+        <nav class="nav" aria-label="主导航">
+          <button class="active">总览</button>
+          <button>车源库</button>
+          <button>对比</button>
+          <button>试驾</button>
+          <button>风险</button>
+          <button>商家</button>
+          <button>时间线</button>
+        </nav>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <div>
+            <h1>购车决策总览</h1>
+            <p class="muted">目标：找到接近理想 i6 体感、真实成本合理、二手风险可控的车源。</p>
+          </div>
+          <div>
+            <button class="button secondary">导出核验清单</button>
+            <button class="button">新增车源</button>
+          </div>
+        </header>
+
+        <section class="summary" aria-label="决策摘要">
+          <div class="decision">
+            <div class="muted">当前建议</div>
+            <h2>ES6 买断版继续看，i6 等降价，ES8 只适合低价租电捡漏</h2>
+            <p class="muted" style="margin-top: 8px;">重点先核验电池产权、NOP+、完整检测和准新过户原因。</p>
+          </div>
+          <div class="panel kpi">
+            <div class="muted">指标剩余</div>
+            <div class="value">362 天</div>
+          </div>
+          <div class="panel kpi">
+            <div class="muted">预算上限</div>
+            <div class="value">31 万</div>
+          </div>
+          <div class="panel kpi">
+            <div class="muted">高风险车源</div>
+            <div class="value">2 台</div>
+          </div>
+        </section>
+
+        <section class="content-grid">
+          <div class="panel">
+            <div class="section-head">
+              <h2>候选车源</h2>
+              <span class="muted">按综合匹配排序</span>
+            </div>
+            <div class="car-list">
+              <article class="car-card card">
+                <div>
+                  <div class="car-title">
+                    <h3>蔚来 ES6 2026 四驱 原厂定制版</h3>
+                    <span class="tag good">值得看</span>
+                    <span class="tag warn">中风险</span>
+                  </div>
+                  <div class="facts">
+                    <span>深圳</span>
+                    <span>懂车帝自营</span>
+                    <span>买断 100kWh</span>
+                    <span>0.02 万公里</span>
+                    <span>1 次过户</span>
+                  </div>
+                  <p class="muted" style="margin-top: 8px;">下一步：问电池产权、NOP+、过户原因，要求完整检测。</p>
+                </div>
+                <div class="price">
+                  <strong>25.49 万</strong>
+                  <span class="muted">3 年约 31.2 万</span>
+                </div>
+              </article>
+
+              <article class="car-card card">
+                <div>
+                  <div class="car-title">
+                    <h3>理想 i6 2025 两驱标准版</h3>
+                    <span class="tag warn">等降价</span>
+                    <span class="tag warn">中风险</span>
+                  </div>
+                  <div class="facts">
+                    <span>重庆</span>
+                    <span>懂车帝自营</span>
+                    <span>买断</span>
+                    <span>0.25 万公里</span>
+                    <span>疑似修复项多</span>
+                  </div>
+                  <p class="muted" style="margin-top: 8px;">下一步：除非价格到 21 万附近且复检干净，否则继续观察。</p>
+                </div>
+                <div class="price">
+                  <strong>22.46 万</strong>
+                  <span class="muted">接近体感标尺</span>
+                </div>
+              </article>
+
+              <article class="car-card card">
+                <div>
+                  <div class="car-title">
+                    <h3>蔚来 ES8 2026 六座行政豪华版 BaaS</h3>
+                    <span class="tag warn">压价捡漏</span>
+                    <span class="tag bad">高风险</span>
+                  </div>
+                  <div class="facts">
+                    <span>重庆</span>
+                    <span>懂车帝自营</span>
+                    <span>BaaS 102kWh</span>
+                    <span>月租待算</span>
+                    <span>两人用偏大</span>
+                  </div>
+                  <p class="muted" style="margin-top: 8px;">下一步：按 3/5 年成本评估，不只看 26.89 万报价。</p>
+                </div>
+                <div class="price">
+                  <strong>26.89 万</strong>
+                  <span class="muted">长期成本敏感</span>
+                </div>
+              </article>
+            </div>
+          </div>
+
+          <aside class="panel">
+            <div class="section-head">
+              <h2>今日待办</h2>
+              <span class="tag bad">3 个高优先级</span>
+            </div>
+            <div class="checklist">
+              <div class="check">向 ES6 商家索要电池产权截图和完整检测。</div>
+              <div class="check">确认蔚来 NOP+ 是否随车，若不随车记录订阅成本。</div>
+              <div class="check">把 i6 重庆车源的维修/修复点截图加入证据墙。</div>
+              <div class="check">设置 i6 目标成交价：21.0-21.5 万。</div>
+            </div>
+          </aside>
+        </section>
+
+        <section class="detail-shell" aria-label="车源详情线框">
+          <div class="detail-stack">
+            <section class="panel">
+              <div class="section-head">
+                <h2>车源详情：蔚来 ES6 买断版</h2>
+                <span class="tag good">继续看</span>
+              </div>
+              <table class="matrix">
+                <thead>
+                  <tr>
+                    <th>维度</th>
+                    <th>当前信息</th>
+                    <th>相对 i6</th>
+                    <th>证据状态</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>前排座椅</td>
+                    <td>主驾零重力、女王副驾</td>
+                    <td>可能优于</td>
+                    <td><span class="tag warn">待试驾</span></td>
+                  </tr>
+                  <tr>
+                    <td>静谧性</td>
+                    <td>蔚来舒适取向</td>
+                    <td>接近</td>
+                    <td><span class="tag warn">待复核</span></td>
+                  </tr>
+                  <tr>
+                    <td>车机</td>
+                    <td>NOMI Mate 3.0</td>
+                    <td>弱于理想生态</td>
+                    <td><span class="tag good">已确认配置</span></td>
+                  </tr>
+                  <tr>
+                    <td>智驾</td>
+                    <td>NOP+ 未确认</td>
+                    <td>不确定</td>
+                    <td><span class="tag bad">待客服确认</span></td>
+                  </tr>
+                </tbody>
+              </table>
+            </section>
+
+            <section class="panel">
+              <div class="section-head">
+                <h2>真实成本</h2>
+                <span class="muted">示例结构</span>
+              </div>
+              <div class="cost-bars">
+                <div class="bar-row">
+                  <span>车价</span>
+                  <div class="bar"><span style="width: 82%;"></span></div>
+                  <strong>25.49 万</strong>
+                </div>
+                <div class="bar-row">
+                  <span>保险上牌</span>
+                  <div class="bar"><span style="width: 18%;"></span></div>
+                  <strong>0.90 万</strong>
+                </div>
+                <div class="bar-row">
+                  <span>复检整备</span>
+                  <div class="bar"><span style="width: 10%;"></span></div>
+                  <strong>0.40 万</strong>
+                </div>
+                <div class="bar-row">
+                  <span>智驾订阅</span>
+                  <div class="bar"><span style="width: 16%;"></span></div>
+                  <strong>待确认</strong>
+                </div>
+              </div>
+            </section>
+
+            <section class="panel">
+              <div class="section-head">
+                <h2>证据墙</h2>
+                <button class="button secondary">添加证据</button>
+              </div>
+              <div class="evidence-grid">
+                <div class="evidence">
+                  <strong>懂车帝车源截图</strong>
+                  <span class="tag good">有效</span>
+                  <span class="muted">关联：价格、配置</span>
+                </div>
+                <div class="evidence">
+                  <strong>检测报告</strong>
+                  <span class="tag warn">待补全</span>
+                  <span class="muted">关联：底盘、电池包</span>
+                </div>
+                <div class="evidence">
+                  <strong>NOP+ 客服回复</strong>
+                  <span class="tag bad">缺失</span>
+                  <span class="muted">关联：权益</span>
+                </div>
+              </div>
+            </section>
+          </div>
+
+          <aside class="decision-panel">
+            <section class="panel">
+              <div class="muted">综合风险</div>
+              <div class="score">42</div>
+              <span class="tag warn">中风险</span>
+            </section>
+            <section class="panel">
+              <h2>为什么便宜</h2>
+              <div class="checklist" style="margin-top: 10px;">
+                <div class="check">准新车已有 1 次过户。</div>
+                <div class="check">权益随车状态未确认。</div>
+                <div class="check">基础检测不足以覆盖电池包和底盘。</div>
+              </div>
+            </section>
+            <section class="panel">
+              <h2>下一步动作</h2>
+              <div class="checklist" style="margin-top: 10px;">
+                <div class="check">要蔚来 App 电池产权截图。</div>
+                <div class="check">问清是否官方认证二手车。</div>
+                <div class="check">约第三方复检，重点看底盘和电池包。</div>
+              </div>
+            </section>
+          </aside>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>
+
