@@ -1896,6 +1896,7 @@ function renderDrives() {
 
 function renderRisks() {
   const select = document.querySelector("#riskCarSelect");
+  const analyzeButton = document.querySelector("#analyzeRiskCar");
   const current = select.value || selectedCarId || state.cars[0]?.id;
   select.innerHTML = state.cars.map((car) => `<option value="${car.id}">${escapeHtml(car.name)} ${escapeHtml(car.trim || "")}</option>`).join("");
   if (current && state.cars.some((car) => car.id === current)) select.value = current;
@@ -1903,8 +1904,10 @@ function renderRisks() {
   if (!car) {
     document.querySelector("#riskDetail").innerHTML = `<div class="muted">暂无车辆。</div>`;
     document.querySelector("#checklist").innerHTML = "";
+    if (analyzeButton) analyzeButton.disabled = true;
     return;
   }
+  if (analyzeButton) analyzeButton.disabled = geminiAnalysisRunning;
   const result = analyzeCar(car);
   document.querySelector("#riskDetail").innerHTML = `
     <div class="risk-summary">
@@ -1930,6 +1933,17 @@ function renderRisks() {
       <div>${escapeHtml(item)}</div>
     </div>
   `).join("");
+}
+
+function analyzeRiskCarWithGemini() {
+  const carId = document.querySelector("#riskCarSelect")?.value || selectedCarId;
+  if (!carId || !state.cars.some((car) => car.id === carId)) {
+    showToast("请先选择一台车源。", "warn");
+    return;
+  }
+  selectedCarId = carId;
+  activeView = "risks";
+  analyzeCurrentCarWithGemini({ auto: false });
 }
 
 function renderSellers() {
@@ -2287,9 +2301,15 @@ function getGeminiAnalyzerUrls() {
 
 function setGeminiButtonState(isRunning) {
   const button = document.querySelector("#analyzeInfoWall");
-  if (!button) return;
-  button.disabled = isRunning;
-  button.textContent = isRunning ? "分析中..." : "Gemini 分析";
+  if (button) {
+    button.disabled = isRunning;
+    button.textContent = isRunning ? "分析中..." : "Gemini 分析";
+  }
+  const riskButton = document.querySelector("#analyzeRiskCar");
+  if (riskButton) {
+    riskButton.disabled = isRunning || !state.cars.length;
+    riskButton.textContent = isRunning ? "分析中..." : "Gemini 重新分析";
+  }
 }
 
 function buildGeminiPayload(car, focusInfoId) {
@@ -2864,6 +2884,7 @@ document.querySelector("#editCurrentCar").addEventListener("click", () => {
 
 document.querySelector("#exportChecklist").addEventListener("click", exportChecklist);
 document.querySelector("#analyzeInfoWall").addEventListener("click", () => analyzeCurrentCarWithGemini({ auto: false }));
+document.querySelector("#analyzeRiskCar").addEventListener("click", analyzeRiskCarWithGemini);
 document.querySelector("#refreshDcdNewCars").addEventListener("click", refreshDongchediNewCars);
 document.querySelector("#refreshDcdUsedCars").addEventListener("click", refreshDongchediUsedCars);
 

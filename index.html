@@ -9,7 +9,7 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="format-detection" content="telephone=no">
     <title>NewCar 购车工作台</title>
-    <link rel="stylesheet" href="./styles.css?v=20260530-imagefit">
+    <link rel="stylesheet" href="./styles.css?v=20260530-riskgemini">
     <script src="./auth-config.js"></script>
     <script src="https://accounts.google.com/gsi/client" async defer></script>
   </head>
@@ -363,7 +363,10 @@
             <section class="panel">
               <div class="panel-head">
                 <h2>风险雷达</h2>
-                <select id="riskCarSelect" class="select"></select>
+                <div class="risk-head-actions">
+                  <select id="riskCarSelect" class="select"></select>
+                  <button class="secondary-button" id="analyzeRiskCar" type="button">Gemini 重新分析</button>
+                </div>
               </div>
               <div id="riskDetail"></div>
             </section>
@@ -515,6 +518,6 @@
       </form>
     </dialog>
 
-    <script src="./app.js"></script>
+    <script src="./app.js?v=20260530-riskgemini"></script>
   </body>
 </html>
