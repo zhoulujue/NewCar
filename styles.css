@@ -572,6 +572,7 @@ textarea.input {
 
 .newcar-feature-media,
 .newcar-card-image {
+  position: relative;
   display: grid;
   place-items: center;
   overflow: hidden;
@@ -587,10 +588,15 @@ textarea.input {
 
 .newcar-feature-media img,
 .newcar-card-image img {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
+  object-position: center;
+  padding: 10px;
   display: block;
+  box-sizing: border-box;
 }
 
 .newcar-feature-copy {
@@ -759,6 +765,7 @@ textarea.input {
 
 .usedcar-feature-media,
 .usedcar-card-image {
+  position: relative;
   display: grid;
   place-items: center;
   overflow: hidden;
@@ -774,10 +781,15 @@ textarea.input {
 
 .usedcar-feature-media img,
 .usedcar-card-image img {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
+  object-position: center;
+  padding: 10px;
   display: block;
+  box-sizing: border-box;
 }
 
 .usedcar-feature-copy {
@@ -873,6 +885,7 @@ textarea.input {
 }
 
 .car-photo {
+  position: relative;
   height: 168px;
   background: linear-gradient(135deg, #dde7ef, #f8fafc);
   display: grid;
@@ -883,10 +896,15 @@ textarea.input {
 
 .car-photo img,
 .detail-image img {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
+  object-position: center;
+  padding: 10px;
   display: block;
+  box-sizing: border-box;
 }
 
 .car-body {
@@ -1185,6 +1203,7 @@ textarea.input {
 }
 
 .detail-image {
+  position: relative;
   min-height: 0;
   aspect-ratio: 4 / 3;
   border-radius: var(--radius);
@@ -1502,7 +1521,9 @@ button:disabled {
 .info-attachments img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
+  object-position: center;
+  background: #fff;
   display: block;
 }
 
