@@ -532,6 +532,194 @@ textarea.input {
   gap: 14px;
 }
 
+.newcar-refresh-panel {
+  margin-bottom: 14px;
+}
+
+.newcar-controls,
+.newcar-source-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.newcar-controls {
+  margin-top: 12px;
+}
+
+.newcar-source-row {
+  justify-content: space-between;
+  margin-top: 10px;
+}
+
+.newcar-source-row a,
+.newcar-news a {
+  color: var(--primary);
+  text-decoration: none;
+}
+
+.newcar-spotlight {
+  margin-bottom: 14px;
+}
+
+.newcar-feature {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.9fr) minmax(0, 1.1fr);
+  gap: 16px;
+  align-items: stretch;
+}
+
+.newcar-feature-media,
+.newcar-card-image {
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: var(--radius);
+  background: linear-gradient(135deg, #dde7ef, #f8fafc);
+  color: #52616f;
+  font-weight: 720;
+}
+
+.newcar-feature-media {
+  min-height: 240px;
+}
+
+.newcar-feature-media img,
+.newcar-card-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.newcar-feature-copy {
+  min-width: 0;
+  align-self: center;
+}
+
+.newcar-feature-copy h2 {
+  margin-top: 12px;
+  font-size: 24px;
+}
+
+.newcar-reason-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 14px 0;
+}
+
+.newcar-reason-list span {
+  padding: 8px 10px;
+  border-radius: 999px;
+  background: #eef6f4;
+  color: var(--primary);
+  font-size: 13px;
+}
+
+.newcar-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 14px;
+}
+
+.newcar-card {
+  overflow: hidden;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.newcar-card:hover {
+  border-color: #cad6df;
+  box-shadow: var(--shadow-strong);
+}
+
+.newcar-card-image {
+  height: 180px;
+  border-radius: 0;
+}
+
+.newcar-card-body {
+  padding: 14px;
+}
+
+.newcar-card-title {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+}
+
+.newcar-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.newcar-facts div {
+  min-width: 0;
+  padding: 10px;
+  border-radius: var(--radius);
+  background: var(--panel-2);
+}
+
+.newcar-facts span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.newcar-facts strong {
+  display: block;
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+}
+
+.newcar-models {
+  margin-top: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #fff;
+}
+
+.newcar-models summary {
+  padding: 10px 12px;
+  cursor: pointer;
+  font-weight: 720;
+}
+
+.newcar-model-list {
+  display: grid;
+  border-top: 1px solid var(--line);
+}
+
+.newcar-model-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.newcar-model-row:last-child {
+  border-bottom: 0;
+}
+
+.newcar-model-row p {
+  grid-column: 1 / -1;
+}
+
+.newcar-news {
+  display: grid;
+  gap: 7px;
+  margin-top: 12px;
+  font-size: 13px;
+}
+
 .car-card {
   overflow: hidden;
 }
@@ -1019,6 +1207,24 @@ th {
   gap: 10px;
   align-items: stretch;
   margin-bottom: 14px;
+}
+
+.info-wall-head {
+  align-items: start;
+}
+
+.info-wall-head > div {
+  display: grid;
+  gap: 4px;
+}
+
+.info-wall-head button {
+  white-space: nowrap;
+}
+
+button:disabled {
+  cursor: progress;
+  opacity: 0.72;
 }
 
 .evidence-form #evidenceTitle,
@@ -1626,7 +1832,7 @@ th {
     bottom: 0;
     z-index: 40;
     display: grid;
-    grid-template-columns: repeat(7, minmax(0, 1fr));
+    grid-template-columns: repeat(8, minmax(0, 1fr));
     gap: 0;
     padding: 7px 8px calc(7px + env(safe-area-inset-bottom));
     border-top: 1px solid rgba(16, 24, 32, 0.08);
@@ -1821,14 +2027,16 @@ th {
   .risk-card,
   .drive-card,
   .seller-card,
-  .evidence-card {
+  .evidence-card,
+  .newcar-card {
     border-radius: 14px;
     box-shadow: none;
   }
 
   .panel:hover,
   .car-card:hover,
-  .seller-card:hover {
+  .seller-card:hover,
+  .newcar-card:hover {
     border-color: var(--line);
     box-shadow: none;
     transform: none;
@@ -1890,6 +2098,49 @@ th {
   .car-grid {
     grid-template-columns: 1fr;
     gap: 12px;
+  }
+
+  .newcar-controls {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .newcar-source-row {
+    display: grid;
+    grid-template-columns: 1fr;
+    align-items: start;
+  }
+
+  .newcar-feature,
+  .newcar-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .newcar-feature-media {
+    min-height: 190px;
+  }
+
+  .newcar-feature-copy h2 {
+    font-size: 20px;
+  }
+
+  .newcar-card-image {
+    height: 176px;
+    background: #eaf0f5;
+  }
+
+  .newcar-card-image img,
+  .newcar-feature-media img {
+    object-fit: contain;
+    padding: 10px;
+  }
+
+  .newcar-facts {
+    grid-template-columns: 1fr;
+  }
+
+  .newcar-model-row {
+    grid-template-columns: 1fr;
   }
 
   .car-photo {
@@ -2065,6 +2316,15 @@ th {
   .risk-summary,
   .seller-grid {
     grid-template-columns: 1fr;
+  }
+
+  .info-wall-head {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .info-wall-head button {
+    width: 100%;
   }
 
   .evidence-form #evidenceTitle,

@@ -26,6 +26,7 @@
         <nav class="nav-list" aria-label="主导航">
           <button class="nav-button active" data-view="dashboard" data-mobile-label="总览">总览</button>
           <button class="nav-button" data-view="garage" data-mobile-label="车源">车源库</button>
+          <button class="nav-button" data-view="newcars" data-mobile-label="新车">新车情报</button>
           <button class="nav-button" data-view="compare" data-mobile-label="对比">对比</button>
           <button class="nav-button" data-view="drives" data-mobile-label="试驾">试驾</button>
           <button class="nav-button" data-view="risks" data-mobile-label="风险">风险</button>
@@ -143,6 +144,44 @@
           <div id="carGrid" class="car-grid"></div>
         </section>
 
+        <section class="view" id="newcarsView">
+          <section class="panel newcar-refresh-panel">
+            <div class="panel-head">
+              <div>
+                <h2>近期发布车型</h2>
+                <span class="muted">从懂车帝首页新车数据和车型页刷新，重点看版本、价格、续航、电池、尺寸和资讯。</span>
+              </div>
+              <button class="primary-button" id="refreshDcdNewCars" type="button">刷新懂车帝数据</button>
+            </div>
+            <div class="newcar-controls">
+              <select id="newcarScopeFilter" class="select">
+                <option value="fit">优先适合我</option>
+                <option value="newenergy">只看新能源</option>
+                <option value="all">全部近期发布</option>
+              </select>
+              <select id="newcarBodyFilter" class="select">
+                <option value="all">全部车身</option>
+                <option value="suv">SUV</option>
+                <option value="sedan">轿车/轿跑</option>
+                <option value="mpv">MPV</option>
+                <option value="other">其他</option>
+              </select>
+              <select id="newcarPriceFilter" class="select">
+                <option value="all">全部价格</option>
+                <option value="budget">30万附近</option>
+                <option value="stretch">30-40万可观望</option>
+                <option value="expensive">40万以上</option>
+              </select>
+            </div>
+            <div class="newcar-source-row">
+              <span id="newcarStatus" class="muted">还没有刷新数据。</span>
+              <a href="https://www.dongchedi.com/" target="_blank" rel="noreferrer">打开懂车帝</a>
+            </div>
+          </section>
+          <section id="newcarSpotlight" class="newcar-spotlight"></section>
+          <div id="newcarGrid" class="newcar-grid"></div>
+        </section>
+
         <section class="view" id="detailView">
           <div class="detail-topline">
             <label>
@@ -172,9 +211,12 @@
                 <div id="i6Matrix"></div>
               </section>
               <section class="panel">
-                <div class="panel-head">
-                  <h2>信息墙</h2>
-                  <span class="muted">随手存聊天截图、检测照片、配置单、口头承诺和自己的判断</span>
+                <div class="panel-head info-wall-head">
+                  <div>
+                    <h2>信息墙</h2>
+                    <span class="muted">随手存聊天截图、检测照片、配置单、口头承诺和自己的判断</span>
+                  </div>
+                  <button class="secondary-button" id="analyzeInfoWall" type="button">Gemini 分析</button>
                 </div>
                 <form id="evidenceForm" class="evidence-form">
                   <input id="evidenceTitle" class="input" placeholder="标题，可留空">
