@@ -42,7 +42,7 @@ server.listen(PORT, HOST, () => {
 
 async function getRecentModels({ limit, detailLimit, force }) {
   if (!force && cache && Date.now() - cache.createdAt < CACHE_TTL_MS && cache.limit >= limit && cache.detailLimit >= detailLimit) {
-    return { ...cache.payload, cached: true };
+    return { ...cache.payload, cached: true, releases: cache.payload.releases.slice(0, limit) };
   }
   const payload = await fetchRecentModels({ limit, detailLimit });
   cache = { createdAt: Date.now(), limit, detailLimit, payload };
