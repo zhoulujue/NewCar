@@ -1676,6 +1676,7 @@ function renderDetail() {
           <div><span>目标价</span><strong>${formatWan(car.targetPrice)}</strong></div>
         </div>
         <p class="detail-note">${escapeHtml(car.notes || "暂无备注。")}</p>
+        ${renderExternalSourceActions(car)}
       </div>
     </div>
   `;
@@ -1705,6 +1706,35 @@ function renderDetail() {
       <div>${escapeHtml(item)}</div>
     </div>
   `).join("");
+}
+
+function renderExternalSourceActions(car) {
+  if (!car.url) return "";
+  const isDongchedi = isDongchediSourceUrl(car.url);
+  return `
+    <div class="detail-source-actions">
+      <a class="secondary-button" href="${escapeAttr(car.url)}" target="_blank" rel="noopener noreferrer">外部车源</a>
+      ${isDongchedi ? `<button class="primary-button" data-open-source-app="${car.id}" type="button">尝试打开懂车帝 App</button>` : ""}
+    </div>
+  `;
+}
+
+function isDongchediSourceUrl(url = "") {
+  return /^https?:\/\/([^/]+\.)?(dongchedi|dongchediapp)\.com\//i.test(url);
+}
+
+function openSourceInApp(carId) {
+  const car = state.cars.find((item) => item.id === carId);
+  if (!car?.url) {
+    showToast("这台车还没有外部车源链接。", "warn");
+    return;
+  }
+  if (!isDongchediSourceUrl(car.url)) {
+    window.open(car.url, "_blank", "noreferrer");
+    return;
+  }
+  showToast("正在尝试唤起懂车帝 App，未安装时会打开网页。", "ok");
+  window.location.href = car.url;
 }
 
 function renderCostPanel(car) {
@@ -2812,6 +2842,7 @@ document.body.addEventListener("click", (event) => {
   const compareId = event.target.closest("[data-compare]")?.dataset.compare;
   const releaseId = event.target.closest("[data-add-release]")?.dataset.addRelease;
   const usedListingId = event.target.closest("[data-add-used-listing]")?.dataset.addUsedListing;
+  const openSourceAppId = event.target.closest("[data-open-source-app]")?.dataset.openSourceApp;
   const deleteEvidenceId = event.target.closest("[data-delete-evidence]")?.dataset.deleteEvidence;
   const shouldAddEvidence = Boolean(event.target.closest("[data-add-evidence]"));
 
@@ -2835,6 +2866,7 @@ document.body.addEventListener("click", (event) => {
   }
   if (releaseId) addReleaseToGarage(releaseId);
   if (usedListingId) addUsedListingToGarage(usedListingId);
+  if (openSourceAppId) openSourceInApp(openSourceAppId);
   if (event.target.closest("[data-dashboard-gemini]")) analyzeDashboardBestWithGemini();
   if (deleteEvidenceId) {
     if (!window.confirm("确定删除这条信息吗？")) return;

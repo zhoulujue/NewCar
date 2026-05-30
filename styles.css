@@ -1238,6 +1238,22 @@ textarea.input {
   font-size: 22px;
 }
 
+.detail-source-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+
+.detail-source-actions a,
+.detail-source-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 128px;
+  text-decoration: none;
+}
+
 .hero-facts {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
