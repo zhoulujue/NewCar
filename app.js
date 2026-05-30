@@ -1076,6 +1076,20 @@ function renderNav() {
   document.querySelector(`#${activeView}View`)?.classList.add("active");
 }
 
+function setActiveView(view, { scroll = true } = {}) {
+  if (!viewMeta[view]) return;
+  activeView = view;
+  render();
+  if (scroll) scrollPageToTop();
+}
+
+function scrollPageToTop() {
+  requestAnimationFrame(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    document.querySelector(".main")?.scrollTo?.({ top: 0, left: 0, behavior: "auto" });
+  });
+}
+
 function renderDashboard() {
   const risks = state.cars.map(analyzeCar);
   const highCount = risks.filter((risk) => risk.level === "high").length;
@@ -1662,7 +1676,7 @@ function renderDetail() {
 
   document.querySelector("#detailHero").innerHTML = `
     <div class="detail-hero">
-      <div class="detail-image">${car.image ? `<img src="${escapeAttr(car.image)}" alt="${escapeAttr(car.name)}">` : `<span>${escapeHtml(car.name)}</span>`}</div>
+      <div class="detail-image ${car.image ? "" : "is-empty"}">${car.image ? `<img src="${escapeAttr(car.image)}" alt="${escapeAttr(car.name)}">` : `<span>${escapeHtml(car.name)}</span>`}</div>
       <div>
         <div class="chip-row tight">
           <span class="chip ${recommendationClass(rec)}">${recommendationLabel(rec)}</span>
@@ -2813,8 +2827,7 @@ function addReleaseToGarage(seriesId) {
   state.cars.unshift(car);
   selectedCarId = car.id;
   selectedCompare.add(car.id);
-  activeView = "detail";
-  render();
+  setActiveView("detail");
   showToast("已加入车源库，可以继续补信息墙和试驾记录。", "ok");
 }
 
@@ -2888,8 +2901,7 @@ function addUsedListingToGarage(skuId) {
   state.evidence.unshift(evidence);
   selectedCarId = car.id;
   selectedCompare.add(car.id);
-  activeView = "detail";
-  render();
+  setActiveView("detail");
   showToast("已加入车源库，正在调用 Gemini 做车源分析。", "ok");
   analyzeCurrentCarWithGemini({ auto: true, focusInfoId: evidence.id });
 }
@@ -2940,8 +2952,7 @@ function numberValue(selector) {
 
 function switchToDetail(carId) {
   selectedCarId = carId;
-  activeView = "detail";
-  render();
+  setActiveView("detail");
 }
 
 function escapeHtml(value) {
@@ -2959,8 +2970,7 @@ function escapeAttr(value) {
 
 document.querySelectorAll(".nav-button").forEach((button) => {
   button.addEventListener("click", () => {
-    activeView = button.dataset.view;
-    render();
+    setActiveView(button.dataset.view);
   });
 });
 
@@ -2977,15 +2987,13 @@ document.body.addEventListener("click", (event) => {
   const shouldAddEvidence = Boolean(event.target.closest("[data-add-evidence]"));
 
   if (viewLink) {
-    activeView = viewLink;
-    render();
+    setActiveView(viewLink);
   }
   if (detailId) switchToDetail(detailId);
   if (editId) openCarDialog(editId);
   if (riskId) {
     selectedCarId = riskId;
-    activeView = "risks";
-    render();
+    setActiveView("risks");
     document.querySelector("#riskCarSelect").value = riskId;
     renderRisks();
   }
