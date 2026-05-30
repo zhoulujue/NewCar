@@ -269,6 +269,7 @@ function normalizeCar(car) {
     stage: car.stage || "watching",
     recommendation: car.recommendation || "auto",
     url: car.url || "",
+    sourceSkuId: car.sourceSkuId || car.skuId || "",
     price: numberOrBlank(car.price),
     newPrice: numberOrBlank(car.newPrice),
     targetPrice: numberOrBlank(car.targetPrice),
@@ -405,7 +406,7 @@ function normalizeUsedListing(item) {
     authentication: item.authentication || "",
     officialHint: item.officialHint || "",
     image: item.image || "",
-    url: item.url || "",
+    url: item.url || buildDongchediUsedCarDetailUrl(item.skuId, item.city),
     tags: Array.isArray(item.tags) ? item.tags.filter(Boolean).map(String) : [],
     transferCount: numberOrBlank(item.transferCount),
     range: numberOrBlank(item.range),
@@ -1222,7 +1223,7 @@ function renderGarage() {
             <button data-edit="${car.id}">编辑</button>
             <button data-risk="${car.id}">风险</button>
             <button data-compare="${car.id}">${selectedCompare.has(car.id) ? "移出" : "对比"}</button>
-            ${car.url ? `<a href="${escapeAttr(car.url)}" target="_blank" rel="noreferrer">打开</a>` : ""}
+            ${car.url ? `<a href="${escapeAttr(getExternalSourceUrl(car))}" target="_blank" rel="noopener noreferrer">打开详情</a>` : ""}
           </div>
         </div>
       </article>
@@ -1435,7 +1436,7 @@ function renderUsedCarSpotlight(listing, officialCount) {
         </div>
         <div class="card-actions">
           <button data-add-used-listing="${listing.skuId}" type="button">加入车源库并分析</button>
-          <a href="${escapeAttr(listing.url)}" target="_blank" rel="noreferrer">懂车帝车源</a>
+          <a href="${escapeAttr(getExternalSourceUrl(listing))}" target="_blank" rel="noopener noreferrer">懂车帝详情</a>
         </div>
       </div>
     </section>
@@ -1478,7 +1479,7 @@ function renderUsedCarCard(listing) {
         </div>
         <div class="card-actions">
           <button data-add-used-listing="${listing.skuId}" type="button">加入并分析</button>
-          <a href="${escapeAttr(listing.url)}" target="_blank" rel="noreferrer">打开</a>
+          <a href="${escapeAttr(getExternalSourceUrl(listing))}" target="_blank" rel="noopener noreferrer">打开详情</a>
         </div>
       </div>
     </article>
@@ -1710,17 +1711,66 @@ function renderDetail() {
 
 function renderExternalSourceActions(car) {
   if (!car.url) return "";
+  const webUrl = getExternalSourceUrl(car);
   const isDongchedi = isDongchediSourceUrl(car.url);
   return `
     <div class="detail-source-actions">
-      <a class="secondary-button" href="${escapeAttr(car.url)}" target="_blank" rel="noopener noreferrer">外部车源</a>
-      ${isDongchedi ? `<button class="primary-button" data-open-source-app="${car.id}" type="button">尝试打开懂车帝 App</button>` : ""}
+      <a class="secondary-button" href="${escapeAttr(webUrl)}" target="_blank" rel="noopener noreferrer">外部车源详情</a>
+      ${isDongchedi ? `<button class="primary-button" data-open-source-app="${car.id}" type="button">唤起懂车帝详情</button>` : ""}
     </div>
   `;
 }
 
 function isDongchediSourceUrl(url = "") {
-  return /^https?:\/\/([^/]+\.)?(dongchedi|dongchediapp)\.com\//i.test(url);
+  return /^https?:\/\/([^/]+\.)?(dongchedi|dongchediapp|dcdapp)\.com\//i.test(url);
+}
+
+function getExternalSourceUrl(source) {
+  if (!source?.url) return "";
+  if (!isDongchediSourceUrl(source.url)) return source.url;
+  const skuId = getDongchediUsedCarSkuId(source);
+  return skuId ? buildDongchediUsedCarDetailUrl(skuId, source.city) : source.url;
+}
+
+function getDongchediUsedCarSkuId(source) {
+  if (!source) return "";
+  const direct = source.sourceSkuId || source.skuId || source.sku_id || "";
+  if (direct) return String(direct);
+  const url = source.url || "";
+  try {
+    const parsed = new URL(url, window.location.origin);
+    const fromQuery = parsed.searchParams.get("sku_id") || parsed.searchParams.get("skuId");
+    if (fromQuery) return fromQuery;
+  } catch (error) {
+    // Keep falling back to regex extraction for older stored PC links.
+  }
+  return url.match(/\/usedcar\/(\d+)/i)?.[1] || url.match(/[?&]sku_id=(\d+)/i)?.[1] || "";
+}
+
+function buildDongchediUsedCarDetailUrl(skuId, city = "北京") {
+  if (!skuId) return "";
+  const url = new URL("https://m.dcdapp.com/motor/feoffline/usedcar_detail/detail.html");
+  url.searchParams.set("_pia_", "1");
+  url.searchParams.set("sku_id", String(skuId));
+  url.searchParams.set("city_name", city || "北京");
+  url.searchParams.set("sh_city_name", city || "北京");
+  url.searchParams.set("biz_scene", "sh_car");
+  url.searchParams.set("used_car_entry", "newcar_workbench");
+  url.searchParams.set("link_source", "newcar_workbench_source_detail");
+  return url.toString();
+}
+
+function buildDongchediAppDetailUrl(webUrl) {
+  if (!webUrl) return "";
+  const params = new URLSearchParams({
+    url: webUrl,
+    hide_bar: "0"
+  });
+  return `snssdk36://webview?${params.toString()}`;
+}
+
+function isMobileBrowser() {
+  return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
 }
 
 function openSourceInApp(carId) {
@@ -1730,11 +1780,26 @@ function openSourceInApp(carId) {
     return;
   }
   if (!isDongchediSourceUrl(car.url)) {
-    window.open(car.url, "_blank", "noreferrer");
+    window.open(car.url, "_blank", "noopener");
     return;
   }
-  showToast("正在尝试唤起懂车帝 App，未安装时会打开网页。", "ok");
-  window.location.href = car.url;
+  const webUrl = getExternalSourceUrl(car);
+  if (!isMobileBrowser()) {
+    window.open(webUrl, "_blank", "noopener");
+    showToast("当前浏览器不支持唤起 App，已打开懂车帝详情页。", "ok");
+    return;
+  }
+  showToast("正在尝试唤起懂车帝 App，未安装时会打开详情页。", "ok");
+  let didHide = false;
+  const markHidden = () => {
+    if (document.hidden) didHide = true;
+  };
+  document.addEventListener("visibilitychange", markHidden, { once: true });
+  window.location.href = buildDongchediAppDetailUrl(webUrl);
+  window.setTimeout(() => {
+    document.removeEventListener("visibilitychange", markHidden);
+    if (!didHide) window.location.href = webUrl;
+  }, 1200);
 }
 
 function renderCostPanel(car) {
@@ -2708,6 +2773,7 @@ function addUsedListingToGarage(skuId) {
     stage: "watching",
     recommendation: listing.fitScore >= 72 ? "worthViewing" : listing.fitScore >= 58 ? "watch" : "waitDrop",
     url: listing.url,
+    sourceSkuId: listing.skuId,
     image: listing.image,
     city: listing.city,
     source: listing.sourceType || "懂车帝官方二手车",

@@ -159,13 +159,13 @@ async function fetchUsedCarPage(params) {
   const rawItems = json.data?.search_sh_sku_info_list || [];
   const glyphMap = buildGlyphMap(rawItems);
   return {
-    listings: rawItems.map((item) => normalizeUsedListing(item, glyphMap)).filter(Boolean),
+    listings: rawItems.map((item) => normalizeUsedListing(item, glyphMap, params)).filter(Boolean),
     hasMore: Boolean(json.data?.has_more),
     total: json.data?.total || ""
   };
 }
 
-function normalizeUsedListing(item, glyphMap) {
+function normalizeUsedListing(item, glyphMap, params = {}) {
   if (!item?.sku_id) return null;
   const title = decodeGlyphText(item.title || "", glyphMap);
   const priceText = decodeGlyphText(item.sh_price || "", glyphMap);
@@ -198,7 +198,7 @@ function normalizeUsedListing(item, glyphMap) {
     authentication: item.authentication_method || "",
     officialHint: decodeGlyphText(item.official_hint_bar || "", glyphMap),
     image: normalizeImageUrl(item.image || item.related_video_thumb || ""),
-    url: `https://www.dongchedi.com/usedcar/${item.sku_id}`,
+    url: buildUsedCarDetailUrl(item.sku_id, city || params.city || "北京"),
     tags,
     transferCount: numberOrEmpty(item.transfer_cnt),
     range: extractRange(`${title} ${tags.join(" ")}`),
@@ -213,6 +213,18 @@ function normalizeUsedListing(item, glyphMap) {
     fitReasons: fit.reasons,
     riskFlags: usedListingRisks(listing)
   };
+}
+
+function buildUsedCarDetailUrl(skuId, city = "北京") {
+  const url = new URL("https://m.dcdapp.com/motor/feoffline/usedcar_detail/detail.html");
+  url.searchParams.set("_pia_", "1");
+  url.searchParams.set("sku_id", String(skuId || ""));
+  url.searchParams.set("city_name", city || "北京");
+  url.searchParams.set("sh_city_name", city || "北京");
+  url.searchParams.set("biz_scene", "sh_car");
+  url.searchParams.set("used_car_entry", "newcar_workbench");
+  url.searchParams.set("link_source", "newcar_workbench_source_detail");
+  return url.toString();
 }
 
 function buildGlyphMap(items) {
