@@ -1652,6 +1652,7 @@ function renderDetail() {
   const car = state.cars.find((item) => item.id === selectedCarId);
   if (!car) {
     document.querySelector("#detailHero").innerHTML = `<div class="muted">暂无车源。</div>`;
+    document.querySelector("#detailGallery").innerHTML = "";
     return;
   }
   const risk = analyzeCar(car);
@@ -1682,6 +1683,7 @@ function renderDetail() {
     </div>
   `;
 
+  document.querySelector("#detailGallery").innerHTML = renderVehicleGallery(car);
   document.querySelector("#detailDecision").innerHTML = `
     <div class="decision-score ${risk.level}">
       <div>
@@ -1707,6 +1709,68 @@ function renderDetail() {
       <div>${escapeHtml(item)}</div>
     </div>
   `).join("");
+}
+
+function renderVehicleGallery(car) {
+  const images = getVehicleImages(car);
+  if (!images.length) {
+    return `
+      <div class="panel-head">
+        <h2>车辆图片</h2>
+        <span class="muted">暂无图片</span>
+      </div>
+      <div class="vehicle-gallery-empty">暂无车辆图片</div>
+    `;
+  }
+  const [primary, ...thumbs] = images;
+  return `
+    <div class="panel-head">
+      <h2>车辆图片</h2>
+      <span class="muted">${images.length} 张</span>
+    </div>
+    <div class="vehicle-gallery">
+      <a class="vehicle-gallery-feature" href="${escapeAttr(primary.src)}" target="_blank" rel="noreferrer" aria-label="${escapeAttr(primary.name)}">
+        <img src="${escapeAttr(primary.src)}" alt="${escapeAttr(primary.name)}">
+        <span>${escapeHtml(primary.source)}</span>
+      </a>
+      ${thumbs.length ? `
+        <div class="vehicle-gallery-strip">
+          ${thumbs.map((image) => `
+            <a href="${escapeAttr(image.src)}" target="_blank" rel="noreferrer" aria-label="${escapeAttr(image.name)}">
+              <img src="${escapeAttr(image.src)}" alt="${escapeAttr(image.name)}">
+              <span>${escapeHtml(image.source)}</span>
+            </a>
+          `).join("")}
+        </div>
+      ` : ""}
+    </div>
+  `;
+}
+
+function getVehicleImages(car) {
+  const images = [];
+  const seen = new Set();
+  const pushImage = (src, name, source) => {
+    if (!src || seen.has(src)) return;
+    seen.add(src);
+    images.push({
+      src,
+      name: name || car.name || "车辆图片",
+      source: source || "车辆图片"
+    });
+  };
+
+  pushImage(car.image, `${car.name} ${car.trim || ""}`.trim(), "车源主图");
+  getCarEvidence(car.id).forEach((item) => {
+    (item.attachments || []).forEach((attachment) => {
+      pushImage(attachment.dataUrl, attachment.name || item.title, item.title || "信息墙");
+    });
+    if (isImageUrl(item.url)) {
+      pushImage(item.url, item.title || "链接图片", item.title || "信息墙");
+    }
+  });
+
+  return images.slice(0, 12);
 }
 
 function renderExternalSourceActions(car) {
