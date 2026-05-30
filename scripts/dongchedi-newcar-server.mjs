@@ -52,8 +52,14 @@ async function getRecentModels({ limit, detailLimit, force }) {
 async function fetchRecentModels({ limit, detailLimit }) {
   const home = await fetchNextPage(HOME_URL);
   const pageProps = home.props?.pageProps || {};
-  const baseReleases = (pageProps.newCarData || []).slice(0, limit).map(fromHomeRelease).filter(Boolean);
-  const detailTargets = baseReleases.slice(0, detailLimit);
+  const recentReleases = (pageProps.newCarData || []).map(fromHomeRelease).filter(Boolean);
+  const hotReleases = collectHotModels(pageProps).map(fromPopularModel).filter(Boolean);
+  const baseReleases = mergeReleases([...recentReleases, ...hotReleases]).slice(0, limit);
+  const recentDetailCount = Math.ceil(detailLimit * 0.58);
+  const detailTargets = mergeReleases([
+    ...recentReleases.slice(0, recentDetailCount),
+    ...hotReleases.slice(0, detailLimit - recentDetailCount)
+  ]).slice(0, detailLimit);
   const detailed = await mapLimit(detailTargets, 4, enrichRelease);
   const detailMap = new Map(detailed.map((item) => [item.seriesId, item]));
   const releases = baseReleases.map((item) => detailMap.get(item.seriesId) || item);
@@ -81,7 +87,11 @@ function fromHomeRelease(item) {
     priceMaxWan: price.max,
     releaseDate: formatReleaseDate(item.online_date_unix, item.online_date_month, item.online_date_day),
     releaseTimestamp: Number(item.online_date_unix || 0),
-    tags: (item.tag_list || []).map((tag) => tag.name).filter(Boolean),
+    tags: unique(["近期发布", ...(item.tag_list || []).map((tag) => tag.name).filter(Boolean)]),
+    sourceTypes: ["recent"],
+    heatRank: "",
+    hotCategory: "",
+    hotLabel: "",
     coverUrl: normalizeImageUrl(item.cover_url),
     dcdUrl: `${SERIES_URL}${item.series_id}`,
     articleUrl: item.article_info?.gid ? `https://www.dongchedi.com/article/${item.article_info.gid}` : "",
@@ -96,6 +106,102 @@ function fromHomeRelease(item) {
   };
 }
 
+function collectHotModels(pageProps) {
+  const popular = pageProps.popularModels || {};
+  const buckets = [
+    ["car", "热门轿车"],
+    ["suv", "热门SUV"],
+    ["other", "其他热门"]
+  ].map(([key, label]) => ({
+    label,
+    series: popular[key]?.series || []
+  }));
+  const maxLength = Math.max(...buckets.map((bucket) => bucket.series.length), 0);
+  const models = [];
+  for (let index = 0; index < maxLength; index += 1) {
+    for (const bucket of buckets) {
+      const series = bucket.series[index];
+      if (!series) continue;
+      models.push({
+        ...series,
+        hotCategory: bucket.label,
+        heatRank: index + 1
+      });
+    }
+  }
+  return models;
+}
+
+function fromPopularModel(item) {
+  if (!item?.id) return null;
+  return {
+    seriesId: Number(item.id),
+    seriesName: item.outter_name || "",
+    brandName: "",
+    carType: item.hotCategory?.replace("热门", "") || "",
+    energyType: "unknown",
+    energyLabel: "待确认",
+    priceText: "价格待确认",
+    priceMinWan: "",
+    priceMaxWan: "",
+    releaseDate: "",
+    releaseTimestamp: 0,
+    tags: unique(["热门车型", item.new_car_tag ? "新" : ""]),
+    sourceTypes: ["hot"],
+    heatRank: item.heatRank || "",
+    hotCategory: item.hotCategory || "热门车型",
+    hotLabel: `${item.hotCategory || "热门车型"} Top ${item.heatRank || "-"}`,
+    coverUrl: "",
+    dcdUrl: `${SERIES_URL}${item.id}`,
+    articleUrl: "",
+    articleTitle: "",
+    communityText: "",
+    score: {},
+    dimensions: {},
+    models: [],
+    news: [],
+    highlights: [],
+    rawUpdatedAt: new Date().toISOString()
+  };
+}
+
+function mergeReleases(items) {
+  const map = new Map();
+  for (const item of items) {
+    if (!item?.seriesId) continue;
+    const existing = map.get(item.seriesId);
+    if (!existing) {
+      map.set(item.seriesId, { ...item, tags: unique(item.tags || []), sourceTypes: unique(item.sourceTypes || []) });
+      continue;
+    }
+    map.set(item.seriesId, {
+      ...existing,
+      ...Object.fromEntries(Object.entries(item).filter(([, value]) => value !== "" && value !== undefined && value !== null)),
+      seriesName: existing.seriesName || item.seriesName,
+      brandName: existing.brandName || item.brandName,
+      carType: existing.carType || item.carType,
+      energyType: existing.energyType !== "unknown" ? existing.energyType : item.energyType,
+      energyLabel: existing.energyLabel !== "待确认" ? existing.energyLabel : item.energyLabel,
+      priceText: existing.priceText !== "价格待确认" ? existing.priceText : item.priceText,
+      priceMinWan: existing.priceMinWan !== "" ? existing.priceMinWan : item.priceMinWan,
+      priceMaxWan: existing.priceMaxWan !== "" ? existing.priceMaxWan : item.priceMaxWan,
+      releaseDate: existing.releaseDate || item.releaseDate,
+      releaseTimestamp: existing.releaseTimestamp || item.releaseTimestamp,
+      coverUrl: existing.coverUrl || item.coverUrl,
+      tags: unique([...(existing.tags || []), ...(item.tags || [])]),
+      sourceTypes: unique([...(existing.sourceTypes || []), ...(item.sourceTypes || [])])
+    });
+  }
+  return [...map.values()].sort((a, b) => releaseSortScore(b) - releaseSortScore(a));
+}
+
+function releaseSortScore(item) {
+  const recentScore = item.releaseTimestamp ? item.releaseTimestamp / 100000000 : 0;
+  const hotScore = item.heatRank ? Math.max(0, 60 - Number(item.heatRank)) : 0;
+  const sourceScore = item.sourceTypes?.includes("recent") ? 30 : 0;
+  return recentScore + hotScore + sourceScore;
+}
+
 async function enrichRelease(release) {
   try {
     const series = await fetchNextPage(release.dcdUrl);
@@ -103,12 +209,19 @@ async function enrichRelease(release) {
     const head = props.seriesHomeHead || {};
     const overview = props.overviewData || {};
     const models = flattenModels(props.carModelsData).map((model) => enrichModel(model, overview));
+    const priceText = bestPriceText(head, release.priceText);
+    const priceRange = parseWanRange(priceText);
+    const energyType = deriveEnergyType(head, models, release);
     return {
       ...release,
       brandName: head.brand_name || release.brandName,
       seriesName: head.series_name || release.seriesName,
       carType: head.car_type || release.carType,
-      priceText: bestPriceText(head, release.priceText),
+      energyType,
+      energyLabel: energyLabelFromType(energyType, release.energyLabel),
+      priceText,
+      priceMinWan: release.priceMinWan !== "" ? release.priceMinWan : priceRange.min,
+      priceMaxWan: release.priceMaxWan !== "" ? release.priceMaxWan : priceRange.max,
       coverUrl: normalizeImageUrl(head.cover_url || release.coverUrl),
       dimensions: firstDimensions(overview),
       score: {
@@ -229,11 +342,19 @@ function extractNextData(html) {
 
 function parsePriceInfo(priceInfo = {}) {
   const raw = priceInfo.price || priceInfo.text || "";
-  const match = String(raw).match(/(\d+(?:\.\d+)?)(?:-(\d+(?:\.\d+)?))?/);
+  const range = parseWanRange(raw);
   const prefix = priceInfo.price_prefix || "";
   const unit = priceInfo.unit_text || "";
   return {
     text: raw ? `${prefix}${raw}${unit}` : "价格待确认",
+    min: range.min,
+    max: range.max
+  };
+}
+
+function parseWanRange(text = "") {
+  const match = String(text).match(/(\d+(?:\.\d+)?)(?:-(\d+(?:\.\d+)?))?/);
+  return {
     min: match ? Number(match[1]) : "",
     max: match ? Number(match[2] || match[1]) : ""
   };
@@ -268,6 +389,24 @@ function energyLabelFromCode(code) {
   return { 0: "燃油/其他", 1: "纯电", 2: "插混", 3: "油混", 4: "增程", 5: "增程" }[code] || "新能源";
 }
 
+function deriveEnergyType(head, models, fallback) {
+  const text = [
+    head.series_new_energy ? "新能源" : "",
+    fallback.energyLabel,
+    fallback.seriesName,
+    ...models.map((model) => [model.groupKey, model.baseConfig.join(" "), model.range, model.battery].join(" "))
+  ].join(" ");
+  if (/增程/.test(text)) return "erev";
+  if (/插混|PHEV|DM-i|DM\b|混动/i.test(text)) return "phev";
+  if (/纯电|电动|EV\b/i.test(text)) return "ev";
+  if (head.series_new_energy) return "new_energy";
+  return fallback.energyType || "unknown";
+}
+
+function energyLabelFromType(type, fallback = "待确认") {
+  return { ev: "纯电", phev: "插混", erev: "增程", hev: "油混", new_energy: "新能源", fuel: "燃油/其他", unknown: fallback }[type] || fallback;
+}
+
 function formatReleaseDate(unix, month, day) {
   if (unix) {
     const date = new Date(Number(unix) * 1000);
@@ -284,6 +423,10 @@ function normalizeImageUrl(url = "") {
   if (url.startsWith("//")) return `https:${url}`;
   if (url.startsWith("http://")) return url.replace("http://", "https://");
   return url;
+}
+
+function unique(values) {
+  return [...new Set((values || []).filter(Boolean).map(String))];
 }
 
 function clamp(value, min, max) {

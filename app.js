@@ -216,7 +216,7 @@ let selectedCompare = new Set(state.selectedCompare?.length ? state.selectedComp
 const viewMeta = {
   dashboard: ["总览", "一眼看到当前最值得看的车、关键风险和今天该做什么。"],
   garage: ["车源库", "记录备选车、车源类型、成本、权益、信息和推荐状态。"],
-  newcars: ["新车情报", "刷新懂车帝近期发布车型，按你的偏好筛出值得关注的新车。"],
+  newcars: ["新车情报", "刷新懂车帝近期发布和热门车型，按你的偏好筛出值得关注的新车。"],
   detail: ["车源详情", "围绕单台车回答：为什么便宜、是否接近 i6、风险是否值得折价。"],
   compare: ["对比", "按真实成本、i6体感、权益明确度和风险做取舍。"],
   drives: ["试驾", "记录前排舒适、静谧、底盘、车机、智驾和相对 i6 结论。"],
@@ -372,6 +372,10 @@ function normalizeRelease(item) {
     carType: item.carType || "",
     energyType: item.energyType || "unknown",
     energyLabel: item.energyLabel || "待确认",
+    sourceTypes: Array.isArray(item.sourceTypes) ? item.sourceTypes.filter(Boolean).map(String) : ["recent"],
+    heatRank: numberOrBlank(item.heatRank),
+    hotCategory: item.hotCategory || "",
+    hotLabel: item.hotLabel || "",
     priceText: item.priceText || "",
     priceMinWan: numberOrBlank(item.priceMinWan),
     priceMaxWan: numberOrBlank(item.priceMaxWan),
@@ -1174,15 +1178,17 @@ function renderNewCars() {
   const releases = getFilteredNewReleases();
   const total = state.market.releases.length;
   const lastFetched = state.market.lastFetchedAt ? formatDateTime(state.market.lastFetchedAt) : "";
+  const recentCount = state.market.releases.filter((release) => release.sourceTypes.includes("recent")).length;
+  const hotCount = state.market.releases.filter((release) => release.sourceTypes.includes("hot")).length;
   status.textContent = total
-    ? `已缓存 ${total} 款，当前显示 ${releases.length} 款。${lastFetched ? `上次刷新：${lastFetched}` : ""}`
-    : "还没有刷新数据。点击按钮后会从懂车帝获取近期发布车型。";
+    ? `已缓存 ${total} 款：近期 ${recentCount} / 热门 ${hotCount}，当前显示 ${releases.length} 款。${lastFetched ? `上次刷新：${lastFetched}` : ""}`
+    : "还没有刷新数据。点击按钮后会从懂车帝获取近期发布和热门车型。";
 
   if (!total) {
     spotlight.innerHTML = `
       <section class="panel newcar-empty">
-        <h2>从懂车帝拉一份近期新车清单</h2>
-        <p class="muted">刷新后会保存到本机缓存，后续可按新能源、车身形式、30万附近价格筛选，也能把感兴趣的新车加入车源库继续跟踪。</p>
+        <h2>从懂车帝拉一份新车与热门车型清单</h2>
+        <p class="muted">刷新后会保存到本机缓存，后续可按近期发布、热门车型、新能源、车身形式、30万附近价格筛选，也能把感兴趣的车加入车源库继续跟踪。</p>
       </section>
     `;
     grid.innerHTML = "";
@@ -1201,6 +1207,8 @@ function getFilteredNewReleases() {
   return [...(state.market.releases || [])]
     .filter((release) => {
       if (scope === "newenergy" && !isNewEnergyRelease(release)) return false;
+      if (scope === "recent" && !release.sourceTypes.includes("recent")) return false;
+      if (scope === "hot" && !release.sourceTypes.includes("hot")) return false;
       if (scope === "fit" && !releaseMatchesUserProfile(release)) return false;
       if (body !== "all" && newReleaseBodyBucket(release) !== body) return false;
       if (price !== "all" && newReleasePriceBucket(release) !== price) return false;
@@ -1208,6 +1216,7 @@ function getFilteredNewReleases() {
     })
     .sort((a, b) => {
       if (scope === "fit") return newReleaseFitScore(b) - newReleaseFitScore(a);
+      if (scope === "hot") return hotSortValue(a) - hotSortValue(b);
       return num(b.releaseTimestamp) - num(a.releaseTimestamp);
     });
 }
@@ -1221,11 +1230,12 @@ function renderNewCarSpotlight(release) {
       <div class="newcar-feature-copy">
         <div class="chip-row tight">
           <span class="chip ok">适配度 ${fit}</span>
+          ${renderReleaseSourceChips(release)}
           <span class="chip info">${escapeHtml(release.energyLabel)}</span>
           <span class="chip">${escapeHtml(release.carType || "车型待确认")}</span>
         </div>
         <h2>${escapeHtml(release.brandName)} ${escapeHtml(release.seriesName)}</h2>
-        <p class="muted">${escapeHtml(release.releaseDate || "发布日期待确认")} · ${escapeHtml(release.priceText || "价格待确认")} · 数据来自懂车帝</p>
+        <p class="muted">${escapeHtml(releaseSourceText(release))} · ${escapeHtml(release.priceText || "价格待确认")} · 数据来自懂车帝</p>
         <div class="newcar-reason-list">
           ${reasons.map((reason) => `<span>${escapeHtml(reason)}</span>`).join("")}
         </div>
@@ -1256,6 +1266,7 @@ function renderNewCarCard(release) {
         </div>
         <div class="chip-row">
           <span class="chip ${fit >= 72 ? "ok" : fit >= 56 ? "warn" : "info"}">适配度</span>
+          ${renderReleaseSourceChips(release)}
           <span class="chip info">${escapeHtml(release.energyLabel)}</span>
           ${release.tags.map((tag) => `<span class="chip">${escapeHtml(tag)}</span>`).join("")}
         </div>
@@ -1305,6 +1316,25 @@ function getReleaseModelFacts(release) {
   return { energy: parts.join(" / ") };
 }
 
+function renderReleaseSourceChips(release) {
+  return release.sourceTypes.map((type) => {
+    const label = type === "hot" ? "热门车型" : "近期发布";
+    const klass = type === "hot" ? "hot" : "recent";
+    return `<span class="chip ${klass}">${label}</span>`;
+  }).join("");
+}
+
+function releaseSourceText(release) {
+  const parts = [];
+  if (release.sourceTypes.includes("recent")) parts.push(release.releaseDate ? `发布于 ${release.releaseDate}` : "近期发布");
+  if (release.sourceTypes.includes("hot")) parts.push(release.hotLabel || release.hotCategory || "热门车型");
+  return parts.join(" · ") || "车型信息";
+}
+
+function hotSortValue(release) {
+  return release.heatRank === "" ? 9999 : Number(release.heatRank);
+}
+
 function firstModelMatch(release, pattern) {
   for (const model of release.models || []) {
     const text = [model.groupKey, model.battery, model.range, model.power, model.baseConfig.join(" "), model.highlightsConfig.join(" ")].join(" ");
@@ -1320,7 +1350,12 @@ function formatDimensions(dimensions) {
 }
 
 function isNewEnergyRelease(release) {
-  return ["ev", "phev", "erev", "hev", "new_energy"].includes(release.energyType);
+  if (["ev", "phev", "erev", "hev", "new_energy"].includes(release.energyType)) return true;
+  return /纯电|插混|混动|增程|PHEV|EV|DM-i|DM|电动/i.test([
+    release.energyLabel,
+    release.seriesName,
+    ...(release.models || []).map((model) => [model.groupKey, model.baseConfig.join(" "), model.range, model.battery].join(" "))
+  ].join(" "));
 }
 
 function releaseMatchesUserProfile(release) {
@@ -1367,11 +1402,15 @@ function newReleaseFitScore(release) {
   if (firstModelMatch(release, /续航\s*(\d+)\s*km/i) >= 650 || firstModelMatch(release, /(\d+)\s*km/i) >= 650) score += 8;
   if (release.score.comfort >= 4 || release.score.interior >= 4) score += 4;
   if (/改款|小改款|新增车型|全新车系/.test(release.tags.join(" "))) score += 4;
+  if (release.sourceTypes.includes("recent")) score += 4;
+  if (release.sourceTypes.includes("hot")) score += 5;
   return Math.max(0, Math.min(100, Math.round(score)));
 }
 
 function newReleaseFitReasons(release) {
   const reasons = [];
+  if (release.sourceTypes.includes("hot")) reasons.push(release.hotLabel || "懂车帝热门车型");
+  if (release.sourceTypes.includes("recent")) reasons.push(release.releaseDate ? `近期发布：${release.releaseDate}` : "近期发布");
   if (isNewEnergyRelease(release)) reasons.push(release.energyLabel);
   if (newReleasePriceBucket(release) === "budget") reasons.push("价格落在30万附近");
   if (newReleaseBodyBucket(release) === "suv") reasons.push("SUV形态适合北京通勤和假期高速");
@@ -2169,7 +2208,7 @@ async function refreshDongchediNewCars() {
   }
   newCarRefreshRunning = true;
   setNewCarRefreshState(true);
-  showToast("正在从懂车帝刷新近期发布车型。", "ok");
+  showToast("正在从懂车帝刷新近期发布和热门车型。", "ok");
   const urls = getDongchediFeedUrls();
   let lastError = "";
   try {
@@ -2182,7 +2221,7 @@ async function refreshDongchediNewCars() {
         }
         applyDongchediNewCarsPayload(result);
         render();
-        showToast(`已刷新 ${state.market.releases.length} 款近期发布车型。`, "ok");
+        showToast(`已刷新 ${state.market.releases.length} 款近期发布/热门车型。`, "ok");
         return;
       } catch (error) {
         lastError = error?.message || "刷新失败";
@@ -2200,7 +2239,7 @@ async function refreshDongchediNewCars() {
 }
 
 function getDongchediFeedUrls() {
-  const params = "limit=30&detailLimit=18";
+  const params = "limit=60&detailLimit=60";
   const urls = [];
   if (location.protocol === "http:" || location.protocol === "https:") {
     urls.push(withQuery(DONGCHEDI_NEWCAR_URL, params));
@@ -2244,13 +2283,13 @@ function addReleaseToGarage(seriesId) {
   const car = normalizeCar({
     id: makeId("car"),
     name: release.seriesName,
-    trim: firstModel.year ? `${firstModel.year}款 ${firstModel.name || ""}`.trim() : firstModel.name || "近期发布车型",
+    trim: firstModel.year ? `${firstModel.year}款 ${firstModel.name || ""}`.trim() : firstModel.name || "近期/热门车型",
     stage: "watching",
     recommendation: newReleaseFitScore(release) >= 70 ? "worthViewing" : "watch",
     url: release.dcdUrl,
     image: release.coverUrl,
     city: "北京",
-    source: "懂车帝新车",
+    source: release.sourceTypes.includes("hot") ? "懂车帝热门车型" : "懂车帝新车",
     seller: `${release.brandName || release.seriesName} 官方渠道待确认`,
     price: release.priceMinWan,
     newPrice: release.priceMinWan,
@@ -2266,10 +2305,10 @@ function addReleaseToGarage(seriesId) {
     certified: "unknown",
     options: release.models.map((model) => `${model.year || ""}款 ${model.name || ""} ${model.officialPrice || model.price || ""} ${model.groupKey || ""}`.trim()).join("\n"),
     issues: "新车刚发布，真实优惠、交付周期、首批车质量稳定性、北京门店试驾车和金融权益都需要后续确认。",
-    rightsNotes: "从懂车帝近期发布车型加入，具体订金、锁单、退订、质保、智驾和充电/补能权益以品牌合同为准。",
+    rightsNotes: "从懂车帝近期发布/热门车型加入，具体订金、锁单、退订、质保、智驾和充电/补能权益以品牌合同为准。",
     sellerNotes: release.articleTitle || "懂车帝车型页与上市资讯已记录。",
     nextAction: "关注北京试驾车到店、首批车主反馈、实际成交权益和7-8月价格变化。",
-    notes: `来自懂车帝新车情报。${facts.energy ? `核心信息：${facts.energy}。` : ""}`
+    notes: `来自懂车帝新车/热门车型情报。${releaseSourceText(release)}。${facts.energy ? `核心信息：${facts.energy}。` : ""}`
   });
   state.cars.unshift(car);
   selectedCarId = car.id;

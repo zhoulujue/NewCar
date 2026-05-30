@@ -822,6 +822,16 @@ textarea.input {
   color: var(--accent);
 }
 
+.chip.recent {
+  background: #e8f5ee;
+  color: var(--ok);
+}
+
+.chip.hot {
+  background: #fff3e5;
+  color: var(--warn);
+}
+
 .car-meta {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
