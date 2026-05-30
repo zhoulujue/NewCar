@@ -4,10 +4,27 @@ const HOST = process.env.DCD_NEWCAR_HOST || "127.0.0.1";
 const PORT = Number(process.env.DCD_NEWCAR_PORT || 8788);
 const HOME_URL = "https://www.dongchedi.com/";
 const SERIES_URL = "https://www.dongchedi.com/auto/series/";
+const USED_CAR_LIST_URL = "https://www.dongchedi.com/motor/pc/sh/sh_sku_list";
 const CACHE_TTL_MS = Number(process.env.DCD_NEWCAR_CACHE_MINUTES || 10) * 60 * 1000;
 const USER_AGENT = process.env.DCD_NEWCAR_UA || "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125 Safari/537.36";
 
-let cache = null;
+const usedTargetSeries = [
+  { seriesId: 25557, name: "理想i6" },
+  { seriesId: 2843, name: "蔚来ES6" },
+  { seriesId: 1616, name: "蔚来ES8" },
+  { seriesId: 9778, name: "ZEEKR 7X" },
+  { seriesId: 25172, name: "ZEEKR 007GT" },
+  { seriesId: 6391, name: "小鹏G7" },
+  { seriesId: 9118, name: "智己LS6" },
+  { seriesId: 9440, name: "奥迪Q6L e-tron" },
+  { seriesId: 9833, name: "乐道L60" },
+  { seriesId: 25565, name: "乐道L80" },
+  { seriesId: 10180, name: "智界R7" },
+  { seriesId: 6187, name: "小米SU7" }
+];
+
+let recentCache = null;
+let usedCache = null;
 
 const server = createServer(async (req, res) => {
   applyCors(req, res);
@@ -30,6 +47,15 @@ const server = createServer(async (req, res) => {
       sendJson(res, 200, payload);
       return;
     }
+    if (req.method === "GET" && url.pathname === "/dongchedi/official-usedcars") {
+      const limit = clamp(Number(url.searchParams.get("limit") || 80), 1, 120);
+      const pages = clamp(Number(url.searchParams.get("pages") || 3), 1, 6);
+      const city = url.searchParams.get("city") || "全国";
+      const force = url.searchParams.get("force") === "1";
+      const payload = await getOfficialUsedCars({ city, limit, pages, force });
+      sendJson(res, 200, payload);
+      return;
+    }
     sendJson(res, 404, { ok: false, error: "Not found" });
   } catch (error) {
     sendJson(res, 500, { ok: false, error: normalizeError(error) });
@@ -41,11 +67,11 @@ server.listen(PORT, HOST, () => {
 });
 
 async function getRecentModels({ limit, detailLimit, force }) {
-  if (!force && cache && Date.now() - cache.createdAt < CACHE_TTL_MS && cache.limit >= limit && cache.detailLimit >= detailLimit) {
-    return { ...cache.payload, cached: true, releases: cache.payload.releases.slice(0, limit) };
+  if (!force && recentCache && Date.now() - recentCache.createdAt < CACHE_TTL_MS && recentCache.limit >= limit && recentCache.detailLimit >= detailLimit) {
+    return { ...recentCache.payload, cached: true, releases: recentCache.payload.releases.slice(0, limit) };
   }
   const payload = await fetchRecentModels({ limit, detailLimit });
-  cache = { createdAt: Date.now(), limit, detailLimit, payload };
+  recentCache = { createdAt: Date.now(), limit, detailLimit, payload };
   return payload;
 }
 
@@ -70,6 +96,284 @@ async function fetchRecentModels({ limit, detailLimit }) {
     fetchedAt: new Date().toISOString(),
     releases
   };
+}
+
+async function getOfficialUsedCars({ city, limit, pages, force }) {
+  const cacheKey = `${city}:${limit}:${pages}`;
+  if (!force && usedCache && usedCache.cacheKey === cacheKey && Date.now() - usedCache.createdAt < CACHE_TTL_MS) {
+    return { ...usedCache.payload, cached: true, listings: usedCache.payload.listings.slice(0, limit) };
+  }
+  const payload = await fetchOfficialUsedCars({ city, limit, pages });
+  usedCache = { createdAt: Date.now(), cacheKey, payload };
+  return payload;
+}
+
+async function fetchOfficialUsedCars({ city, limit, pages }) {
+  const requests = [];
+  for (let page = 1; page <= pages; page += 1) {
+    requests.push({ sh_city_name: city, page, limit: 20, dcd_self_sh: 1, price: "15,33" });
+  }
+  for (let page = 1; page <= Math.min(2, pages); page += 1) {
+    requests.push({ sh_city_name: city, page, limit: 20, dcd_self_sh: 1, price: "20,31" });
+  }
+  usedTargetSeries.forEach((target) => {
+    requests.push({ sh_city_name: city, page: 1, limit: 20, dcd_self_sh: 1, series_ids: target.seriesId });
+  });
+
+  const payloads = await mapLimit(requests, 3, fetchUsedCarPage);
+  const mergedListings = mergeUsedListings(payloads.flatMap((payload) => payload.listings || []));
+  const cityListings = city === "全国" ? mergedListings : mergedListings.filter((listing) => listing.city === city);
+  const listings = cityListings
+    .sort((a, b) => b.fitScore - a.fitScore || usedPriceSort(a) - usedPriceSort(b))
+    .slice(0, limit);
+  return {
+    ok: true,
+    sourceLabel: "懂车帝官方二手车",
+    sourceUrl: "https://www.dongchedi.com/usedcar/x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x",
+    city,
+    fetchedAt: new Date().toISOString(),
+    listings
+  };
+}
+
+async function fetchUsedCarPage(params) {
+  const body = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== "" && value !== undefined && value !== null) body.set(key, String(value));
+  });
+  const response = await fetch(USED_CAR_LIST_URL, {
+    method: "POST",
+    headers: {
+      "user-agent": USER_AGENT,
+      accept: "application/json,text/plain,*/*",
+      "accept-language": "zh-CN,zh;q=0.9,en;q=0.7",
+      "content-type": "application/x-www-form-urlencoded",
+      origin: "https://www.dongchedi.com",
+      referer: "https://www.dongchedi.com/usedcar/x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x"
+    },
+    body
+  });
+  if (!response.ok) throw new Error(`懂车帝二手车接口返回 ${response.status}`);
+  const json = await response.json();
+  if (json.status !== 0) throw new Error(json.prompts || json.message || "懂车帝二手车接口返回异常");
+  const rawItems = json.data?.search_sh_sku_info_list || [];
+  const glyphMap = buildGlyphMap(rawItems);
+  return {
+    listings: rawItems.map((item) => normalizeUsedListing(item, glyphMap)).filter(Boolean),
+    hasMore: Boolean(json.data?.has_more),
+    total: json.data?.total || ""
+  };
+}
+
+function normalizeUsedListing(item, glyphMap) {
+  if (!item?.sku_id) return null;
+  const title = decodeGlyphText(item.title || "", glyphMap);
+  const priceText = decodeGlyphText(item.sh_price || "", glyphMap);
+  const officialPriceText = decodeGlyphText(item.official_price || "", glyphMap);
+  const ageText = decodeGlyphText(item.car_age || "", glyphMap);
+  const mileageText = decodeGlyphText(item.car_mileage || "", glyphMap);
+  const city = decodeGlyphText(item.brand_source_city_name || item.car_source_city_name || "", glyphMap);
+  const tags = normalizeUsedTags(item);
+  const listing = {
+    skuId: Number(item.sku_id),
+    spuId: Number(item.spu_id || 0),
+    brandId: Number(item.brand_id || 0),
+    brandName: item.brand_name || "",
+    seriesId: Number(item.series_id || 0),
+    seriesName: item.series_name || "",
+    title,
+    trim: title.replace(item.series_name || "", "").trim(),
+    year: Number(item.car_year || parseYear(ageText) || 0) || "",
+    ageText,
+    mileageText,
+    mileageWan: parseWan(mileageText),
+    priceText,
+    priceWan: parseWan(priceText),
+    officialPriceText,
+    officialPriceWan: parseWan(officialPriceText),
+    city,
+    sourceType: item.is_self_trade ? "懂车帝官方直营" : item.car_source_type || "懂车帝车源",
+    seller: item.is_self_trade ? `懂车帝官方直营 ${city || ""}`.trim() : item.car_source_type || "懂车帝车源",
+    shopId: item.shop_id || "",
+    authentication: item.authentication_method || "",
+    officialHint: decodeGlyphText(item.official_hint_bar || "", glyphMap),
+    image: normalizeImageUrl(item.image || item.related_video_thumb || ""),
+    url: `https://www.dongchedi.com/usedcar/${item.sku_id}`,
+    tags,
+    transferCount: numberOrEmpty(item.transfer_cnt),
+    range: extractRange(`${title} ${tags.join(" ")}`),
+    batterySize: extractBatterySize(`${title} ${tags.join(" ")}`),
+    energyType: inferUsedEnergyType(`${title} ${tags.join(" ")}`),
+    rawUpdatedAt: new Date().toISOString()
+  };
+  const fit = scoreUsedListing(listing);
+  return {
+    ...listing,
+    fitScore: fit.score,
+    fitReasons: fit.reasons,
+    riskFlags: usedListingRisks(listing)
+  };
+}
+
+function buildGlyphMap(items) {
+  const map = {};
+  items.forEach((item) => {
+    const plain = [item.car_age, item.car_mileage].filter(Boolean).join(" / ");
+    learnGlyphPair(map, item.sub_title, plain);
+  });
+  return map;
+}
+
+function learnGlyphPair(map, raw = "", plain = "") {
+  const rawChars = [...String(raw)];
+  const plainChars = [...String(plain)];
+  if (!rawChars.length || rawChars.length !== plainChars.length) return;
+  rawChars.forEach((char, index) => {
+    if (char !== plainChars[index] && char.charCodeAt(0) >= 0xe000) map[char] = plainChars[index];
+  });
+}
+
+function decodeGlyphText(value = "", map = {}) {
+  return [...String(value)].map((char) => map[char] || char).join("");
+}
+
+function normalizeUsedTags(item) {
+  const simple = (item.tags || []).map((tag) => tag.text).filter(Boolean);
+  const v2 = Array.isArray(item.tags_v2) ? item.tags_v2.map((tag) => tag.text).filter(Boolean) : [];
+  const special = Object.values(item.special_tags || {}).map((tag) => tag.text).filter(Boolean);
+  if (item.official_hint_bar) special.push("官方直营");
+  if (item.authentication_method) special.push(item.authentication_method);
+  return unique([...simple, ...v2, ...special]);
+}
+
+function scoreUsedListing(listing) {
+  let score = 16;
+  const reasons = [];
+  if (/官方|自营|直营/.test(listing.sourceType)) {
+    score += 14;
+    reasons.push("懂车帝官方/自营车源");
+  }
+  if (listing.priceWan !== "") {
+    if (listing.priceWan >= 20 && listing.priceWan <= 31) {
+      score += 26;
+      reasons.push("价格落在30万左右");
+    } else if (listing.priceWan >= 15 && listing.priceWan < 20) {
+      score += 12;
+      reasons.push("价格明显低于预算，可做性价比备选");
+    } else if (listing.priceWan > 31 && listing.priceWan <= 38) {
+      score += 8;
+      reasons.push("价格略超预算，适合观望压价");
+    } else if (listing.priceWan < 10) {
+      score -= 10;
+    } else {
+      score -= 12;
+    }
+  }
+  const text = `${listing.brandName} ${listing.seriesName} ${listing.title}`;
+  if (/理想i6/i.test(text)) {
+    score += 26;
+    reasons.push("理想 i6 是你的体感标尺");
+  } else if (/蔚来ES6|ZEEKR 7X|007GT|小鹏G7|奥迪Q6L|智己LS6|乐道L80|智界R7/i.test(text)) {
+    score += 18;
+    reasons.push("命中近期重点关注车型");
+  } else if (/蔚来|理想|极氪|小鹏|奥迪|智己|乐道|小米|智界/i.test(text)) {
+    score += 10;
+    reasons.push("品牌在你的关注池内");
+  }
+  if (["ev", "phev", "erev", "new_energy"].includes(listing.energyType)) {
+    score += 10;
+    reasons.push(energyLabelFromType(listing.energyType, "新能源"));
+  }
+  if (listing.range >= 650) {
+    score += 9;
+    reasons.push(`续航 ${listing.range}km`);
+  }
+  if (listing.year >= 2025) {
+    score += 18;
+    reasons.push("准新年份");
+  } else if (listing.year >= 2023) {
+    score += 7;
+  } else if (listing.year && listing.year < 2021) {
+    score -= 10;
+  }
+  if (listing.mileageWan !== "") {
+    if (listing.mileageWan <= 1) {
+      score += 14;
+      reasons.push("低里程");
+    } else if (listing.mileageWan <= 3) {
+      score += 7;
+    } else if (listing.mileageWan >= 6) {
+      score -= 8;
+    }
+  }
+  if (/ES8|L80|L90|六座|七座|MPV/i.test(text)) {
+    score -= 4;
+    reasons.push("两人用车略偏大");
+  }
+  if (/智界R7/i.test(text)) score -= 7;
+  return {
+    score: Math.max(0, Math.min(100, Math.round(score))),
+    reasons: reasons.slice(0, 6)
+  };
+}
+
+function usedListingRisks(listing) {
+  const risks = [];
+  if (listing.authentication && !/官方认证/.test(listing.authentication)) risks.push("非品牌官方认证");
+  if (listing.city && listing.city !== "北京") risks.push(`异地车源：${listing.city}`);
+  if (listing.year && listing.year < 2023) risks.push("车龄偏老");
+  if (listing.mileageWan !== "" && listing.mileageWan >= 5) risks.push("里程偏高");
+  if (!listing.priceWan) risks.push("价格字段需二次确认");
+  if (/蔚来|ES6|ES8|ET5|ET7/i.test(`${listing.brandName} ${listing.seriesName}`)) risks.push("蔚来权益/NOP+需确认");
+  if (/车衣|改色/i.test(listing.title)) risks.push("膜下漆面需复检");
+  if (!risks.length) risks.push("仍需看检测报告和出险记录");
+  return risks.slice(0, 5);
+}
+
+function mergeUsedListings(listings) {
+  const map = new Map();
+  listings.forEach((listing) => {
+    if (!listing?.skuId) return;
+    const existing = map.get(listing.skuId);
+    if (!existing || listing.fitScore > existing.fitScore) map.set(listing.skuId, listing);
+  });
+  return [...map.values()];
+}
+
+function usedPriceSort(listing) {
+  return listing.priceWan === "" ? 999 : Math.abs(Number(listing.priceWan) - 28);
+}
+
+function parseYear(text = "") {
+  const match = String(text).match(/(20\d{2})/);
+  return match ? Number(match[1]) : "";
+}
+
+function parseWan(text = "") {
+  const match = String(text).match(/(\d+(?:\.\d+)?)/);
+  return match ? Number(match[1]) : "";
+}
+
+function extractRange(text = "") {
+  const match = String(text).match(/(\d{3,4})\s*(?:KM|km|公里)/);
+  return match ? Number(match[1]) : "";
+}
+
+function extractBatterySize(text = "") {
+  const match = String(text).match(/(\d{2,3})\s*kWh/i);
+  return match ? Number(match[1]) : "";
+}
+
+function inferUsedEnergyType(text = "") {
+  if (/增程|EREV/i.test(text)) return "erev";
+  if (/插混|PHEV|EM-P|DM-i|DM\b|混动|T8/i.test(text)) return "phev";
+  if (/纯电|电动|EV|e-tron|蔚来|极氪|小鹏|智己|乐道|小米|智界|i6|SU7|YU7/i.test(text)) return "ev";
+  return "unknown";
+}
+
+function numberOrEmpty(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : "";
 }
 
 function fromHomeRelease(item) {

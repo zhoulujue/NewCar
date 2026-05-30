@@ -6,10 +6,13 @@ const INFO_IMAGE_QUALITY = 0.82;
 const LOCAL_GEMINI_ANALYZER_URL = window.NEWCAR_AI_CONFIG?.geminiAnalyzerUrl || "http://127.0.0.1:8787/analyze";
 const DONGCHEDI_NEWCAR_URL = window.NEWCAR_DATA_CONFIG?.dongchediNewcarUrl || "/api/dongchedi/recent-models";
 const LOCAL_DONGCHEDI_NEWCAR_URL = window.NEWCAR_DATA_CONFIG?.localDongchediNewcarUrl || "http://127.0.0.1:8788/dongchedi/recent-models";
+const DONGCHEDI_USEDCAR_URL = window.NEWCAR_DATA_CONFIG?.dongchediUsedcarUrl || "/api/dongchedi/official-usedcars";
+const LOCAL_DONGCHEDI_USEDCAR_URL = window.NEWCAR_DATA_CONFIG?.localDongchediUsedcarUrl || "http://127.0.0.1:8788/dongchedi/official-usedcars";
 
 let geminiAnalysisRunning = false;
 let geminiUnavailableNotified = false;
 let newCarRefreshRunning = false;
+let usedCarRefreshRunning = false;
 
 function makeId(prefix = "id") {
   if (globalThis.crypto && typeof globalThis.crypto.randomUUID === "function") {
@@ -217,12 +220,12 @@ const viewMeta = {
   dashboard: ["总览", "一眼看到当前最值得看的车、关键风险和今天该做什么。"],
   garage: ["车源库", "记录备选车、车源类型、成本、权益、信息和推荐状态。"],
   newcars: ["新车情报", "刷新懂车帝近期发布和热门车型，按你的偏好筛出值得关注的新车。"],
+  usedcars: ["二手车", "拉取懂车帝官方直营车源，按你的预算、体感偏好和二手风险排序。"],
   detail: ["车源详情", "围绕单台车回答：为什么便宜、是否接近 i6、风险是否值得折价。"],
   compare: ["对比", "按真实成本、i6体感、权益明确度和风险做取舍。"],
   drives: ["试驾", "记录前排舒适、静谧、底盘、车机、智驾和相对 i6 结论。"],
   risks: ["风险", "按车源信息自动提示二手新能源可能存在的坑。"],
-  sellers: ["商家", "聚合卖家身份、承诺、保障和车源风险。"],
-  timeline: ["时间线", "跟踪指标到期、降价目标、复检和试驾节奏。"]
+  sellers: ["商家", "聚合卖家身份、承诺、保障和车源风险。"]
 };
 
 function loadState() {
@@ -249,6 +252,7 @@ function normalizeState(rawState) {
     evidence,
     drives,
     market: normalizeMarket(rawState.market),
+    usedMarket: normalizeUsedMarket(rawState.usedMarket),
     selectedCarId: rawState.selectedCarId || cars[0]?.id || "",
     selectedCompare: Array.isArray(rawState.selectedCompare) ? rawState.selectedCompare.filter((id) => carIds.has(id)) : []
   };
@@ -360,6 +364,56 @@ function normalizeMarket(market = {}) {
     sourceUrl: market.sourceUrl || "",
     sourceLabel: market.sourceLabel || "懂车帝",
     error: market.error || ""
+  };
+}
+
+function normalizeUsedMarket(usedMarket = {}) {
+  return {
+    listings: Array.isArray(usedMarket.listings) ? usedMarket.listings.map(normalizeUsedListing).filter(Boolean) : [],
+    lastFetchedAt: usedMarket.lastFetchedAt || "",
+    sourceUrl: usedMarket.sourceUrl || "",
+    sourceLabel: usedMarket.sourceLabel || "懂车帝官方二手车",
+    city: usedMarket.city || "全国",
+    error: usedMarket.error || ""
+  };
+}
+
+function normalizeUsedListing(item) {
+  if (!item || !item.skuId) return null;
+  return {
+    skuId: Number(item.skuId),
+    spuId: numberOrBlank(item.spuId),
+    brandId: numberOrBlank(item.brandId),
+    brandName: item.brandName || "",
+    seriesId: numberOrBlank(item.seriesId),
+    seriesName: item.seriesName || "",
+    title: item.title || "",
+    trim: item.trim || "",
+    year: numberOrBlank(item.year),
+    ageText: item.ageText || "",
+    mileageText: item.mileageText || "",
+    mileageWan: numberOrBlank(item.mileageWan),
+    priceText: item.priceText || "",
+    priceWan: numberOrBlank(item.priceWan),
+    officialPriceText: item.officialPriceText || "",
+    officialPriceWan: numberOrBlank(item.officialPriceWan),
+    city: item.city || "",
+    sourceType: item.sourceType || "懂车帝车源",
+    seller: item.seller || "",
+    shopId: item.shopId || "",
+    authentication: item.authentication || "",
+    officialHint: item.officialHint || "",
+    image: item.image || "",
+    url: item.url || "",
+    tags: Array.isArray(item.tags) ? item.tags.filter(Boolean).map(String) : [],
+    transferCount: numberOrBlank(item.transferCount),
+    range: numberOrBlank(item.range),
+    batterySize: numberOrBlank(item.batterySize),
+    energyType: item.energyType || "unknown",
+    fitScore: numberOrDefault(item.fitScore, 0),
+    fitReasons: Array.isArray(item.fitReasons) ? item.fitReasons.filter(Boolean).map(String) : [],
+    riskFlags: Array.isArray(item.riskFlags) ? item.riskFlags.filter(Boolean).map(String) : [],
+    rawUpdatedAt: item.rawUpdatedAt || ""
   };
 }
 
@@ -988,6 +1042,7 @@ function render() {
   renderDashboard();
   renderGarage();
   renderNewCars();
+  renderUsedCars();
   renderDetail();
   renderCompare();
   renderDrives();
@@ -1004,6 +1059,7 @@ function ensureSelectedCar() {
 }
 
 function renderNav() {
+  if (!viewMeta[activeView]) activeView = "dashboard";
   const activeNavView = activeView === "detail" ? "garage" : activeView;
   document.querySelectorAll(".nav-button").forEach((button) => {
     const isActive = button.dataset.view === activeNavView;
@@ -1303,6 +1359,161 @@ function renderNewCarCard(release) {
       </div>
     </article>
   `;
+}
+
+function renderUsedCars() {
+  const status = document.querySelector("#usedcarStatus");
+  const spotlight = document.querySelector("#usedcarSpotlight");
+  const grid = document.querySelector("#usedcarGrid");
+  if (!status || !spotlight || !grid) return;
+  const listings = getFilteredUsedListings();
+  const total = state.usedMarket.listings.length;
+  const lastFetched = state.usedMarket.lastFetchedAt ? formatDateTime(state.usedMarket.lastFetchedAt) : "";
+  const officialCount = state.usedMarket.listings.filter((listing) => /官方|直营|自营/.test(listing.sourceType)).length;
+  status.textContent = total
+    ? `已缓存 ${total} 台官方/自营车源，当前显示 ${listings.length} 台。${lastFetched ? `上次刷新：${lastFetched}` : ""}`
+    : "还没有刷新数据。点击按钮后会从懂车帝官方二手车源拉取。";
+
+  if (!total) {
+    spotlight.innerHTML = `
+      <section class="panel usedcar-empty">
+        <h2>从懂车帝拉取官方二手车源</h2>
+        <p class="muted">默认优先懂车帝官方直营/自营车源，刷新后会按 30 万左右、准新低里程、长续航、接近理想 i6 体感和二手风险排序。</p>
+      </section>
+    `;
+    grid.innerHTML = "";
+    return;
+  }
+
+  const best = listings[0] || state.usedMarket.listings[0];
+  spotlight.innerHTML = best ? renderUsedCarSpotlight(best, officialCount) : "";
+  grid.innerHTML = listings.map(renderUsedCarCard).join("") || `<div class="muted">当前筛选条件下没有车源。</div>`;
+}
+
+function getFilteredUsedListings() {
+  const city = document.querySelector("#usedcarCityFilter")?.value || "全国";
+  const scope = document.querySelector("#usedcarScopeFilter")?.value || "fit";
+  const risk = document.querySelector("#usedcarRiskFilter")?.value || "all";
+  return [...(state.usedMarket.listings || [])]
+    .filter((listing) => {
+      if (city !== "全国" && listing.city !== city) return false;
+      if (scope === "fit" && usedListingClientScore(listing) < 52) return false;
+      if (scope === "budget" && !priceNearBudget(listing)) return false;
+      if (scope === "fresh" && !isFreshUsedListing(listing)) return false;
+      if (scope === "known" && !isKnownConcernListing(listing)) return false;
+      if (scope === "longrange" && !isLongRangeUsedListing(listing)) return false;
+      if (risk === "cleaner" && listing.riskFlags.length > 3) return false;
+      if (risk === "no-old" && listing.year && listing.year < 2023) return false;
+      return true;
+    })
+    .sort((a, b) => usedListingClientScore(b) - usedListingClientScore(a) || usedListingPriceDistance(a) - usedListingPriceDistance(b));
+}
+
+function renderUsedCarSpotlight(listing, officialCount) {
+  const risks = listing.riskFlags.slice(0, 4);
+  return `
+    <section class="panel usedcar-feature">
+      <div class="usedcar-feature-media">${listing.image ? `<img src="${escapeAttr(listing.image)}" alt="${escapeAttr(listing.title)}">` : `<span>${escapeHtml(listing.seriesName)}</span>`}</div>
+      <div class="usedcar-feature-copy">
+        <div class="chip-row tight">
+          <span class="chip ok">匹配度 ${usedListingClientScore(listing)}</span>
+          <span class="chip official">${escapeHtml(listing.sourceType || "官方车源")}</span>
+          <span class="chip">${escapeHtml(listing.city || "全国")}</span>
+          <span class="chip info">${escapeHtml(usedEnergyLabel(listing.energyType))}</span>
+        </div>
+        <h2>${escapeHtml(listing.title)}</h2>
+        <p class="muted">${escapeHtml(listing.priceText || "价格待确认")} · ${escapeHtml(listing.ageText || "-")} · ${escapeHtml(listing.mileageText || "-")} · 本次官方/自营池 ${officialCount} 台</p>
+        <div class="newcar-reason-list">
+          ${listing.fitReasons.slice(0, 5).map((reason) => `<span>${escapeHtml(reason)}</span>`).join("")}
+        </div>
+        <div class="usedcar-risk-strip">
+          ${risks.map((risk) => `<span>${escapeHtml(risk)}</span>`).join("")}
+        </div>
+        <div class="card-actions">
+          <button data-add-used-listing="${listing.skuId}" type="button">加入车源库并分析</button>
+          <a href="${escapeAttr(listing.url)}" target="_blank" rel="noreferrer">懂车帝车源</a>
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+function renderUsedCarCard(listing) {
+  const score = usedListingClientScore(listing);
+  const discount = getUsedListingDiscount(listing);
+  return `
+    <article class="usedcar-card">
+      <div class="usedcar-card-image">${listing.image ? `<img src="${escapeAttr(listing.image)}" alt="${escapeAttr(listing.title)}">` : `<span>${escapeHtml(listing.seriesName)}</span>`}</div>
+      <div class="usedcar-card-body">
+        <div class="usedcar-card-title">
+          <div>
+            <div class="car-name">${escapeHtml(listing.seriesName || listing.title)}</div>
+            <div class="car-trim">${escapeHtml(listing.trim || listing.title)}</div>
+          </div>
+          <div class="fit-score">${score}</div>
+        </div>
+        <div class="chip-row">
+          <span class="chip ${score >= 72 ? "ok" : score >= 56 ? "warn" : "info"}">偏好排序</span>
+          <span class="chip official">${escapeHtml(listing.sourceType)}</span>
+          <span class="chip">${escapeHtml(listing.city || "未知城市")}</span>
+          ${listing.authentication ? `<span class="chip">${escapeHtml(listing.authentication)}</span>` : ""}
+        </div>
+        <div class="usedcar-facts">
+          <div><span>报价</span><strong>${escapeHtml(listing.priceText || "-")}</strong></div>
+          <div><span>新车指导</span><strong>${escapeHtml(listing.officialPriceText || "-")}</strong></div>
+          <div><span>年份/里程</span><strong>${escapeHtml([listing.ageText, listing.mileageText].filter(Boolean).join(" / ") || "-")}</strong></div>
+          <div><span>折让</span><strong>${discount === null ? "-" : `${discount.toFixed(1)}%`}</strong></div>
+        </div>
+        <div class="chip-row">
+          ${listing.range ? `<span class="chip">续航 ${listing.range}km</span>` : ""}
+          ${listing.transferCount !== "" ? `<span class="chip">过户 ${listing.transferCount} 次</span>` : ""}
+          ${listing.tags.slice(0, 4).map((tag) => `<span class="chip">${escapeHtml(tag)}</span>`).join("")}
+        </div>
+        <div class="usedcar-risk-list">
+          ${listing.riskFlags.slice(0, 4).map((risk) => `<span>${escapeHtml(risk)}</span>`).join("")}
+        </div>
+        <div class="card-actions">
+          <button data-add-used-listing="${listing.skuId}" type="button">加入并分析</button>
+          <a href="${escapeAttr(listing.url)}" target="_blank" rel="noreferrer">打开</a>
+        </div>
+      </div>
+    </article>
+  `;
+}
+
+function usedListingClientScore(listing) {
+  let score = numberOrDefault(listing.fitScore, 0);
+  if (state.cars.some((car) => car.url === listing.url)) score -= 8;
+  return Math.max(0, Math.min(100, Math.round(score)));
+}
+
+function priceNearBudget(listing) {
+  return listing.priceWan !== "" && listing.priceWan >= 18 && listing.priceWan <= 31;
+}
+
+function isFreshUsedListing(listing) {
+  return listing.year >= 2025 || (listing.mileageWan !== "" && listing.mileageWan <= 1.2);
+}
+
+function isKnownConcernListing(listing) {
+  return /理想i6|蔚来ES6|蔚来ES8|ZEEKR 7X|007GT|小鹏G7|智己LS6|奥迪Q6L|乐道L80|智界R7/i.test(`${listing.seriesName} ${listing.title}`);
+}
+
+function isLongRangeUsedListing(listing) {
+  return listing.range >= 650 || ["ev", "erev", "phev"].includes(listing.energyType);
+}
+
+function usedListingPriceDistance(listing) {
+  return listing.priceWan === "" ? 999 : Math.abs(Number(listing.priceWan) - 28);
+}
+
+function getUsedListingDiscount(listing) {
+  if (listing.priceWan === "" || listing.officialPriceWan === "" || !listing.officialPriceWan) return null;
+  return Math.max(0, (1 - Number(listing.priceWan) / Number(listing.officialPriceWan)) * 100);
+}
+
+function usedEnergyLabel(type) {
+  return { ev: "纯电", phev: "插混", erev: "增程", new_energy: "新能源", unknown: "待确认" }[type] || "待确认";
 }
 
 function getReleaseModelFacts(release) {
@@ -1768,7 +1979,9 @@ function groupSellers() {
 }
 
 function renderTimeline() {
-  document.querySelector("#timelineBoard").innerHTML = buildTimelineItems().map((item) => `
+  const board = document.querySelector("#timelineBoard");
+  if (!board) return;
+  board.innerHTML = buildTimelineItems().map((item) => `
     <div class="timeline-item ${item.level || ""}">
       <div class="timeline-date">${escapeHtml(item.date)}</div>
       <div>
@@ -2248,6 +2461,54 @@ function getDongchediFeedUrls() {
   return [...new Set(urls)];
 }
 
+async function refreshDongchediUsedCars() {
+  if (usedCarRefreshRunning) {
+    showToast("正在刷新懂车帝二手车源。", "warn");
+    return;
+  }
+  usedCarRefreshRunning = true;
+  setUsedCarRefreshState(true);
+  showToast("正在从懂车帝刷新官方二手车源。", "ok");
+  const urls = getDongchediUsedcarUrls();
+  let lastError = "";
+  try {
+    for (const url of urls) {
+      try {
+        const response = await fetch(url, { headers: { Accept: "application/json" } });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok || result.ok === false) {
+          throw new Error(result.error || `刷新失败：${response.status}`);
+        }
+        applyDongchediUsedCarsPayload(result);
+        render();
+        showToast(`已刷新 ${state.usedMarket.listings.length} 台懂车帝官方/自营车源。`, "ok");
+        return;
+      } catch (error) {
+        lastError = error?.message || "刷新失败";
+      }
+    }
+    throw new Error(lastError || "无法连接懂车帝二手车数据服务。");
+  } catch (error) {
+    state.usedMarket.error = error?.message || "刷新失败";
+    renderUsedCars();
+    showToast("刷新失败，请确认懂车帝数据服务已启动。", "danger");
+  } finally {
+    usedCarRefreshRunning = false;
+    setUsedCarRefreshState(false);
+  }
+}
+
+function getDongchediUsedcarUrls() {
+  const city = encodeURIComponent(document.querySelector("#usedcarCityFilter")?.value || "全国");
+  const params = `limit=90&pages=3&city=${city}`;
+  const urls = [];
+  if (location.protocol === "http:" || location.protocol === "https:") {
+    urls.push(withQuery(DONGCHEDI_USEDCAR_URL, params));
+  }
+  urls.push(withQuery(LOCAL_DONGCHEDI_USEDCAR_URL, params));
+  return [...new Set(urls)];
+}
+
 function withQuery(url, params) {
   return `${url}${url.includes("?") ? "&" : "?"}${params}`;
 }
@@ -2262,11 +2523,29 @@ function applyDongchediNewCarsPayload(result) {
   });
 }
 
+function applyDongchediUsedCarsPayload(result) {
+  state.usedMarket = normalizeUsedMarket({
+    listings: result.listings || [],
+    lastFetchedAt: result.fetchedAt || new Date().toISOString(),
+    sourceUrl: result.sourceUrl || "https://www.dongchedi.com/usedcar/",
+    sourceLabel: result.sourceLabel || "懂车帝官方二手车",
+    city: result.city || "全国",
+    error: ""
+  });
+}
+
 function setNewCarRefreshState(isRunning) {
   const button = document.querySelector("#refreshDcdNewCars");
   if (!button) return;
   button.disabled = isRunning;
   button.textContent = isRunning ? "刷新中..." : "刷新懂车帝数据";
+}
+
+function setUsedCarRefreshState(isRunning) {
+  const button = document.querySelector("#refreshDcdUsedCars");
+  if (!button) return;
+  button.disabled = isRunning;
+  button.textContent = isRunning ? "刷新中..." : "刷新官方车源";
 }
 
 function addReleaseToGarage(seriesId) {
@@ -2316,6 +2595,81 @@ function addReleaseToGarage(seriesId) {
   activeView = "detail";
   render();
   showToast("已加入车源库，可以继续补信息墙和试驾记录。", "ok");
+}
+
+function addUsedListingToGarage(skuId) {
+  const listing = state.usedMarket.listings.find((item) => String(item.skuId) === String(skuId));
+  if (!listing) return;
+  const existing = state.cars.find((car) => car.url === listing.url);
+  if (existing) {
+    switchToDetail(existing.id);
+    showToast("这台车源已经在车源库里。", "warn");
+    return;
+  }
+  const risks = listing.riskFlags || [];
+  const isNio = /蔚来|ES6|ES8|EC6|ET5|ET7/i.test(`${listing.seriesName} ${listing.title}`);
+  const isLi = /理想|i6/i.test(`${listing.seriesName} ${listing.title}`);
+  const car = normalizeCar({
+    id: makeId("car"),
+    name: listing.seriesName || listing.brandName || listing.title,
+    trim: listing.trim || listing.title,
+    stage: "watching",
+    recommendation: listing.fitScore >= 72 ? "worthViewing" : listing.fitScore >= 58 ? "watch" : "waitDrop",
+    url: listing.url,
+    image: listing.image,
+    city: listing.city,
+    source: listing.sourceType || "懂车帝官方二手车",
+    seller: listing.seller || "懂车帝官方二手车",
+    price: listing.priceWan,
+    newPrice: listing.officialPriceWan,
+    targetPrice: listing.priceWan !== "" ? Math.max(0, Number(listing.priceWan) - (listing.priceWan >= 25 ? 1.2 : 0.6)) : "",
+    landing: listing.priceWan !== "" ? Number(listing.priceWan) + 1.1 : "",
+    costs: { insurance: 0.75, transport: listing.city && listing.city !== "北京" ? 0.18 : 0.05, inspection: 0.18, reconditioning: 0.25, adasMonthly: 0 },
+    battery: isNio && /租电|BaaS/i.test(listing.title) ? "baas" : "buyout",
+    batterySize: listing.batterySize,
+    range: listing.range,
+    mileage: listing.mileageWan,
+    plateDate: listing.year ? `${listing.year}-01` : "",
+    transfers: listing.transferCount,
+    exterior: "待看车确认",
+    interior: "待看车确认",
+    nop: isLi ? "included" : "unknown",
+    report: listing.tags.some((tag) => /检测/.test(tag)) ? "basic" : "none",
+    certified: /官方认证/.test(listing.authentication) ? "official" : "platform",
+    options: listing.tags.join(" / "),
+    issues: risks.join("；") || "仍需核验检测报告、出险记录、权益和合同承诺。",
+    rightsNotes: isNio ? "重点确认电池产权/BaaS、NOP+、质保、换电权益和二手车主权益。" : "重点确认质保、智驾权益、官方/平台保障、退换和合同承诺。",
+    sellerNotes: [listing.seller, listing.officialHint, listing.shopId ? `shop_id: ${listing.shopId}` : ""].filter(Boolean).join("；"),
+    nextAction: "先索要完整检测报告、出险/维保记录、权益截图，再决定是否约看和第三方复检。",
+    notes: `来自懂车帝官方二手车源。排序原因：${listing.fitReasons.join("、") || "待进一步判断"}。`
+  });
+  state.cars.unshift(car);
+  const evidence = {
+    id: makeId("ev"),
+    carId: car.id,
+    title: "懂车帝官方二手车源",
+    type: "listing",
+    status: risks.length >= 3 ? "pending" : "valid",
+    url: listing.url,
+    notes: [
+      `车源：${listing.title}`,
+      `报价：${listing.priceText || "-"}；新车指导价：${listing.officialPriceText || "-"}`,
+      `城市：${listing.city || "-"}；年份/里程：${[listing.ageText, listing.mileageText].filter(Boolean).join(" / ") || "-"}`,
+      `商家/来源：${listing.seller || listing.sourceType || "-"}`,
+      `平台标签：${listing.tags.join("、") || "-"}`,
+      `初步风险：${risks.join("、") || "仍需核验检测报告和出险记录"}`,
+      "请 Gemini 继续做商家信息梳理、风险评估，并和当前车源库里的理想 i6、蔚来 ES6、极氪 7X 等候选做对比评估。"
+    ].join("\n"),
+    attachments: [],
+    createdAt: new Date().toISOString().slice(0, 10)
+  };
+  state.evidence.unshift(evidence);
+  selectedCarId = car.id;
+  selectedCompare.add(car.id);
+  activeView = "detail";
+  render();
+  showToast("已加入车源库，正在调用 Gemini 做车源分析。", "ok");
+  analyzeCurrentCarWithGemini({ auto: true, focusInfoId: evidence.id });
 }
 
 function exportChecklist() {
@@ -2395,6 +2749,7 @@ document.body.addEventListener("click", (event) => {
   const riskId = event.target.closest("[data-risk]")?.dataset.risk;
   const compareId = event.target.closest("[data-compare]")?.dataset.compare;
   const releaseId = event.target.closest("[data-add-release]")?.dataset.addRelease;
+  const usedListingId = event.target.closest("[data-add-used-listing]")?.dataset.addUsedListing;
   const deleteEvidenceId = event.target.closest("[data-delete-evidence]")?.dataset.deleteEvidence;
   const shouldAddEvidence = Boolean(event.target.closest("[data-add-evidence]"));
 
@@ -2417,6 +2772,7 @@ document.body.addEventListener("click", (event) => {
     render();
   }
   if (releaseId) addReleaseToGarage(releaseId);
+  if (usedListingId) addUsedListingToGarage(usedListingId);
   if (deleteEvidenceId) {
     if (!window.confirm("确定删除这条信息吗？")) return;
     state.evidence = state.evidence.filter((item) => item.id !== deleteEvidenceId);
@@ -2466,6 +2822,9 @@ document.querySelector("#deleteCar").addEventListener("click", () => {
   "#newcarScopeFilter",
   "#newcarBodyFilter",
   "#newcarPriceFilter",
+  "#usedcarCityFilter",
+  "#usedcarScopeFilter",
+  "#usedcarRiskFilter",
   "#rankMode",
   "#riskCarSelect",
   "#detailCarSelect"
@@ -2483,6 +2842,7 @@ document.querySelector("#editCurrentCar").addEventListener("click", () => {
 document.querySelector("#exportChecklist").addEventListener("click", exportChecklist);
 document.querySelector("#analyzeInfoWall").addEventListener("click", () => analyzeCurrentCarWithGemini({ auto: false }));
 document.querySelector("#refreshDcdNewCars").addEventListener("click", refreshDongchediNewCars);
+document.querySelector("#refreshDcdUsedCars").addEventListener("click", refreshDongchediUsedCars);
 
 document.querySelector("#evidenceForm").addEventListener("submit", (event) => {
   event.preventDefault();

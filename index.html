@@ -27,11 +27,11 @@
           <button class="nav-button active" data-view="dashboard" data-mobile-label="总览">总览</button>
           <button class="nav-button" data-view="garage" data-mobile-label="车源">车源库</button>
           <button class="nav-button" data-view="newcars" data-mobile-label="新车">新车情报</button>
+          <button class="nav-button" data-view="usedcars" data-mobile-label="二手">二手车</button>
           <button class="nav-button" data-view="compare" data-mobile-label="对比">对比</button>
           <button class="nav-button" data-view="drives" data-mobile-label="试驾">试驾</button>
           <button class="nav-button" data-view="risks" data-mobile-label="风险">风险</button>
           <button class="nav-button" data-view="sellers" data-mobile-label="商家">商家</button>
-          <button class="nav-button" data-view="timeline" data-mobile-label="时间">时间线</button>
         </nav>
         <div class="side-footer">
           <button class="ghost-button" id="exportData">导出 JSON</button>
@@ -101,8 +101,8 @@
             </section>
             <section class="panel">
               <div class="panel-head">
-                <h2>价格与时间</h2>
-                <button class="text-button" data-view-link="timeline">时间线</button>
+                <h2>价格观察</h2>
+                <button class="text-button" data-view-link="usedcars">找车源</button>
               </div>
               <div id="timelinePreview" class="timeline-list"></div>
             </section>
@@ -182,6 +182,47 @@
           </section>
           <section id="newcarSpotlight" class="newcar-spotlight"></section>
           <div id="newcarGrid" class="newcar-grid"></div>
+        </section>
+
+        <section class="view" id="usedcarsView">
+          <section class="panel usedcar-refresh-panel">
+            <div class="panel-head">
+              <div>
+                <h2>懂车帝官方二手车源</h2>
+                <span class="muted">拉取懂车帝官方直营/自营车源，按你的预算、i6 体感标尺、准新低里程和二手风险排序。</span>
+              </div>
+              <button class="primary-button" id="refreshDcdUsedCars" type="button">刷新官方车源</button>
+            </div>
+            <div class="usedcar-controls">
+              <select id="usedcarCityFilter" class="select">
+                <option value="全国">全国官方</option>
+                <option value="北京">北京</option>
+                <option value="重庆">重庆</option>
+                <option value="武汉">武汉</option>
+                <option value="上海">上海</option>
+                <option value="深圳">深圳</option>
+              </select>
+              <select id="usedcarScopeFilter" class="select">
+                <option value="fit">优先适合我</option>
+                <option value="budget">30万附近</option>
+                <option value="fresh">准新低里程</option>
+                <option value="known">重点车型池</option>
+                <option value="longrange">长续航新能源</option>
+                <option value="all">全部官方车源</option>
+              </select>
+              <select id="usedcarRiskFilter" class="select">
+                <option value="all">全部风险</option>
+                <option value="cleaner">少风险提示</option>
+                <option value="no-old">排除老车</option>
+              </select>
+            </div>
+            <div class="usedcar-source-row">
+              <span id="usedcarStatus" class="muted">还没有刷新数据。</span>
+              <a href="https://www.dongchedi.com/usedcar/x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x" target="_blank" rel="noreferrer">打开懂车帝二手车</a>
+            </div>
+          </section>
+          <section id="usedcarSpotlight" class="usedcar-spotlight"></section>
+          <div id="usedcarGrid" class="usedcar-grid"></div>
         </section>
 
         <section class="view" id="detailView">
@@ -344,16 +385,6 @@
             <div id="sellerGrid" class="seller-grid"></div>
           </div>
         </section>
-
-        <section class="view" id="timelineView">
-          <section class="panel">
-            <div class="panel-head">
-              <h2>购车时间线</h2>
-              <span class="muted">指标窗口、目标价、试驾和复检节奏</span>
-            </div>
-            <div id="timelineBoard" class="timeline-board"></div>
-          </section>
-        </section>
       </main>
     </div>
 
@@ -449,6 +480,9 @@
           <label>官方认证
             <select id="carCertified" class="input">
               <option value="unknown">待确认</option>
+              <option value="official">品牌官方认证</option>
+              <option value="platform">平台认证/平台担保</option>
+              <option value="dealer">车商认证</option>
               <option value="yes">确认官方认证</option>
               <option value="no">非官方认证</option>
             </select>

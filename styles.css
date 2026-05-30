@@ -720,6 +720,154 @@ textarea.input {
   font-size: 13px;
 }
 
+.usedcar-refresh-panel {
+  margin-bottom: 14px;
+}
+
+.usedcar-controls,
+.usedcar-source-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.usedcar-controls {
+  margin-top: 12px;
+}
+
+.usedcar-source-row {
+  justify-content: space-between;
+  margin-top: 10px;
+}
+
+.usedcar-source-row a {
+  color: var(--primary);
+  text-decoration: none;
+}
+
+.usedcar-spotlight {
+  margin-bottom: 14px;
+}
+
+.usedcar-feature {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.9fr) minmax(0, 1.1fr);
+  gap: 16px;
+  align-items: stretch;
+}
+
+.usedcar-feature-media,
+.usedcar-card-image {
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: var(--radius);
+  background: linear-gradient(135deg, #e5eef1, #f9fbfc);
+  color: #52616f;
+  font-weight: 720;
+}
+
+.usedcar-feature-media {
+  min-height: 240px;
+}
+
+.usedcar-feature-media img,
+.usedcar-card-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.usedcar-feature-copy {
+  min-width: 0;
+  align-self: center;
+}
+
+.usedcar-feature-copy h2 {
+  margin-top: 12px;
+  font-size: 24px;
+}
+
+.usedcar-risk-strip,
+.usedcar-risk-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.usedcar-risk-strip span,
+.usedcar-risk-list span {
+  padding: 7px 9px;
+  border-radius: 999px;
+  background: #fff5eb;
+  color: #9a4b12;
+  font-size: 12px;
+}
+
+.usedcar-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 14px;
+}
+
+.usedcar-card {
+  overflow: hidden;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.usedcar-card:hover {
+  border-color: #cad6df;
+  box-shadow: var(--shadow-strong);
+}
+
+.usedcar-card-image {
+  height: 180px;
+  border-radius: 0;
+}
+
+.usedcar-card-body {
+  padding: 14px;
+}
+
+.usedcar-card-title {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+}
+
+.usedcar-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.usedcar-facts div {
+  min-width: 0;
+  padding: 10px;
+  border-radius: var(--radius);
+  background: var(--panel-2);
+}
+
+.usedcar-facts span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.usedcar-facts strong {
+  display: block;
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+}
+
 .car-card {
   overflow: hidden;
 }
@@ -830,6 +978,11 @@ textarea.input {
 .chip.hot {
   background: #fff3e5;
   color: var(--warn);
+}
+
+.chip.official {
+  background: #e9f6f4;
+  color: var(--primary);
 }
 
 .car-meta {
@@ -2038,7 +2191,8 @@ button:disabled {
   .drive-card,
   .seller-card,
   .evidence-card,
-  .newcar-card {
+  .newcar-card,
+  .usedcar-card {
     border-radius: 14px;
     box-shadow: none;
   }
@@ -2046,7 +2200,8 @@ button:disabled {
   .panel:hover,
   .car-card:hover,
   .seller-card:hover,
-  .newcar-card:hover {
+  .newcar-card:hover,
+  .usedcar-card:hover {
     border-color: var(--line);
     box-shadow: none;
     transform: none;
@@ -2150,6 +2305,45 @@ button:disabled {
   }
 
   .newcar-model-row {
+    grid-template-columns: 1fr;
+  }
+
+  .usedcar-controls {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .usedcar-source-row {
+    display: grid;
+    grid-template-columns: 1fr;
+    align-items: start;
+  }
+
+  .usedcar-feature,
+  .usedcar-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .usedcar-feature-media {
+    min-height: 190px;
+  }
+
+  .usedcar-feature-copy h2 {
+    font-size: 20px;
+  }
+
+  .usedcar-card-image {
+    height: 176px;
+    background: #eaf0f5;
+  }
+
+  .usedcar-card-image img,
+  .usedcar-feature-media img {
+    object-fit: contain;
+    padding: 10px;
+  }
+
+  .usedcar-facts {
     grid-template-columns: 1fr;
   }
 
