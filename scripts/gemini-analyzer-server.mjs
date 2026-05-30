@@ -16,11 +16,11 @@ const server = createServer(async (req, res) => {
     return;
   }
   try {
-    if (req.method === "GET" && req.url === "/health") {
+    if (req.method === "GET" && ["/health", "/api/gemini-health"].includes(req.url)) {
       sendJson(res, 200, { ok: true, service: "newcar-gemini-analyzer", mode: MODE, model: MODEL });
       return;
     }
-    if (req.method === "POST" && req.url === "/analyze") {
+    if (req.method === "POST" && ["/analyze", "/api/analyze"].includes(req.url)) {
       const payload = await readJson(req);
       const result = MODE === "api" ? await analyzeWithGeminiApi(payload) : await analyzeWithGeminiCli(payload);
       sendJson(res, 200, { ok: true, ...result });

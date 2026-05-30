@@ -3,7 +3,8 @@ const AUTH_PROFILE_KEY = "newcar-auth-profile";
 const INDICATOR_DEADLINE = new Date("2027-05-26T23:59:59+08:00");
 const INFO_IMAGE_MAX_EDGE = 1600;
 const INFO_IMAGE_QUALITY = 0.82;
-const LOCAL_GEMINI_ANALYZER_URL = window.NEWCAR_AI_CONFIG?.geminiAnalyzerUrl || "http://127.0.0.1:8787/analyze";
+const GEMINI_ANALYZER_URL = window.NEWCAR_AI_CONFIG?.geminiAnalyzerUrl || "/api/analyze";
+const LOCAL_GEMINI_ANALYZER_URL = window.NEWCAR_AI_CONFIG?.localGeminiAnalyzerUrl || "http://127.0.0.1:8787/analyze";
 const DONGCHEDI_NEWCAR_URL = window.NEWCAR_DATA_CONFIG?.dongchediNewcarUrl || "/api/dongchedi/recent-models";
 const LOCAL_DONGCHEDI_NEWCAR_URL = window.NEWCAR_DATA_CONFIG?.localDongchediNewcarUrl || "http://127.0.0.1:8788/dongchedi/recent-models";
 const DONGCHEDI_USEDCAR_URL = window.NEWCAR_DATA_CONFIG?.dongchediUsedcarUrl || "/api/dongchedi/official-usedcars";
@@ -2182,7 +2183,7 @@ async function addEvidenceFromForm() {
   ["#evidenceTitle", "#evidenceUrl", "#evidenceNotes"].forEach((selector) => setValue(selector, ""));
   if (document.querySelector("#evidenceFiles")) document.querySelector("#evidenceFiles").value = "";
   render();
-  showToast("信息已加入当前车源，正在调用本地 Gemini 分析。", "ok");
+  showToast("信息已加入当前车源，正在调用 Gemini 分析。", "ok");
   analyzeCurrentCarWithGemini({ auto: true, focusInfoId: item.id });
 }
 
@@ -2231,35 +2232,57 @@ async function analyzeCurrentCarWithGemini({ auto = false, focusInfoId = "" } = 
   if (!car) return;
   geminiAnalysisRunning = true;
   setGeminiButtonState(true);
-  if (!auto) showToast("正在调用本地 Gemini 分析信息墙。", "ok");
+  if (!auto) showToast("正在调用 Gemini 分析信息墙。", "ok");
   try {
-    const response = await fetch(LOCAL_GEMINI_ANALYZER_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(buildGeminiPayload(car, focusInfoId))
-    });
-    const result = await response.json().catch(() => ({}));
-    if (!response.ok || result.ok === false) {
-      throw new Error(result.error || `Gemini 分析失败：${response.status}`);
+    const payload = buildGeminiPayload(car, focusInfoId);
+    const urls = getGeminiAnalyzerUrls();
+    let result = null;
+    let lastError = "";
+    for (const url of urls) {
+      try {
+        const response = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        result = await response.json().catch(() => ({}));
+        if (!response.ok || result.ok === false) {
+          throw new Error(result.error || `Gemini 分析失败：${response.status}`);
+        }
+        break;
+      } catch (error) {
+        lastError = error?.message || "Gemini 分析失败。";
+        result = null;
+      }
     }
+    if (!result) throw new Error(lastError || "Gemini 分析服务未就绪。");
     applyGeminiAnalysis(result, focusInfoId);
     geminiUnavailableNotified = false;
     render();
     showToast("Gemini 已分析并更新车源信息。", "ok");
   } catch (error) {
-    const message = error?.message || "本地 Gemini 分析失败。";
+    const message = error?.message || "Gemini 分析失败。";
     if (auto) {
       if (!geminiUnavailableNotified) {
-        showToast("信息已保存；本地 Gemini 分析服务未就绪，可稍后点 Gemini 分析。", "warn");
+        showToast("信息已保存；Gemini 分析服务未就绪，可稍后点 Gemini 分析。", "warn");
         geminiUnavailableNotified = true;
       }
     } else {
-      showToast(message.includes("Failed to fetch") ? "请先启动本地 Gemini 分析服务。" : message, "danger");
+      showToast(message.includes("Failed to fetch") ? "Gemini 分析服务未就绪，请检查线上服务或本机服务。" : message, "danger");
     }
   } finally {
     geminiAnalysisRunning = false;
     setGeminiButtonState(false);
   }
+}
+
+function getGeminiAnalyzerUrls() {
+  const urls = [];
+  if (location.protocol === "http:" || location.protocol === "https:") {
+    urls.push(GEMINI_ANALYZER_URL);
+  }
+  urls.push(LOCAL_GEMINI_ANALYZER_URL);
+  return [...new Set(urls)];
 }
 
 function setGeminiButtonState(isRunning) {
