@@ -1088,9 +1088,12 @@ function renderDashboard() {
       <h2>${best ? `${escapeHtml(best.name)} ${escapeHtml(best.trim || "")}：${recommendationLabel(deriveRecommendation(best))}` : "先添加一台车源"}</h2>
       <p>${best ? escapeHtml(best.nextAction || "补齐信息、成本和试驾记录后再做最终判断。") : "系统会自动生成风险和核验清单。"}</p>
     </div>
-    <div class="deadline-pill">
-      <span>指标到期</span>
-      <strong>${daysUntilDeadline()} 天</strong>
+    <div class="decision-actions">
+      <div class="deadline-pill">
+        <span>指标到期</span>
+        <strong>${daysUntilDeadline()} 天</strong>
+      </div>
+      <button class="secondary-button" id="analyzeDashboardCar" data-dashboard-gemini type="button" ${best ? "" : "disabled"}>Gemini 重新分析</button>
     </div>
   `;
 
@@ -1946,6 +1949,17 @@ function analyzeRiskCarWithGemini() {
   analyzeCurrentCarWithGemini({ auto: false });
 }
 
+function analyzeDashboardBestWithGemini() {
+  const best = [...state.cars].sort((a, b) => fitScore(b) - fitScore(a))[0];
+  if (!best) {
+    showToast("请先添加一台车源。", "warn");
+    return;
+  }
+  selectedCarId = best.id;
+  activeView = "dashboard";
+  analyzeCurrentCarWithGemini({ auto: false });
+}
+
 function renderSellers() {
   const sellers = groupSellers();
   document.querySelector("#sellerGrid").innerHTML = sellers.map((seller) => {
@@ -2309,6 +2323,11 @@ function setGeminiButtonState(isRunning) {
   if (riskButton) {
     riskButton.disabled = isRunning || !state.cars.length;
     riskButton.textContent = isRunning ? "分析中..." : "Gemini 重新分析";
+  }
+  const dashboardButton = document.querySelector("#analyzeDashboardCar");
+  if (dashboardButton) {
+    dashboardButton.disabled = isRunning || !state.cars.length;
+    dashboardButton.textContent = isRunning ? "分析中..." : "Gemini 重新分析";
   }
 }
 
@@ -2816,6 +2835,7 @@ document.body.addEventListener("click", (event) => {
   }
   if (releaseId) addReleaseToGarage(releaseId);
   if (usedListingId) addUsedListingToGarage(usedListingId);
+  if (event.target.closest("[data-dashboard-gemini]")) analyzeDashboardBestWithGemini();
   if (deleteEvidenceId) {
     if (!window.confirm("确定删除这条信息吗？")) return;
     state.evidence = state.evidence.filter((item) => item.id !== deleteEvidenceId);

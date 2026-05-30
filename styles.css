@@ -379,6 +379,17 @@ h3 {
   color: var(--muted);
 }
 
+.decision-actions {
+  display: grid;
+  gap: 10px;
+  align-self: stretch;
+}
+
+.decision-actions .secondary-button {
+  width: 100%;
+  white-space: nowrap;
+}
+
 .eyebrow {
   color: var(--primary);
   font-size: 12px;
