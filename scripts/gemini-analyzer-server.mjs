@@ -9,6 +9,10 @@ const MAX_BODY_BYTES = Number(process.env.GEMINI_ANALYZER_MAX_BODY_MB || 28) * 1
 const MAX_INLINE_IMAGES = Number(process.env.GEMINI_ANALYZER_MAX_IMAGES || 10);
 const GEMINI_API_TIMEOUT_MS = Number(process.env.GEMINI_API_TIMEOUT_MS || 90000);
 const GEMINI_RECOMMEND_TIMEOUT_MS = Number(process.env.GEMINI_RECOMMEND_TIMEOUT_MS || 45000);
+const DEEPSEEK_MODEL = process.env.DEEPSEEK_MODEL || "deepseek-v4-flash";
+const DEEPSEEK_BASE_URL = (process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com").replace(/\/$/, "");
+const DEEPSEEK_API_TIMEOUT_MS = Number(process.env.DEEPSEEK_API_TIMEOUT_MS || 45000);
+const DEEPSEEK_MAX_TOKENS = Number(process.env.DEEPSEEK_MAX_TOKENS || 8192);
 
 const server = createServer(async (req, res) => {
   applyCors(req, res);
@@ -18,13 +22,21 @@ const server = createServer(async (req, res) => {
     return;
   }
   try {
-    if (req.method === "GET" && ["/health", "/api/gemini-health"].includes(req.url)) {
-      sendJson(res, 200, { ok: true, service: "newcar-gemini-analyzer", mode: MODE, model: MODEL });
+    if (req.method === "GET" && ["/health", "/api/gemini-health", "/api/deepseek-health"].includes(req.url)) {
+      sendJson(res, 200, {
+        ok: true,
+        service: "newcar-gemini-analyzer",
+        mode: MODE,
+        model: MODEL,
+        fallbackProvider: "deepseek",
+        deepseekModel: DEEPSEEK_MODEL,
+        deepseekConfigured: Boolean(process.env.DEEPSEEK_API_KEY)
+      });
       return;
     }
     if (req.method === "POST" && ["/analyze", "/api/analyze"].includes(req.url)) {
       const payload = await readJson(req);
-      const result = MODE === "api" ? await analyzeWithGeminiApi(payload) : await analyzeWithGeminiCli(payload);
+      const result = await analyzeWithProviderFallback(payload, Date.now());
       sendJson(res, 200, { ok: true, ...result });
       return;
     }
@@ -151,16 +163,90 @@ async function recommendWithGeminiCli(payload) {
   return parseModelJson(text);
 }
 
+async function analyzeWithProviderFallback(payload, startedAt = Date.now()) {
+  try {
+    const result = MODE === "api" ? await analyzeWithGeminiApi(payload) : await analyzeWithGeminiCli(payload);
+    console.log(`[analyze] gemini ok ${Date.now() - startedAt}ms images=${collectImages(payload).length}`);
+    return { provider: "gemini", ...result };
+  } catch (geminiError) {
+    const geminiMessage = normalizeError(geminiError);
+    console.warn(`[analyze] gemini failed ${Date.now() - startedAt}ms: ${geminiMessage}`);
+    try {
+      const result = await analyzeWithDeepSeekApi(payload);
+      console.log(`[analyze] deepseek ok ${Date.now() - startedAt}ms after gemini failure`);
+      return { provider: "deepseek", providerFallbackFrom: "gemini", ...result };
+    } catch (deepseekError) {
+      const deepseekMessage = normalizeError(deepseekError);
+      console.warn(`[analyze] deepseek failed ${Date.now() - startedAt}ms: ${deepseekMessage}`);
+      throw new Error(`Gemini 和 DeepSeek 均不可用。Gemini：${geminiMessage}；DeepSeek：${deepseekMessage}`);
+    }
+  }
+}
+
 async function recommendWithFallback(payload, startedAt = Date.now()) {
   try {
     const result = MODE === "api" ? await recommendWithGeminiApi(payload) : await recommendWithGeminiCli(payload);
-    console.log(`[recommend] ok ${Date.now() - startedAt}ms models=${(payload.recentModels || []).length} used=${(payload.usedListings || []).length}`);
-    return result;
-  } catch (error) {
-    const normalized = normalizeError(error);
-    console.warn(`[recommend] fallback ${Date.now() - startedAt}ms models=${(payload.recentModels || []).length} used=${(payload.usedListings || []).length}: ${normalized}`);
-    return buildServerRecommendationFallback(payload, normalized);
+    console.log(`[recommend] gemini ok ${Date.now() - startedAt}ms models=${(payload.recentModels || []).length} used=${(payload.usedListings || []).length}`);
+    return { provider: "gemini", ...result };
+  } catch (geminiError) {
+    const geminiMessage = normalizeError(geminiError);
+    console.warn(`[recommend] gemini failed ${Date.now() - startedAt}ms models=${(payload.recentModels || []).length} used=${(payload.usedListings || []).length}: ${geminiMessage}`);
+    try {
+      const result = await recommendWithDeepSeekApi(payload);
+      console.log(`[recommend] deepseek ok ${Date.now() - startedAt}ms after gemini failure models=${(payload.recentModels || []).length} used=${(payload.usedListings || []).length}`);
+      return { provider: "deepseek", providerFallbackFrom: "gemini", ...result };
+    } catch (deepseekError) {
+      const deepseekMessage = normalizeError(deepseekError);
+      console.warn(`[recommend] server fallback ${Date.now() - startedAt}ms models=${(payload.recentModels || []).length} used=${(payload.usedListings || []).length}: ${deepseekMessage}`);
+      return buildServerRecommendationFallback(payload, `Gemini：${geminiMessage}；DeepSeek：${deepseekMessage}`);
+    }
   }
+}
+
+async function analyzeWithDeepSeekApi(payload) {
+  const prompt = buildPrompt(stripImageData(payload), false);
+  return requestDeepSeekJson(prompt, 0.15);
+}
+
+async function recommendWithDeepSeekApi(payload) {
+  const prompt = buildRecommendationPrompt(payload);
+  return requestDeepSeekJson(prompt, 0.2);
+}
+
+async function requestDeepSeekJson(prompt, temperature) {
+  const apiKey = process.env.DEEPSEEK_API_KEY;
+  if (!apiKey) throw new Error("未找到 DEEPSEEK_API_KEY，请先在服务端环境文件中配置 DeepSeek API Key。");
+  const body = {
+    model: DEEPSEEK_MODEL,
+    messages: [
+      {
+        role: "system",
+        content: "你是 NewCar 购车工作台的结构化 JSON 分析引擎。请严格输出 JSON，不要输出 Markdown 或解释。"
+      },
+      { role: "user", content: prompt }
+    ],
+    stream: false,
+    response_format: { type: "json_object" },
+    max_tokens: DEEPSEEK_MAX_TOKENS,
+    temperature
+  };
+  if (process.env.DEEPSEEK_THINKING_TYPE) {
+    body.thinking = { type: process.env.DEEPSEEK_THINKING_TYPE };
+  }
+  const response = await fetchWithTimeout(`${DEEPSEEK_BASE_URL}/chat/completions`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`
+    },
+    body: JSON.stringify(body)
+  }, DEEPSEEK_API_TIMEOUT_MS);
+  const json = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(json.error?.message || `DeepSeek API 返回 ${response.status}`);
+  }
+  const text = json.choices?.[0]?.message?.content || "";
+  return parseModelJson(text);
 }
 
 function runGeminiCli(prompt) {

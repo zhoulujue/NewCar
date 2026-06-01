@@ -3245,7 +3245,7 @@ async function analyzeRequirementAndCollectCars() {
       }
     }
     if (!result) throw new Error(lastError || "Gemini 推荐服务未就绪。");
-    applyRequirementAnalysis(result, result.fallback ? "服务器规则兜底" : "Gemini");
+    applyRequirementAnalysis(result, requirementAnalysisSourceLabel(result));
     render();
     showToast("已根据用车需求生成候选车型。", "ok");
   } catch (error) {
@@ -3286,6 +3286,13 @@ function setRequirementAnalyzeState(isRunning) {
   if (!button) return;
   button.disabled = isRunning;
   button.textContent = isRunning ? "正在找车..." : "理解需求并找车";
+}
+
+function requirementAnalysisSourceLabel(result = {}) {
+  if (result.provider === "deepseek") return "DeepSeek";
+  if (result.provider === "gemini") return "Gemini";
+  if (result.fallback) return "服务器规则兜底";
+  return "Gemini";
 }
 
 function buildRequirementGeminiPayload() {

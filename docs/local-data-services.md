@@ -46,14 +46,14 @@ http://127.0.0.1:8787/analyze
 http://127.0.0.1:8787/recommend
 ```
 
-`/analyze` 用于单台车的信息墙/风险分析，`/recommend` 用于首页“用车需求 -> 候选车型”推荐。如果本机配置了 `GEMINI_API_KEY`，服务会走 Gemini API；否则会尝试调用本机 `gemini` CLI。不要把 API Key 写进代码或提交到仓库。
+`/analyze` 用于单台车的信息墙/风险分析，`/recommend` 用于首页“用车需求 -> 候选车型”推荐。如果本机配置了 `GEMINI_API_KEY`，服务会优先走 Gemini API；Gemini 失败后会自动改用 DeepSeek（需配置 `DEEPSEEK_API_KEY`）；二者都失败时，`/recommend` 会返回服务器规则兜底候选。不要把 API Key 写进代码或提交到仓库。
 
-线上部署时，`car.zhoulujue.com/api/analyze` 和 `car.zhoulujue.com/api/recommend` 都应由 Caddy 代理到服务器内的 Gemini analyzer。当前 `huoshan-johor` 上 8787 已被其他服务占用，因此线上 analyzer 使用 `127.0.0.1:8790`。Gemini API Key 应写在服务器环境文件，例如 `/etc/newcar/gemini.env`，并通过 systemd 的 `EnvironmentFile` 加载，不要提交到仓库。
+线上部署时，`car.zhoulujue.com/api/analyze` 和 `car.zhoulujue.com/api/recommend` 都应由 Caddy 代理到服务器内的 analyzer。当前 `huoshan-johor` 上 8787 已被其他服务占用，因此线上 analyzer 使用 `127.0.0.1:8790`。Gemini / DeepSeek API Key 应写在服务器环境文件，例如 `/etc/newcar/gemini.env`，并通过 systemd 的 `EnvironmentFile` 加载，不要提交到仓库。
 
 可选环境变量：
 
 ```bash
-GEMINI_MODEL=gemini-2.5-flash GEMINI_ANALYZER_PORT=8787 node scripts/gemini-analyzer-server.mjs
+GEMINI_MODEL=gemini-2.5-flash DEEPSEEK_MODEL=deepseek-v4-flash GEMINI_ANALYZER_PORT=8787 node scripts/gemini-analyzer-server.mjs
 ```
 
 如果返回“当前网络区域不可用”，说明本机 Gemini API/CLI 的网络或区域还没打通，前端会保留你上传的信息，稍后可以手动再点“Gemini 分析”。
