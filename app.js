@@ -15,6 +15,7 @@ const LOCAL_DONGCHEDI_USEDCAR_URL = window.NEWCAR_DATA_CONFIG?.localDongchediUse
 let geminiAnalysisRunning = false;
 let geminiUnavailableNotified = false;
 let requirementAnalysisRunning = false;
+let requirementEditMode = false;
 let newCarRefreshRunning = false;
 let usedCarRefreshRunning = false;
 
@@ -301,7 +302,8 @@ function normalizeUserRequirement(requirement = {}) {
     mustHaves: merged.mustHaves || seedRequirement.mustHaves,
     dealBreakers: merged.dealBreakers || seedRequirement.dealBreakers,
     referenceCar: merged.referenceCar || seedRequirement.referenceCar,
-    notes: merged.notes || seedRequirement.notes
+    notes: merged.notes || seedRequirement.notes,
+    updatedAt: merged.updatedAt || ""
   };
 }
 
@@ -1287,38 +1289,90 @@ function renderRequirementPanel() {
   if (!panel) return;
   const requirement = state.userRequirement;
   const analysis = state.requirementAnalysis;
-  if (!panel.contains(document.activeElement)) {
-    setValue("#reqPeople", requirement.people);
-    setValue("#reqBudgetMin", requirement.budgetMinWan);
-    setValue("#reqBudgetMax", requirement.budgetMaxWan);
-    setValue("#reqEnergy", requirement.energyTypes.includes("ev") && requirement.energyTypes.length === 1 ? "ev" : requirement.energyTypes.includes("erev") && !requirement.energyTypes.includes("ev") ? "hybrid" : "all");
-    setValue("#reqRange", requirement.minRangeKm);
-    setValue("#reqBody", requirement.bodyPreference);
-    setValue("#reqTiming", requirement.purchaseTiming);
-    setValue("#reqMustHaves", requirement.mustHaves);
-    setValue("#reqDealBreakers", requirement.dealBreakers);
-    setValue("#reqNotes", requirement.notes);
-    setRequirementCheckboxes("reqScene", requirement.scenes);
-    setRequirementCheckboxes("reqPriority", requirement.priorities);
+  const form = document.querySelector("#requirementForm");
+  const preview = document.querySelector("#requirementPreview");
+  panel.classList.toggle("is-editing", requirementEditMode);
+  if (form) form.hidden = !requirementEditMode;
+  document.querySelector("#editRequirement")?.toggleAttribute("hidden", requirementEditMode);
+  document.querySelector("#saveRequirement")?.toggleAttribute("hidden", !requirementEditMode);
+  document.querySelector("#cancelRequirementEdit")?.toggleAttribute("hidden", !requirementEditMode);
+  if (!requirementEditMode || !form?.contains(document.activeElement)) {
+    fillRequirementFormFromState(requirement);
   }
-
+  if (preview) preview.innerHTML = renderRequirementPreview(requirement, analysis);
   document.querySelector("#requirementSummary").innerHTML = renderRequirementSummary(requirement, analysis);
   document.querySelector("#requirementRecommendations").innerHTML = renderRequirementRecommendations(analysis);
   setRequirementAnalyzeState(requirementAnalysisRunning);
 }
 
-function renderRequirementSummary(requirement, analysis) {
-  const chips = [
-    `${peopleLabel(requirement.people)}乘坐`,
+function fillRequirementFormFromState(requirement = state.userRequirement) {
+  setValue("#reqPeople", requirement.people);
+  setValue("#reqBudgetMin", requirement.budgetMinWan);
+  setValue("#reqBudgetMax", requirement.budgetMaxWan);
+  setValue("#reqEnergy", requirement.energyTypes.includes("ev") && requirement.energyTypes.length === 1 ? "ev" : requirement.energyTypes.includes("erev") && !requirement.energyTypes.includes("ev") ? "hybrid" : "all");
+  setValue("#reqRange", requirement.minRangeKm);
+  setValue("#reqBody", requirement.bodyPreference);
+  setValue("#reqTiming", requirement.purchaseTiming);
+  setValue("#reqMustHaves", requirement.mustHaves);
+  setValue("#reqDealBreakers", requirement.dealBreakers);
+  setValue("#reqNotes", requirement.notes);
+  setRequirementCheckboxes("reqScene", requirement.scenes);
+  setRequirementCheckboxes("reqPriority", requirement.priorities);
+}
+
+function renderRequirementPreview(requirement, analysis) {
+  const scenes = requirement.scenes.map((scene) => requirementSceneLabels[scene] || scene);
+  const priorities = requirement.priorities.map((priority) => requirementPriorityLabels[priority] || priority);
+  const summaryLine = [
+    peopleLabel(requirement.people),
+    requirement.city || "北京",
     `${formatWan(requirement.budgetMinWan)}-${formatWan(requirement.budgetMaxWan)}`,
     energyPreferenceLabel(requirement.energyTypes),
-    `纯电续航≥${requirement.minRangeKm}km`,
     bodyPreferenceLabel(requirement.bodyPreference)
-  ];
+  ].filter(Boolean).join(" · ");
+  const updatedText = requirement.updatedAt ? `保存于 ${formatDateTime(requirement.updatedAt)}` : "样例画像，尚未手动保存";
+  const analyzedText = analysis.lastAnalyzedAt ? `上次分析 ${formatDateTime(analysis.lastAnalyzedAt)}` : "尚未分析";
+  const blocks = [
+    ["购车时间", requirement.purchaseTiming],
+    ["必须满足", requirement.mustHaves],
+    ["不能接受", requirement.dealBreakers],
+    ["其他补充", requirement.notes]
+  ].filter(([, value]) => value);
+  return `
+    <div class="profile-preview-top">
+      <div class="profile-main">
+        <div class="eyebrow">当前画像</div>
+        <h3>${escapeHtml(summaryLine)}</h3>
+        <p>${escapeHtml(analysis.summary || "保存画像后，后续新车推荐、二手车排序和风险提示都会以这份偏好为中心。")}</p>
+      </div>
+      <div class="profile-status">
+        <span>${escapeHtml(updatedText)}</span>
+        <strong>${escapeHtml(analyzedText)}</strong>
+      </div>
+    </div>
+    <div class="profile-chip-row">
+      ${scenes.map((scene) => `<span>${escapeHtml(scene)}</span>`).join("")}
+      <span>纯电续航≥${escapeHtml(requirement.minRangeKm)}km</span>
+    </div>
+    <div class="profile-priority">
+      <span>优先级</span>
+      <div>${priorities.map((priority) => `<strong>${escapeHtml(priority)}</strong>`).join("")}</div>
+    </div>
+    <div class="profile-grid">
+      ${blocks.map(([label, value]) => `
+        <div class="profile-block">
+          <span>${escapeHtml(label)}</span>
+          <p>${escapeHtml(value)}</p>
+        </div>
+      `).join("")}
+    </div>
+  `;
+}
+
+function renderRequirementSummary(requirement, analysis) {
+  if (!analysis.searchStrategy && !analysis.error) return "";
   return `
     <div class="requirement-summary-text">
-      <div class="chip-row tight">${chips.map((chip) => `<span class="chip">${escapeHtml(chip)}</span>`).join("")}</div>
-      <p>${escapeHtml(analysis.summary || "填写画像后，系统会刷新懂车帝车型池，并用 Gemini 把你的需求转成可挑选的候选车型。")}</p>
       ${analysis.searchStrategy ? `<p class="muted">${escapeHtml(analysis.searchStrategy)}</p>` : ""}
       ${analysis.error ? `<p class="requirement-error">${escapeHtml(analysis.error)}</p>` : ""}
     </div>
@@ -1412,6 +1466,22 @@ function renderRequirementCandidateCard(candidate) {
     </article>
   `;
 }
+
+const requirementSceneLabels = {
+  city: "市区通勤",
+  highway: "高速长途",
+  holiday: "假期出行",
+  parking: "北京停车"
+};
+
+const requirementPriorityLabels = {
+  comfort: "舒适/NVH",
+  range: "续航补能",
+  cockpit: "车机生态",
+  adas: "高速智驾",
+  interior: "内饰质感",
+  appearance: "外观耐看"
+};
 
 function peopleLabel(value) {
   return { "1": "1人", "2": "2人", "3-4": "3-4人", "5+": "5人以上" }[value] || `${value}人`;
@@ -2882,7 +2952,7 @@ function getGeminiRecommenderUrls() {
   return [...new Set(urls)];
 }
 
-function saveRequirementFromForm() {
+function saveRequirementFromForm({ touch = true } = {}) {
   const energy = getValue("#reqEnergy");
   state.userRequirement = normalizeUserRequirement({
     city: "北京",
@@ -2900,8 +2970,20 @@ function saveRequirementFromForm() {
     mustHaves: getValue("#reqMustHaves"),
     dealBreakers: getValue("#reqDealBreakers"),
     referenceCar: seedRequirement.referenceCar,
-    notes: getValue("#reqNotes")
+    notes: getValue("#reqNotes"),
+    updatedAt: touch ? new Date().toISOString() : state.userRequirement.updatedAt
   });
+  saveState();
+  return state.userRequirement;
+}
+
+function setRequirementEditMode(isEditing) {
+  requirementEditMode = isEditing;
+  if (isEditing) fillRequirementFormFromState();
+  renderRequirementPanel();
+  if (isEditing) {
+    requestAnimationFrame(() => document.querySelector("#reqPeople")?.focus({ preventScroll: true }));
+  }
 }
 
 function checkedValues(name) {
@@ -2914,8 +2996,9 @@ async function analyzeRequirementAndCollectCars() {
     return;
   }
   saveRequirementFromForm();
+  requirementEditMode = false;
   requirementAnalysisRunning = true;
-  setRequirementAnalyzeState(true);
+  renderRequirementPanel();
   showToast("正在刷新车型池并调用 Gemini 理解需求。", "ok");
   try {
     await refreshDongchediNewCars({ silent: true });
@@ -3811,6 +3894,18 @@ document.querySelector("#requirementForm")?.addEventListener("submit", (event) =
   analyzeRequirementAndCollectCars();
 });
 
+document.querySelector("#editRequirement")?.addEventListener("click", () => setRequirementEditMode(true));
+document.querySelector("#cancelRequirementEdit")?.addEventListener("click", () => {
+  setRequirementEditMode(false);
+  showToast("已取消画像修改。", "warn");
+});
+document.querySelector("#saveRequirement")?.addEventListener("click", () => {
+  saveRequirementFromForm();
+  requirementEditMode = false;
+  render();
+  showToast("用车画像已保存。", "ok");
+});
+
 document.querySelector("#deleteCar").addEventListener("click", () => {
   const id = getValue("#carId");
   const car = state.cars.find((item) => item.id === id);
@@ -3902,6 +3997,7 @@ document.querySelector("#importData").addEventListener("change", async (event) =
   state = normalizeState(parsed);
   selectedCarId = state.selectedCarId || state.cars[0]?.id || "";
   selectedCompare = new Set(state.selectedCompare?.length ? state.selectedCompare : state.cars.slice(0, 3).map((car) => car.id));
+  requirementEditMode = false;
   render();
   showToast("数据已导入。", "ok");
 });
@@ -3929,6 +4025,7 @@ document.querySelector("#resetSeed").addEventListener("click", () => {
   });
   selectedCarId = state.cars[0]?.id || "";
   selectedCompare = new Set(state.cars.slice(0, 3).map((car) => car.id));
+  requirementEditMode = false;
   render();
   showToast("已恢复样例数据。", "warn");
 });
