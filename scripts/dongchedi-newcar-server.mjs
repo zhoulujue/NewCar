@@ -8,6 +8,44 @@ const USED_CAR_LIST_URL = "https://www.dongchedi.com/motor/pc/sh/sh_sku_list";
 const CACHE_TTL_MS = Number(process.env.DCD_NEWCAR_CACHE_MINUTES || 10) * 60 * 1000;
 const USER_AGENT = process.env.DCD_NEWCAR_UA || "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125 Safari/537.36";
 
+const knownPureEvSeriesIds = new Set([
+  25557, 20041, 25621, 6391, 9778, 25172, 25846, 9440, 25994, 25400, 5358, 25565,
+  2843, 1616, 9118, 10180, 6187, 25738, 9952, 25904, 25226, 6172, 4363, 1255,
+  5813, 8942, 5952, 5248
+]);
+
+const industryNewCarSources = [
+  { name: "汽车之家资讯", url: "https://www.autohome.com.cn/news/" },
+  { name: "易车新车", url: "https://news.yiche.com/xinchexiaoxi/" },
+  { name: "太平洋汽车新车", url: "https://www.pcauto.com.cn/nation/" }
+];
+
+const supplementalNewCarSeries = [
+  { seriesId: 25557, name: "理想i6", sourceLabel: "重点纯电候选", aliases: ["理想 i6"] },
+  { seriesId: 20041, name: "小米YU7", sourceLabel: "重点纯电候选", aliases: ["小米 YU7"] },
+  { seriesId: 25621, name: "小鹏GX", sourceLabel: "重点纯电候选", aliases: ["小鹏GX", "小鹏 G X", "GX Ultra SE"] },
+  { seriesId: 6391, name: "小鹏G7", sourceLabel: "重点纯电候选", aliases: ["小鹏 G7"] },
+  { seriesId: 9778, name: "ZEEKR 7X", sourceLabel: "重点纯电候选", aliases: ["极氪7X", "极氪 7X"] },
+  { seriesId: 25172, name: "ZEEKR 007GT", sourceLabel: "重点纯电候选", aliases: ["极氪007GT", "极氪 007GT", "007GT"] },
+  { seriesId: 25846, name: "奥迪E7X", sourceLabel: "重点纯电候选", aliases: ["奥迪 E7X"] },
+  { seriesId: 9440, name: "奥迪Q6L e-tron", sourceLabel: "重点纯电候选", aliases: ["奥迪Q6L", "Q6L e-tron"] },
+  { seriesId: 25994, name: "钛7 EV", sourceLabel: "重点纯电候选", aliases: ["方程豹钛7", "方程豹 钛7", "钛7"] },
+  { seriesId: 25400, name: "海狮06EV", sourceLabel: "重点纯电候选", aliases: ["比亚迪海狮06EV", "海狮06 EV"] },
+  { seriesId: 5358, name: "IQ锐歌", sourceLabel: "重点纯电候选", aliases: ["凯迪拉克IQ锐歌", "锐歌"] },
+  { seriesId: 25565, name: "乐道L80", sourceLabel: "重点纯电候选", aliases: ["乐道 L80"] },
+  { seriesId: 2843, name: "蔚来ES6", sourceLabel: "重点纯电候选", aliases: ["蔚来 ES6"] },
+  { seriesId: 1616, name: "蔚来ES8", sourceLabel: "重点纯电候选", aliases: ["蔚来 ES8"] },
+  { seriesId: 9118, name: "智己LS6", sourceLabel: "重点纯电候选", aliases: ["智己 LS6"] },
+  { seriesId: 10180, name: "智界R7", sourceLabel: "重点纯电候选", aliases: ["智界 R7"] },
+  { seriesId: 6187, name: "小米SU7", sourceLabel: "重点纯电候选", aliases: ["小米 SU7"] },
+  { seriesId: 4363, name: "Model Y", sourceLabel: "热门纯电候选", aliases: ["特斯拉Model Y", "特斯拉 Model Y"] },
+  { seriesId: 25738, name: "与众07", sourceLabel: "近期纯电候选", aliases: ["与众 07"] },
+  { seriesId: 9952, name: "与众06", sourceLabel: "近期纯电候选", aliases: ["与众 06"] },
+  { seriesId: 25904, name: "蔚来ES9", sourceLabel: "近期纯电候选", aliases: ["蔚来 ES9"] },
+  { seriesId: 25226, name: "沃尔沃ES90", sourceLabel: "近期纯电候选", aliases: ["沃尔沃 ES90"] },
+  { seriesId: 6172, name: "沃尔沃EX90", sourceLabel: "近期纯电候选", aliases: ["沃尔沃 EX90"] }
+];
+
 const usedTargetSeries = [
   { seriesId: 25557, name: "理想i6" },
   { seriesId: 2843, name: "蔚来ES6" },
@@ -40,8 +78,8 @@ const server = createServer(async (req, res) => {
       return;
     }
     if (req.method === "GET" && url.pathname === "/dongchedi/recent-models") {
-      const limit = clamp(Number(url.searchParams.get("limit") || 30), 1, 60);
-      const detailLimit = clamp(Number(url.searchParams.get("detailLimit") || 18), 0, limit);
+      const limit = clamp(Number(url.searchParams.get("limit") || 60), 1, 120);
+      const detailLimit = clamp(Number(url.searchParams.get("detailLimit") || 60), 0, Math.min(limit, 100));
       const force = url.searchParams.get("force") === "1";
       const profile = parseProfileFromSearch(url.searchParams);
       const payload = await getRecentModels({ limit, detailLimit, force, profile });
@@ -85,18 +123,23 @@ async function fetchRecentModels({ limit, detailLimit }) {
   const pageProps = home.props?.pageProps || {};
   const recentReleases = (pageProps.newCarData || []).map(fromHomeRelease).filter(Boolean);
   const hotReleases = collectHotModels(pageProps).map(fromPopularModel).filter(Boolean);
-  const baseReleases = mergeReleases([...recentReleases, ...hotReleases]).slice(0, limit);
-  const recentDetailCount = Math.ceil(detailLimit * 0.58);
-  const detailTargets = mergeReleases([
-    ...recentReleases.slice(0, recentDetailCount),
-    ...hotReleases.slice(0, detailLimit - recentDetailCount)
-  ]).slice(0, detailLimit);
+  const articleReleases = await collectArticleSeriesReleases(collectHomeArticleSignals(pageProps));
+  const industryReleases = await collectIndustrySeriesReleases();
+  const supplementalReleases = supplementalNewCarSeries.map(fromSupplementalSeries);
+  const baseReleases = mergeReleases([
+    ...recentReleases,
+    ...hotReleases,
+    ...articleReleases,
+    ...industryReleases,
+    ...supplementalReleases
+  ]);
+  const detailTargets = prioritizeDetailTargets(baseReleases).slice(0, detailLimit);
   const detailed = await mapLimit(detailTargets, 4, enrichRelease);
   const detailMap = new Map(detailed.map((item) => [item.seriesId, item]));
   const releases = baseReleases.map((item) => detailMap.get(item.seriesId) || item);
   return {
     ok: true,
-    sourceLabel: "懂车帝",
+    sourceLabel: "懂车帝首页/热门/资讯/行业线索/重点车型",
     sourceUrl: HOME_URL,
     fetchedAt: new Date().toISOString(),
     releases
@@ -130,6 +173,7 @@ async function fetchOfficialUsedCars({ city, limit, pages, profile }) {
   const mergedListings = mergeUsedListings(payloads.flatMap((payload) => payload.listings || []));
   const cityListings = city === "全国" ? mergedListings : mergedListings.filter((listing) => listing.city === city);
   const listings = cityListings
+    .filter((listing) => listingMatchesEnergyProfile(listing, profile))
     .sort((a, b) => b.fitScore - a.fitScore || usedPriceSort(a, profile) - usedPriceSort(b, profile))
     .slice(0, limit);
   return {
@@ -212,7 +256,7 @@ function normalizeUsedListing(item, glyphMap, params = {}, profile = {}) {
     transferCount: numberOrEmpty(item.transfer_cnt),
     range: extractRange(`${title} ${tags.join(" ")}`),
     batterySize: extractBatterySize(`${title} ${tags.join(" ")}`),
-    energyType: inferUsedEnergyType(`${title} ${tags.join(" ")}`),
+    energyType: inferUsedEnergyTypeFromListing(item, `${title} ${tags.join(" ")}`),
     rawUpdatedAt: new Date().toISOString()
   };
   const fit = scoreUsedListing(listing, profile);
@@ -332,6 +376,10 @@ function profileSignature(profile = {}) {
   ].join(":");
 }
 
+function profileRequiresPureEv(profile = {}) {
+  return (profile.energyTypes || []).length === 1 && profile.energyTypes[0] === "ev";
+}
+
 function profileSummary(profile = {}, cityOverride = "") {
   const { min, max } = profileBudget(profile);
   const energy = profile.energyTypes?.includes("ev") && profile.energyTypes.length === 1
@@ -369,7 +417,8 @@ function scoreReleaseForProfile(release, profile = {}) {
   const text = `${release.brandName || ""} ${release.seriesName || ""} ${release.carType || ""}`;
   let score = releaseSortScore(release);
   if (releaseIsNewEnergy(release)) score += 20;
-  if ((profile.energyTypes || []).includes(release.energyType) || release.energyType === "new_energy") score += 10;
+  if (releaseMatchesEnergyProfile(release, profile)) score += 10;
+  else if ((profile.energyTypes || []).length) score -= 16;
   const min = release.priceMinWan;
   const max = release.priceMaxWan || min;
   if (min !== "") {
@@ -404,6 +453,14 @@ function releaseIsNewEnergy(release) {
   ].join(" "));
 }
 
+function releaseMatchesEnergyProfile(release, profile = {}) {
+  const energyTypes = profile.energyTypes || [];
+  if (!energyTypes.length) return true;
+  if (profileRequiresPureEv(profile)) return release.energyType === "ev";
+  if (energyTypes.includes(release.energyType)) return true;
+  return release.energyType === "new_energy" && energyTypes.some((type) => ["ev", "phev", "erev"].includes(type));
+}
+
 function releaseBodyBucket(release) {
   const text = `${release.carType || ""} ${release.seriesName || ""}`;
   if (/SUV/i.test(text)) return "suv";
@@ -429,6 +486,14 @@ function vehicleHitsProfileDealBreaker(text = "", profile = {}) {
   if (/阿维塔.*06|06T/i.test(haystack) && /阿维塔|方向盘|小.*方|方.*方向盘/i.test(breakers)) return true;
   if (/事故|重大修复|火烧|泡水/i.test(haystack) && /事故|修复太多|泡水|火烧/i.test(breakers)) return true;
   return false;
+}
+
+function listingMatchesEnergyProfile(listing, profile = {}) {
+  const energyTypes = profile.energyTypes || [];
+  if (!energyTypes.length) return true;
+  if (profileRequiresPureEv(profile)) return listing.energyType === "ev";
+  if (energyTypes.includes(listing.energyType)) return true;
+  return listing.energyType === "new_energy" && energyTypes.some((type) => ["ev", "phev", "erev"].includes(type));
 }
 
 function scoreUsedListing(listing, profile = {}) {
@@ -467,8 +532,10 @@ function scoreUsedListing(listing, profile = {}) {
     reasons.push("品牌在你的关注池内");
   }
   if (["ev", "phev", "erev", "new_energy"].includes(listing.energyType)) {
-    score += profile.energyTypes?.includes(listing.energyType) || listing.energyType === "new_energy" ? 12 : 8;
+    score += profile.energyTypes?.includes(listing.energyType) ? 12 : 4;
     reasons.push(profile.energyTypes?.includes(listing.energyType) ? `符合画像能源：${energyLabelFromType(listing.energyType, "新能源")}` : energyLabelFromType(listing.energyType, "新能源"));
+  } else if (profile.energyTypes?.length) {
+    score -= 18;
   }
   const minRange = Number(profile.minRangeKm || 650);
   if (listing.range >= minRange) {
@@ -516,6 +583,7 @@ function usedListingRisks(listing, profile = {}) {
   if (listing.authentication && !/官方认证/.test(listing.authentication)) risks.push("非品牌官方认证");
   const homeCity = profile.city || "北京";
   if (listing.city && listing.city !== homeCity) risks.push(`异地车源：${listing.city}`);
+  if (!listingMatchesEnergyProfile(listing, profile)) risks.push("能源形式不符合画像");
   if (listing.year && listing.year < 2023) risks.push("车龄偏老");
   if (listing.mileageWan !== "" && listing.mileageWan >= 5) risks.push("里程偏高");
   if (!listing.priceWan) risks.push("价格字段需二次确认");
@@ -562,10 +630,18 @@ function extractBatterySize(text = "") {
 }
 
 function inferUsedEnergyType(text = "") {
+  if (/燃油|汽油|柴油|B5|B6|TFSI|TSI|涡轮|自然吸气/i.test(text)) return "fuel";
   if (/增程|EREV/i.test(text)) return "erev";
   if (/插混|PHEV|EM-P|DM-i|DM\b|混动|T8/i.test(text)) return "phev";
-  if (/纯电|电动|EV|e-tron|蔚来|极氪|小鹏|智己|乐道|小米|智界|i6|SU7|YU7/i.test(text)) return "ev";
+  if (/纯电|电动|EV|e-tron|Model\s*[3YXS]|EQE|EQS|iX\d?|ID\.|蔚来|极氪|小鹏|智己|乐道|小米|智界|阿维塔|i6|SU7|YU7/i.test(text)) return "ev";
   return "unknown";
+}
+
+function inferUsedEnergyTypeFromListing(item, text = "") {
+  const inferred = inferUsedEnergyType(text);
+  if (inferred !== "unknown") return inferred;
+  if (knownPureEvSeriesIds.has(Number(item.series_id || 0))) return "ev";
+  return inferred;
 }
 
 function numberOrEmpty(value) {
@@ -605,6 +681,250 @@ function fromHomeRelease(item) {
     highlights: [],
     rawUpdatedAt: new Date().toISOString()
   };
+}
+
+function fromSupplementalSeries(item) {
+  const energyType = item.energyType || (/纯电|EV|e-tron/i.test(`${item.name || ""} ${item.sourceLabel || ""}`) ? "ev" : "unknown");
+  return {
+    seriesId: Number(item.seriesId),
+    seriesName: item.name || "",
+    brandName: item.brandName || "",
+    carType: "",
+    energyType,
+    energyLabel: energyLabelFromType(energyType, "待确认"),
+    priceText: "价格待确认",
+    priceMinWan: "",
+    priceMaxWan: "",
+    releaseDate: "",
+    releaseTimestamp: 0,
+    tags: unique([item.sourceLabel || "重点车型"]),
+    sourceTypes: ["watchlist"],
+    heatRank: "",
+    hotCategory: "",
+    hotLabel: "",
+    coverUrl: "",
+    dcdUrl: `${SERIES_URL}${item.seriesId}`,
+    articleUrl: "",
+    articleTitle: item.sourceLabel || "",
+    communityText: "",
+    score: {},
+    dimensions: {},
+    models: [],
+    news: [],
+    highlights: [],
+    rawUpdatedAt: new Date().toISOString()
+  };
+}
+
+function collectHomeArticleSignals(pageProps = {}) {
+  const focusSignals = (pageProps.focusPic || [])
+    .filter(Boolean)
+    .flatMap((group) => group.pic_list || [])
+    .map((item) => ({
+      articleId: item.group_id,
+      title: item.title || "",
+      coverUrl: normalizeImageUrl(item.img_url || ""),
+      publishTime: "",
+      sourceLabel: "懂车帝焦点图"
+    }));
+  const todaySignals = [
+    ...(pageProps.todayNews?.head_article || []),
+    ...(pageProps.todayNews?.content_article || [])
+  ].map((item) => ({
+    articleId: item.gid_str || item.group_id || item.unique_id_str,
+    title: item.title || "",
+    coverUrl: "",
+    publishTime: "",
+    sourceLabel: "懂车帝今日资讯"
+  }));
+  const videoSignals = (pageProps.homeOriginal?.video_list || []).map((item) => ({
+    articleId: item.unique_id_str || item.unique_id,
+    title: item.title || "",
+    coverUrl: normalizeImageUrl(item.video_info?.cover_url || ""),
+    publishTime: item.publish_time ? new Date(Number(item.publish_time) * 1000).toISOString() : "",
+    sourceLabel: item.column?.name ? `懂车帝${item.column.name}` : "懂车帝视频"
+  }));
+  const seen = new Set();
+  return [...focusSignals, ...todaySignals, ...videoSignals]
+    .filter((item) => item.articleId && item.title && looksLikeNewCarArticle(item.title))
+    .filter((item) => {
+      const key = String(item.articleId);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, 24);
+}
+
+function looksLikeNewCarArticle(title = "") {
+  return /上市|发布|亮相|首发|预售|申报|内饰|实车|新车|续航|价格|定价|首秀|官图|闪充|纯电|EV|e-tron|YU7|GX|i6|E7X|钛7|L80|ES6|7X|007GT/i.test(title);
+}
+
+async function collectArticleSeriesReleases(articleSignals = []) {
+  const releases = await mapLimit(articleSignals, 4, async (signal) => {
+    try {
+      const html = await fetchHtml(`https://www.dongchedi.com/article/${signal.articleId}`);
+      const ids = unique([...html.matchAll(/\/auto\/series\/(\d+)/g)].map((match) => match[1]));
+      return ids.slice(0, 3).map((seriesId) => fromArticleSeriesSignal(signal, seriesId));
+    } catch {
+      return [];
+    }
+  });
+  return releases.flat().filter(Boolean);
+}
+
+function fromArticleSeriesSignal(signal, seriesId) {
+  return {
+    seriesId: Number(seriesId),
+    seriesName: inferSeriesNameFromTitle(signal.title),
+    brandName: "",
+    carType: "",
+    energyType: inferReleaseEnergyTypeFromText(signal.title),
+    energyLabel: energyLabelFromType(inferReleaseEnergyTypeFromText(signal.title), "待确认"),
+    priceText: "价格待确认",
+    priceMinWan: "",
+    priceMaxWan: "",
+    releaseDate: signal.publishTime ? signal.publishTime.slice(0, 10) : "",
+    releaseTimestamp: signal.publishTime ? Math.floor(new Date(signal.publishTime).getTime() / 1000) : 0,
+    tags: unique(["资讯信源", signal.sourceLabel]),
+    sourceTypes: ["news"],
+    heatRank: "",
+    hotCategory: "",
+    hotLabel: signal.sourceLabel || "懂车帝资讯",
+    coverUrl: signal.coverUrl || "",
+    dcdUrl: `${SERIES_URL}${seriesId}`,
+    articleUrl: `https://www.dongchedi.com/article/${signal.articleId}`,
+    articleTitle: signal.title,
+    communityText: "",
+    score: {},
+    dimensions: {},
+    models: [],
+    news: [],
+    highlights: [`资讯线索：${signal.title}`],
+    rawUpdatedAt: new Date().toISOString()
+  };
+}
+
+function inferSeriesNameFromTitle(title = "") {
+  const normalized = String(title).replace(/[“”"]/g, "");
+  const match = normalized.match(/(?:全新|新款|2026款|2025款)?([A-Za-z0-9\u4e00-\u9fa5·+\- ]{2,24}?)(?:上市|发布|亮相|首发|预售|申报|内饰|实车|官图|首秀|公布|价格|续航)/);
+  return match ? match[1].trim() : "";
+}
+
+function inferReleaseEnergyTypeFromText(text = "") {
+  if (/增程/.test(text)) return "erev";
+  if (/插混|PHEV|DM-i|混动/i.test(text)) return "phev";
+  if (/纯电|电动|EV|e-tron|闪充/i.test(text)) return "ev";
+  return "unknown";
+}
+
+async function collectIndustrySeriesReleases() {
+  const sourceResults = await mapLimit(industryNewCarSources, 2, async (source) => {
+    try {
+      const html = await fetchHtml(source.url);
+      return collectIndustrySignals(html, source).flatMap(fromIndustrySignal);
+    } catch {
+      return [];
+    }
+  });
+  return sourceResults.flat().filter(Boolean);
+}
+
+function collectIndustrySignals(html = "", source = {}) {
+  const signals = [
+    ...extractHtmlAttributeTexts(html, "title"),
+    ...extractHtmlAttributeTexts(html, "alt"),
+    ...extractHtmlTagTexts(html, "a"),
+    ...extractHtmlTagTexts(html, "h1"),
+    ...extractHtmlTagTexts(html, "h2"),
+    ...extractHtmlTagTexts(html, "h3")
+  ];
+  const seen = new Set();
+  return signals
+    .map(cleanHtmlText)
+    .filter((title) => title.length >= 4 && title.length <= 80 && looksLikeNewCarArticle(title))
+    .filter((title) => {
+      const key = normalizeSeriesText(`${source.name}:${title}`);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, 36)
+    .map((title) => ({
+      title,
+      sourceLabel: source.name || "行业资讯",
+      sourceUrl: source.url || ""
+    }));
+}
+
+function fromIndustrySignal(signal) {
+  return matchSupplementalSeries(signal.title).map((series) => ({
+    seriesId: Number(series.seriesId),
+    seriesName: series.name || "",
+    brandName: series.brandName || "",
+    carType: "",
+    energyType: knownPureEvSeriesIds.has(Number(series.seriesId)) ? "ev" : inferReleaseEnergyTypeFromText(signal.title),
+    energyLabel: energyLabelFromType(knownPureEvSeriesIds.has(Number(series.seriesId)) ? "ev" : inferReleaseEnergyTypeFromText(signal.title), "待确认"),
+    priceText: "价格待确认",
+    priceMinWan: "",
+    priceMaxWan: "",
+    releaseDate: "",
+    releaseTimestamp: 0,
+    tags: unique(["行业线索", signal.sourceLabel]),
+    sourceTypes: ["industry"],
+    heatRank: "",
+    hotCategory: "",
+    hotLabel: signal.sourceLabel || "行业资讯",
+    coverUrl: "",
+    dcdUrl: `${SERIES_URL}${series.seriesId}`,
+    articleUrl: signal.sourceUrl || "",
+    articleTitle: signal.title,
+    communityText: "",
+    score: {},
+    dimensions: {},
+    models: [],
+    news: [],
+    highlights: [`行业线索：${signal.title}`],
+    rawUpdatedAt: new Date().toISOString()
+  }));
+}
+
+function matchSupplementalSeries(text = "") {
+  const normalized = normalizeSeriesText(text);
+  return supplementalNewCarSeries.filter((series) => {
+    const aliases = unique([series.name, ...(series.aliases || [])]);
+    return aliases.some((alias) => alias && normalized.includes(normalizeSeriesText(alias)));
+  });
+}
+
+function extractHtmlAttributeTexts(html = "", attr = "title") {
+  return [...String(html).matchAll(new RegExp(`${attr}=["']([^"']{2,120})["']`, "gi"))].map((match) => match[1]);
+}
+
+function extractHtmlTagTexts(html = "", tag = "a") {
+  return [...String(html).matchAll(new RegExp(`<${tag}\\b[^>]*>([\\s\\S]{2,200}?)<\\/${tag}>`, "gi"))].map((match) => stripHtml(match[1]));
+}
+
+function stripHtml(value = "") {
+  return String(value).replace(/<script[\s\S]*?<\/script>/gi, " ").replace(/<style[\s\S]*?<\/style>/gi, " ").replace(/<[^>]+>/g, " ");
+}
+
+function cleanHtmlText(value = "") {
+  return decodeHtmlEntities(stripHtml(value)).replace(/\s+/g, " ").trim();
+}
+
+function decodeHtmlEntities(value = "") {
+  return String(value)
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, "\"")
+    .replace(/&#39;/g, "'");
+}
+
+function normalizeSeriesText(value = "") {
+  return cleanHtmlText(value).replace(/\s+/g, "").toLowerCase();
 }
 
 function collectHotModels(pageProps) {
@@ -696,10 +1016,28 @@ function mergeReleases(items) {
   return [...map.values()].sort((a, b) => releaseSortScore(b) - releaseSortScore(a));
 }
 
+function prioritizeDetailTargets(releases = []) {
+  const priority = new Map();
+  for (const release of releases) {
+    let value = 0;
+    if (release.sourceTypes?.includes("watchlist")) value += 1000;
+    if (release.sourceTypes?.includes("news")) value += 600;
+    if (release.sourceTypes?.includes("industry")) value += 520;
+    if (release.sourceTypes?.includes("recent")) value += 300;
+    if (release.sourceTypes?.includes("hot")) value += 120;
+    if (release.energyType === "ev") value += 80;
+    if (release.priceMinWan !== "" || release.priceText !== "价格待确认") value += 20;
+    priority.set(release.seriesId, value + releaseSortScore(release));
+  }
+  return [...releases].sort((a, b) => (priority.get(b.seriesId) || 0) - (priority.get(a.seriesId) || 0));
+}
+
 function releaseSortScore(item) {
   const recentScore = item.releaseTimestamp ? item.releaseTimestamp / 100000000 : 0;
   const hotScore = item.heatRank ? Math.max(0, 60 - Number(item.heatRank)) : 0;
-  const sourceScore = item.sourceTypes?.includes("recent") ? 30 : 0;
+  const sourceScore = (item.sourceTypes?.includes("recent") ? 30 : 0)
+    + (item.sourceTypes?.includes("industry") ? 18 : 0)
+    + (item.sourceTypes?.includes("news") ? 12 : 0);
   return recentScore + hotScore + sourceScore;
 }
 
@@ -831,8 +1169,22 @@ async function fetchHtml(url) {
       "accept-language": "zh-CN,zh;q=0.9,en;q=0.7"
     }
   });
-  if (!response.ok) throw new Error(`懂车帝返回 ${response.status}`);
-  return response.text();
+  if (!response.ok) throw new Error(`页面返回 ${response.status}`);
+  const buffer = Buffer.from(await response.arrayBuffer());
+  return decodeResponseText(buffer, response.headers.get("content-type") || "");
+}
+
+function decodeResponseText(buffer, contentType = "") {
+  const probe = buffer.toString("latin1", 0, Math.min(buffer.length, 2048));
+  const charset = (contentType.match(/charset=([^;\s]+)/i)?.[1]
+    || probe.match(/<meta[^>]+charset=["']?([^"'\s/>]+)/i)?.[1]
+    || "utf-8").toLowerCase();
+  const encoding = /gb2312|gbk|gb18030/i.test(charset) ? "gb18030" : "utf-8";
+  try {
+    return new TextDecoder(encoding).decode(buffer);
+  } catch {
+    return buffer.toString("utf8");
+  }
 }
 
 function extractNextData(html) {
@@ -891,6 +1243,7 @@ function energyLabelFromCode(code) {
 }
 
 function deriveEnergyType(head, models, fallback) {
+  if (knownPureEvSeriesIds.has(Number(fallback.seriesId || 0))) return "ev";
   const text = [
     head.series_new_energy ? "新能源" : "",
     fallback.energyLabel,
