@@ -488,6 +488,7 @@ function normalizeMarket(market = {}) {
     lastFetchedAt: market.lastFetchedAt || "",
     sourceUrl: market.sourceUrl || "",
     sourceLabel: market.sourceLabel || "懂车帝",
+    profileSummary: market.profileSummary || "",
     error: market.error || ""
   };
 }
@@ -499,6 +500,7 @@ function normalizeUsedMarket(usedMarket = {}) {
     sourceUrl: usedMarket.sourceUrl || "",
     sourceLabel: usedMarket.sourceLabel || "懂车帝官方二手车",
     city: usedMarket.city || "全国",
+    profileSummary: usedMarket.profileSummary || "",
     error: usedMarket.error || ""
   };
 }
@@ -1503,6 +1505,62 @@ function bodyPreferenceLabel(value) {
   }[value] || "车身不限";
 }
 
+function getSavedRefreshRequirement() {
+  return normalizeUserRequirement(state.userRequirement);
+}
+
+function getRequirementBudget(requirement = state.userRequirement) {
+  const req = normalizeUserRequirement(requirement);
+  let min = Number(req.budgetMinWan);
+  let max = Number(req.budgetMaxWan);
+  if (min > max) [min, max] = [max, min];
+  return { min, max, center: (min + max) / 2 };
+}
+
+function buildRefreshProfileSummary(requirement = state.userRequirement, options = {}) {
+  const req = normalizeUserRequirement(requirement);
+  const budget = getRequirementBudget(req);
+  return [
+    options.city || req.city || "北京",
+    `${formatWan(budget.min)}-${formatWan(budget.max)}`,
+    energyPreferenceLabel(req.energyTypes),
+    `续航≥${req.minRangeKm}km`,
+    bodyPreferenceLabel(req.bodyPreference),
+    req.priorities.slice(0, 3).map((priority) => requirementPriorityLabels[priority] || priority).join("/")
+  ].filter(Boolean).join(" · ");
+}
+
+function buildRefreshProfileParams(extra = {}) {
+  const req = getSavedRefreshRequirement();
+  const params = new URLSearchParams();
+  params.set("profile", "1");
+  params.set("profileCity", req.city || "北京");
+  params.set("people", req.people || "2");
+  params.set("scenes", req.scenes.join(","));
+  params.set("budgetMinWan", String(req.budgetMinWan));
+  params.set("budgetMaxWan", String(req.budgetMaxWan));
+  params.set("energyTypes", req.energyTypes.join(","));
+  params.set("minRangeKm", String(req.minRangeKm));
+  params.set("minPhevRangeKm", String(req.minPhevRangeKm));
+  params.set("priorities", req.priorities.join(","));
+  params.set("seatFocus", req.seatFocus || "front");
+  params.set("bodyPreference", req.bodyPreference || "suv_sedan");
+  params.set("purchaseTiming", String(req.purchaseTiming || "").slice(0, 80));
+  params.set("mustHaves", String(req.mustHaves || "").slice(0, 160));
+  params.set("dealBreakers", String(req.dealBreakers || "").slice(0, 180));
+  params.set("referenceCar", String(req.referenceCar || "").slice(0, 120));
+  params.set("notes", String(req.notes || "").slice(0, 120));
+  Object.entries(extra).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== "") params.set(key, String(value));
+  });
+  return params.toString();
+}
+
+function resolveUsedcarRefreshCity(selectedCity = "profile") {
+  if (selectedCity === "profile" || !selectedCity) return getSavedRefreshRequirement().city || "北京";
+  return selectedCity;
+}
+
 function setRequirementCheckboxes(name, values) {
   const set = new Set(values);
   document.querySelectorAll(`input[name="${name}"]`).forEach((input) => {
@@ -1719,9 +1777,10 @@ function renderNewCars() {
   const lastFetched = state.market.lastFetchedAt ? formatDateTime(state.market.lastFetchedAt) : "";
   const recentCount = state.market.releases.filter((release) => release.sourceTypes.includes("recent")).length;
   const hotCount = state.market.releases.filter((release) => release.sourceTypes.includes("hot")).length;
+  const profileSummary = buildRefreshProfileSummary();
   status.textContent = total
-    ? `已缓存 ${total} 款：近期 ${recentCount} / 热门 ${hotCount}，当前显示 ${releases.length} 款。${lastFetched ? `上次刷新：${lastFetched}` : ""}`
-    : "还没有刷新数据。点击按钮后会从懂车帝获取近期发布和热门车型。";
+    ? `已缓存 ${total} 款：近期 ${recentCount} / 热门 ${hotCount}，当前显示 ${releases.length} 款。按首页画像：${profileSummary}。${lastFetched ? `上次刷新：${lastFetched}` : ""}`
+    : `还没有刷新数据。点击按钮后会按首页画像获取近期发布和热门车型：${profileSummary}。`;
 
   if (!total) {
     spotlight.innerHTML = `
@@ -1853,9 +1912,12 @@ function renderUsedCars() {
   const total = state.usedMarket.listings.length;
   const lastFetched = state.usedMarket.lastFetchedAt ? formatDateTime(state.usedMarket.lastFetchedAt) : "";
   const officialCount = state.usedMarket.listings.filter((listing) => /官方|直营|自营/.test(listing.sourceType)).length;
+  const selectedCity = document.querySelector("#usedcarCityFilter")?.value || "profile";
+  const profileCity = resolveUsedcarRefreshCity(selectedCity);
+  const profileSummary = buildRefreshProfileSummary(state.userRequirement, { city: profileCity });
   status.textContent = total
-    ? `已缓存 ${total} 台官方/自营车源，当前显示 ${listings.length} 台。${lastFetched ? `上次刷新：${lastFetched}` : ""}`
-    : "还没有刷新数据。点击按钮后会从懂车帝官方二手车源拉取。";
+    ? `已缓存 ${total} 台官方/自营车源，当前显示 ${listings.length} 台。按首页画像：${profileSummary}。${lastFetched ? `上次刷新：${lastFetched}` : ""}`
+    : `还没有刷新数据。点击按钮后会按首页画像拉取懂车帝官方二手车源：${profileSummary}。`;
 
   if (!total) {
     spotlight.innerHTML = `
@@ -1874,12 +1936,13 @@ function renderUsedCars() {
 }
 
 function getFilteredUsedListings() {
-  const city = document.querySelector("#usedcarCityFilter")?.value || "全国";
+  const selectedCity = document.querySelector("#usedcarCityFilter")?.value || "profile";
+  const city = resolveUsedcarRefreshCity(selectedCity);
   const scope = document.querySelector("#usedcarScopeFilter")?.value || "fit";
   const risk = document.querySelector("#usedcarRiskFilter")?.value || "all";
   return [...(state.usedMarket.listings || [])]
     .filter((listing) => {
-      if (city !== "全国" && listing.city !== city) return false;
+      if (selectedCity !== "全国" && listing.city !== city) return false;
       if (scope === "fit" && usedListingClientScore(listing) < 52) return false;
       if (scope === "budget" && !priceNearBudget(listing)) return false;
       if (scope === "fresh" && !isFreshUsedListing(listing)) return false;
@@ -1965,13 +2028,33 @@ function renderUsedCarCard(listing) {
 }
 
 function usedListingClientScore(listing) {
+  const req = getSavedRefreshRequirement();
+  const budget = getRequirementBudget(req);
   let score = numberOrDefault(listing.fitScore, 0);
+  const text = `${listing.brandName} ${listing.seriesName} ${listing.title}`;
+  if (listing.priceWan !== "") {
+    if (listing.priceWan >= budget.min - 4 && listing.priceWan <= budget.max + 1) {
+      score += 6;
+    } else {
+      score -= Math.min(14, Math.abs(Number(listing.priceWan) - budget.center) * 1.2);
+    }
+  }
+  if (req.energyTypes.includes(listing.energyType) || (listing.energyType === "new_energy" && req.energyTypes.length)) score += 4;
+  if (listing.range && req.minRangeKm) {
+    if (listing.range >= Number(req.minRangeKm)) score += 5;
+    else if (listing.range < Number(req.minRangeKm) - 100) score -= 6;
+  }
+  if (listing.city && listing.city === (req.city || "北京")) score += 4;
+  if (req.bodyPreference === "no_mpv" && /ES8|L80|L90|六座|七座|MPV/i.test(text)) score -= 6;
+  if (req.bodyPreference === "compact" && /ES8|L80|L90|大型|六座|七座|MPV/i.test(text)) score -= 8;
+  if (vehicleHitsProfileDealBreaker(text, req)) score -= 18;
   if (state.cars.some((car) => car.url === listing.url)) score -= 8;
   return Math.max(0, Math.min(100, Math.round(score)));
 }
 
 function priceNearBudget(listing) {
-  return listing.priceWan !== "" && listing.priceWan >= 18 && listing.priceWan <= 31;
+  const { min, max } = getRequirementBudget();
+  return listing.priceWan !== "" && listing.priceWan >= Math.max(5, min - 6) && listing.priceWan <= max + 1;
 }
 
 function isFreshUsedListing(listing) {
@@ -1983,11 +2066,13 @@ function isKnownConcernListing(listing) {
 }
 
 function isLongRangeUsedListing(listing) {
-  return listing.range >= 650 || ["ev", "erev", "phev"].includes(listing.energyType);
+  const req = getSavedRefreshRequirement();
+  return listing.range >= Number(req.minRangeKm || 650) || (!listing.range && req.energyTypes.includes(listing.energyType));
 }
 
 function usedListingPriceDistance(listing) {
-  return listing.priceWan === "" ? 999 : Math.abs(Number(listing.priceWan) - 28);
+  const { center } = getRequirementBudget();
+  return listing.priceWan === "" ? 999 : Math.abs(Number(listing.priceWan) - center);
 }
 
 function getUsedListingDiscount(listing) {
@@ -2038,6 +2123,35 @@ function firstModelMatch(release, pattern) {
   return "";
 }
 
+function getReleaseRangeKm(release) {
+  const values = [];
+  for (const model of release.models || []) {
+    const text = [
+      model.groupKey,
+      model.battery,
+      model.range,
+      model.power,
+      ...(model.baseConfig || []),
+      ...(model.highlightsConfig || [])
+    ].join(" ");
+    [...text.matchAll(/(\d{3,4})\s*(?:km|公里)/gi)].forEach((match) => values.push(Number(match[1])));
+    if (model.range && Number(model.range)) values.push(Number(model.range));
+  }
+  const direct = firstModelMatch(release, /续航\s*(\d+)\s*km/i) || firstModelMatch(release, /(\d+)\s*km/i);
+  if (direct) values.push(Number(direct));
+  return values.filter((value) => Number.isFinite(value)).sort((a, b) => b - a)[0] || "";
+}
+
+function vehicleHitsProfileDealBreaker(text = "", requirement = state.userRequirement) {
+  const req = normalizeUserRequirement(requirement);
+  const haystack = String(text);
+  const breakers = `${req.dealBreakers || ""} ${req.notes || ""}`;
+  if (/智界\s*R7/i.test(haystack) && /智界\s*R7|R7.*外观|不喜欢.*R7/i.test(breakers)) return true;
+  if (/阿维塔.*06|06T/i.test(haystack) && /阿维塔|方向盘|小.*方|方.*方向盘/i.test(breakers)) return true;
+  if (/事故|重大修复|火烧|泡水/i.test(haystack) && /事故|修复太多|泡水|火烧/i.test(breakers)) return true;
+  return false;
+}
+
 function formatDimensions(dimensions) {
   if (!dimensions?.length) return "-";
   return `${dimensions.length}/${dimensions.width || "-"}/${dimensions.height || "-"} · ${dimensions.wheelbase || "-"}轴距`;
@@ -2053,9 +2167,17 @@ function isNewEnergyRelease(release) {
 }
 
 function releaseMatchesUserProfile(release) {
+  const req = getSavedRefreshRequirement();
   if (!isNewEnergyRelease(release)) return false;
   if (newReleasePriceBucket(release) === "expensive") return false;
   if (/微型|小型车|皮卡|跑车/.test(release.carType || "")) return false;
+  if (vehicleHitsProfileDealBreaker(`${release.brandName} ${release.seriesName}`, req)) return false;
+  const body = newReleaseBodyBucket(release);
+  if (req.bodyPreference === "no_mpv" && body === "mpv") return false;
+  if (req.bodyPreference === "suv" && body !== "suv") return false;
+  if (req.bodyPreference === "sedan" && body !== "sedan") return false;
+  const range = getReleaseRangeKm(release);
+  if (range && req.minRangeKm && range < Number(req.minRangeKm) - 160) return false;
   return newReleaseFitScore(release) >= 48;
 }
 
@@ -2068,33 +2190,50 @@ function newReleaseBodyBucket(release) {
 }
 
 function newReleasePriceBucket(release) {
+  const budget = getRequirementBudget();
   const min = release.priceMinWan;
   const max = release.priceMaxWan || min;
   if (min === "") return "all";
-  if (min <= 31 && max >= 20) return "budget";
-  if (min <= 40) return "stretch";
+  if (max >= budget.min - 6 && min <= budget.max + 2) return "budget";
+  if (min <= budget.max + 10) return "stretch";
   return "expensive";
 }
 
 function newReleaseFitScore(release) {
+  const req = getSavedRefreshRequirement();
+  const budget = getRequirementBudget(req);
   let score = 18;
   if (isNewEnergyRelease(release)) score += 18;
   const min = release.priceMinWan;
   const max = release.priceMaxWan || min;
   if (min !== "") {
-    if (min <= 31 && max >= 22) score += 24;
-    else if (min <= 40) score += 14;
+    if (max >= budget.min - 6 && min <= budget.max + 2) score += 24;
+    else if (min < budget.min - 6) score += 12;
+    else if (min <= budget.max + 10) score += 14;
     else score -= 12;
   }
   const body = newReleaseBodyBucket(release);
-  if (body === "suv" || body === "sedan") score += 12;
-  if (body === "mpv") score += 2;
+  if (req.bodyPreference === "suv_sedan" && (body === "suv" || body === "sedan")) score += 12;
+  if (req.bodyPreference === "suv" && body === "suv") score += 14;
+  if (req.bodyPreference === "sedan" && body === "sedan") score += 14;
+  if (req.bodyPreference === "compact" && release.dimensions?.length && Number(release.dimensions.length) <= 4950) score += 8;
+  if (req.bodyPreference === "no_mpv" && body === "mpv") score -= 12;
+  else if (body === "mpv") score += 2;
   if (/中大型|大型|行政|六座|七座/.test(`${release.carType} ${release.seriesName}`)) score -= 4;
   const brandText = `${release.brandName} ${release.seriesName}`;
+  if (vehicleHitsProfileDealBreaker(brandText, req)) score -= 18;
   if (/理想|蔚来|乐道|极氪|奥迪|小米|智界|问界|阿维塔/i.test(brandText)) score += 10;
   if (/i6|ES6|7X|Q6L|E7X|YU7|L80|R7/i.test(brandText)) score += 8;
-  if (firstModelMatch(release, /续航\s*(\d+)\s*km/i) >= 650 || firstModelMatch(release, /(\d+)\s*km/i) >= 650) score += 8;
-  if (release.score.comfort >= 4 || release.score.interior >= 4) score += 4;
+  if (req.referenceCar && /理想\s*i6/i.test(req.referenceCar) && /理想\s*i6/i.test(brandText)) score += 10;
+  if (req.energyTypes.includes(release.energyType) || (release.energyType === "new_energy" && req.energyTypes.length)) score += 8;
+  const range = getReleaseRangeKm(release);
+  if (range >= Number(req.minRangeKm || 650)) score += 8;
+  else if (range && range < Number(req.minRangeKm || 650) - 100) score -= 5;
+  if (req.priorities.includes("comfort") && release.score.comfort >= 4) score += 4;
+  if (req.priorities.includes("interior") && release.score.interior >= 4) score += 4;
+  if (req.priorities.includes("appearance") && release.score.appearance >= 4) score += 3;
+  if (req.priorities.includes("adas") && /理想|小鹏|华为|问界|智界|阿维塔/i.test(brandText)) score += 4;
+  if (req.priorities.includes("cockpit") && /理想|蔚来|小鹏|极氪|小米/i.test(brandText)) score += 4;
   if (/改款|小改款|新增车型|全新车系/.test(release.tags.join(" "))) score += 4;
   if (release.sourceTypes.includes("recent")) score += 4;
   if (release.sourceTypes.includes("hot")) score += 5;
@@ -2106,7 +2245,10 @@ function newReleaseFitReasons(release) {
   if (release.sourceTypes.includes("hot")) reasons.push(release.hotLabel || "懂车帝热门车型");
   if (release.sourceTypes.includes("recent")) reasons.push(release.releaseDate ? `近期发布：${release.releaseDate}` : "近期发布");
   if (isNewEnergyRelease(release)) reasons.push(release.energyLabel);
-  if (newReleasePriceBucket(release) === "budget") reasons.push("价格落在30万附近");
+  if (newReleasePriceBucket(release) === "budget") {
+    const budget = getRequirementBudget();
+    reasons.push(`贴近画像预算 ${formatWan(budget.min)}-${formatWan(budget.max)}`);
+  }
   if (newReleaseBodyBucket(release) === "suv") reasons.push("SUV形态适合北京通勤和假期高速");
   if (newReleaseBodyBucket(release) === "sedan") reasons.push("轿车/轿跑更贴近两人用车");
   const facts = getReleaseModelFacts(release).energy;
@@ -3478,7 +3620,7 @@ async function refreshDongchediNewCars({ silent = false } = {}) {
   }
   newCarRefreshRunning = true;
   setNewCarRefreshState(true);
-  if (!silent) showToast("正在从懂车帝刷新近期发布和热门车型。", "ok");
+  if (!silent) showToast(`正在按首页画像刷新近期发布和热门车型：${buildRefreshProfileSummary()}。`, "ok");
   const urls = getDongchediFeedUrls();
   let lastError = "";
   try {
@@ -3510,7 +3652,7 @@ async function refreshDongchediNewCars({ silent = false } = {}) {
 }
 
 function getDongchediFeedUrls() {
-  const params = "limit=60&detailLimit=60";
+  const params = buildRefreshProfileParams({ limit: 60, detailLimit: 60 });
   const urls = [];
   if (location.protocol === "http:" || location.protocol === "https:") {
     urls.push(withQuery(DONGCHEDI_NEWCAR_URL, params));
@@ -3526,7 +3668,9 @@ async function refreshDongchediUsedCars() {
   }
   usedCarRefreshRunning = true;
   setUsedCarRefreshState(true);
-  showToast("正在从懂车帝刷新官方二手车源。", "ok");
+  const selectedCity = document.querySelector("#usedcarCityFilter")?.value || "profile";
+  const refreshCity = resolveUsedcarRefreshCity(selectedCity);
+  showToast(`正在按首页画像刷新${refreshCity}官方二手车源。`, "ok");
   const urls = getDongchediUsedcarUrls();
   let lastError = "";
   try {
@@ -3557,8 +3701,9 @@ async function refreshDongchediUsedCars() {
 }
 
 function getDongchediUsedcarUrls() {
-  const city = encodeURIComponent(document.querySelector("#usedcarCityFilter")?.value || "全国");
-  const params = `limit=90&pages=3&city=${city}`;
+  const selectedCity = document.querySelector("#usedcarCityFilter")?.value || "profile";
+  const city = resolveUsedcarRefreshCity(selectedCity);
+  const params = buildRefreshProfileParams({ limit: 90, pages: 3, city, cityScope: selectedCity });
   const urls = [];
   if (location.protocol === "http:" || location.protocol === "https:") {
     urls.push(withQuery(DONGCHEDI_USEDCAR_URL, params));
@@ -3577,6 +3722,7 @@ function applyDongchediNewCarsPayload(result) {
     lastFetchedAt: result.fetchedAt || new Date().toISOString(),
     sourceUrl: result.sourceUrl || "https://www.dongchedi.com/",
     sourceLabel: result.sourceLabel || "懂车帝",
+    profileSummary: result.profileSummary || buildRefreshProfileSummary(),
     error: ""
   });
 }
@@ -3588,6 +3734,7 @@ function applyDongchediUsedCarsPayload(result) {
     sourceUrl: result.sourceUrl || "https://www.dongchedi.com/usedcar/",
     sourceLabel: result.sourceLabel || "懂车帝官方二手车",
     city: result.city || "全国",
+    profileSummary: result.profileSummary || buildRefreshProfileSummary(state.userRequirement, { city: result.city || state.userRequirement.city || "北京" }),
     error: ""
   });
 }

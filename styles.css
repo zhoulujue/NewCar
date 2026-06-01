@@ -966,6 +966,13 @@ textarea.input {
   margin-top: 10px;
 }
 
+.newcar-source-row .muted,
+.usedcar-source-row .muted {
+  flex: 1 1 320px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .newcar-source-row a,
 .newcar-news a {
   color: var(--primary);

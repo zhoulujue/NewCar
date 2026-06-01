@@ -43,7 +43,8 @@ const server = createServer(async (req, res) => {
       const limit = clamp(Number(url.searchParams.get("limit") || 30), 1, 60);
       const detailLimit = clamp(Number(url.searchParams.get("detailLimit") || 18), 0, limit);
       const force = url.searchParams.get("force") === "1";
-      const payload = await getRecentModels({ limit, detailLimit, force });
+      const profile = parseProfileFromSearch(url.searchParams);
+      const payload = await getRecentModels({ limit, detailLimit, force, profile });
       sendJson(res, 200, payload);
       return;
     }
@@ -52,7 +53,8 @@ const server = createServer(async (req, res) => {
       const pages = clamp(Number(url.searchParams.get("pages") || 3), 1, 6);
       const city = url.searchParams.get("city") || "全国";
       const force = url.searchParams.get("force") === "1";
-      const payload = await getOfficialUsedCars({ city, limit, pages, force });
+      const profile = parseProfileFromSearch(url.searchParams);
+      const payload = await getOfficialUsedCars({ city, limit, pages, force, profile });
       sendJson(res, 200, payload);
       return;
     }
@@ -66,13 +68,16 @@ server.listen(PORT, HOST, () => {
   console.log(`NewCar Dongchedi new-car service listening on http://${HOST}:${PORT}`);
 });
 
-async function getRecentModels({ limit, detailLimit, force }) {
+async function getRecentModels({ limit, detailLimit, force, profile }) {
+  let payload;
   if (!force && recentCache && Date.now() - recentCache.createdAt < CACHE_TTL_MS && recentCache.limit >= limit && recentCache.detailLimit >= detailLimit) {
-    return { ...recentCache.payload, cached: true, releases: recentCache.payload.releases.slice(0, limit) };
+    payload = { ...recentCache.payload, cached: true };
+  } else {
+    payload = await fetchRecentModels({ limit, detailLimit });
+    recentCache = { createdAt: Date.now(), limit, detailLimit, payload };
   }
-  const payload = await fetchRecentModels({ limit, detailLimit });
-  recentCache = { createdAt: Date.now(), limit, detailLimit, payload };
-  return payload;
+  const releases = rankReleasesForProfile(payload.releases, profile).slice(0, limit);
+  return { ...payload, profileSummary: profileSummary(profile), profile, releases };
 }
 
 async function fetchRecentModels({ limit, detailLimit }) {
@@ -98,47 +103,51 @@ async function fetchRecentModels({ limit, detailLimit }) {
   };
 }
 
-async function getOfficialUsedCars({ city, limit, pages, force }) {
-  const cacheKey = `${city}:${limit}:${pages}`;
+async function getOfficialUsedCars({ city, limit, pages, force, profile }) {
+  const cacheKey = `${city}:${limit}:${pages}:${profileSignature(profile)}`;
   if (!force && usedCache && usedCache.cacheKey === cacheKey && Date.now() - usedCache.createdAt < CACHE_TTL_MS) {
     return { ...usedCache.payload, cached: true, listings: usedCache.payload.listings.slice(0, limit) };
   }
-  const payload = await fetchOfficialUsedCars({ city, limit, pages });
+  const payload = await fetchOfficialUsedCars({ city, limit, pages, profile });
   usedCache = { createdAt: Date.now(), cacheKey, payload };
   return payload;
 }
 
-async function fetchOfficialUsedCars({ city, limit, pages }) {
+async function fetchOfficialUsedCars({ city, limit, pages, profile }) {
   const requests = [];
+  const [widePrice, tightPrice] = usedPriceRangesForProfile(profile);
   for (let page = 1; page <= pages; page += 1) {
-    requests.push({ sh_city_name: city, page, limit: 20, dcd_self_sh: 1, price: "15,33" });
+    requests.push({ sh_city_name: city, page, limit: 20, dcd_self_sh: 1, price: widePrice, profile });
   }
   for (let page = 1; page <= Math.min(2, pages); page += 1) {
-    requests.push({ sh_city_name: city, page, limit: 20, dcd_self_sh: 1, price: "20,31" });
+    requests.push({ sh_city_name: city, page, limit: 20, dcd_self_sh: 1, price: tightPrice, profile });
   }
   usedTargetSeries.forEach((target) => {
-    requests.push({ sh_city_name: city, page: 1, limit: 20, dcd_self_sh: 1, series_ids: target.seriesId });
+    requests.push({ sh_city_name: city, page: 1, limit: 20, dcd_self_sh: 1, series_ids: target.seriesId, profile });
   });
 
   const payloads = await mapLimit(requests, 3, fetchUsedCarPage);
   const mergedListings = mergeUsedListings(payloads.flatMap((payload) => payload.listings || []));
   const cityListings = city === "全国" ? mergedListings : mergedListings.filter((listing) => listing.city === city);
   const listings = cityListings
-    .sort((a, b) => b.fitScore - a.fitScore || usedPriceSort(a) - usedPriceSort(b))
+    .sort((a, b) => b.fitScore - a.fitScore || usedPriceSort(a, profile) - usedPriceSort(b, profile))
     .slice(0, limit);
   return {
     ok: true,
     sourceLabel: "懂车帝官方二手车",
     sourceUrl: "https://www.dongchedi.com/usedcar/x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x",
     city,
+    profileSummary: profileSummary(profile, city),
+    profile,
     fetchedAt: new Date().toISOString(),
     listings
   };
 }
 
 async function fetchUsedCarPage(params) {
+  const { profile = {}, ...requestParams } = params;
   const body = new URLSearchParams();
-  Object.entries(params).forEach(([key, value]) => {
+  Object.entries(requestParams).forEach(([key, value]) => {
     if (value !== "" && value !== undefined && value !== null) body.set(key, String(value));
   });
   const response = await fetch(USED_CAR_LIST_URL, {
@@ -159,13 +168,13 @@ async function fetchUsedCarPage(params) {
   const rawItems = json.data?.search_sh_sku_info_list || [];
   const glyphMap = buildGlyphMap(rawItems);
   return {
-    listings: rawItems.map((item) => normalizeUsedListing(item, glyphMap, params)).filter(Boolean),
+    listings: rawItems.map((item) => normalizeUsedListing(item, glyphMap, requestParams, profile)).filter(Boolean),
     hasMore: Boolean(json.data?.has_more),
     total: json.data?.total || ""
   };
 }
 
-function normalizeUsedListing(item, glyphMap, params = {}) {
+function normalizeUsedListing(item, glyphMap, params = {}, profile = {}) {
   if (!item?.sku_id) return null;
   const title = decodeGlyphText(item.title || "", glyphMap);
   const priceText = decodeGlyphText(item.sh_price || "", glyphMap);
@@ -206,12 +215,12 @@ function normalizeUsedListing(item, glyphMap, params = {}) {
     energyType: inferUsedEnergyType(`${title} ${tags.join(" ")}`),
     rawUpdatedAt: new Date().toISOString()
   };
-  const fit = scoreUsedListing(listing);
+  const fit = scoreUsedListing(listing, profile);
   return {
     ...listing,
     fitScore: fit.score,
     fitReasons: fit.reasons,
-    riskFlags: usedListingRisks(listing)
+    riskFlags: usedListingRisks(listing, profile)
   };
 }
 
@@ -258,24 +267,189 @@ function normalizeUsedTags(item) {
   return unique([...simple, ...v2, ...special]);
 }
 
-function scoreUsedListing(listing) {
+function parseProfileFromSearch(searchParams) {
+  const energyTypes = parseCsv(searchParams.get("energyTypes"));
+  const priorities = parseCsv(searchParams.get("priorities"));
+  const scenes = parseCsv(searchParams.get("scenes"));
+  return {
+    city: searchParams.get("profileCity") || searchParams.get("city") || "北京",
+    people: searchParams.get("people") || "2",
+    scenes: scenes.length ? scenes : ["city", "highway", "holiday"],
+    budgetMinWan: parseNumberParam(searchParams, "budgetMinWan", 24),
+    budgetMaxWan: parseNumberParam(searchParams, "budgetMaxWan", 31),
+    energyTypes: energyTypes.length ? energyTypes : ["ev", "erev", "phev"],
+    minRangeKm: parseNumberParam(searchParams, "minRangeKm", 650),
+    minPhevRangeKm: parseNumberParam(searchParams, "minPhevRangeKm", 300),
+    priorities: priorities.length ? priorities : ["comfort", "range", "cockpit", "adas", "interior", "appearance"],
+    seatFocus: searchParams.get("seatFocus") || "front",
+    bodyPreference: searchParams.get("bodyPreference") || "suv_sedan",
+    purchaseTiming: searchParams.get("purchaseTiming") || "",
+    mustHaves: searchParams.get("mustHaves") || "",
+    dealBreakers: searchParams.get("dealBreakers") || "",
+    referenceCar: searchParams.get("referenceCar") || "",
+    notes: searchParams.get("notes") || ""
+  };
+}
+
+function parseCsv(value = "") {
+  return String(value || "").split(",").map((item) => item.trim()).filter(Boolean);
+}
+
+function parseNumberParam(searchParams, key, fallback) {
+  const number = Number(searchParams.get(key));
+  return Number.isFinite(number) ? number : fallback;
+}
+
+function profileBudget(profile = {}) {
+  let min = Number(profile.budgetMinWan || 24);
+  let max = Number(profile.budgetMaxWan || 31);
+  if (!Number.isFinite(min)) min = 24;
+  if (!Number.isFinite(max)) max = 31;
+  if (min > max) [min, max] = [max, min];
+  return { min, max, center: (min + max) / 2 };
+}
+
+function usedPriceRangesForProfile(profile = {}) {
+  const { min, max } = profileBudget(profile);
+  const wide = `${Math.max(5, Math.floor(min - 9))},${Math.ceil(max + 5)}`;
+  const tight = `${Math.max(5, Math.floor(min - 4))},${Math.ceil(max)}`;
+  const ranges = unique([wide, tight]);
+  return [ranges[0] || "15,33", ranges[1] || ranges[0] || "20,31"];
+}
+
+function profileSignature(profile = {}) {
+  const { min, max } = profileBudget(profile);
+  return [
+    profile.city || "北京",
+    profile.people || "2",
+    min,
+    max,
+    (profile.energyTypes || []).join("|"),
+    profile.minRangeKm || 650,
+    profile.bodyPreference || "suv_sedan",
+    (profile.priorities || []).slice(0, 6).join("|"),
+    String(profile.dealBreakers || "").slice(0, 80)
+  ].join(":");
+}
+
+function profileSummary(profile = {}, cityOverride = "") {
+  const { min, max } = profileBudget(profile);
+  const energy = profile.energyTypes?.includes("ev") && profile.energyTypes.length === 1
+    ? "只看纯电"
+    : profile.energyTypes?.length ? "新能源不限" : "新能源";
+  return [
+    cityOverride || profile.city || "北京",
+    `${min}-${max}万`,
+    energy,
+    `续航≥${profile.minRangeKm || 650}km`,
+    bodyPreferenceText(profile.bodyPreference),
+    (profile.priorities || []).slice(0, 3).join("/")
+  ].filter(Boolean).join(" · ");
+}
+
+function bodyPreferenceText(value = "") {
+  return {
+    suv_sedan: "SUV/轿车均可",
+    suv: "优先SUV",
+    sedan: "优先轿车/旅行",
+    compact: "优先好停车",
+    no_mpv: "不看MPV"
+  }[value] || "车身不限";
+}
+
+function rankReleasesForProfile(releases = [], profile = {}) {
+  return [...(releases || [])].sort((a, b) => {
+    const scoreDelta = scoreReleaseForProfile(b, profile) - scoreReleaseForProfile(a, profile);
+    return scoreDelta || releaseSortScore(b) - releaseSortScore(a);
+  });
+}
+
+function scoreReleaseForProfile(release, profile = {}) {
+  const budget = profileBudget(profile);
+  const text = `${release.brandName || ""} ${release.seriesName || ""} ${release.carType || ""}`;
+  let score = releaseSortScore(release);
+  if (releaseIsNewEnergy(release)) score += 20;
+  if ((profile.energyTypes || []).includes(release.energyType) || release.energyType === "new_energy") score += 10;
+  const min = release.priceMinWan;
+  const max = release.priceMaxWan || min;
+  if (min !== "") {
+    if (max >= budget.min - 6 && min <= budget.max + 2) score += 30;
+    else if (min < budget.min - 6) score += 12;
+    else if (min <= budget.max + 10) score += 16;
+    else score -= 18;
+  }
+  const body = releaseBodyBucket(release);
+  if (profile.bodyPreference === "suv_sedan" && (body === "suv" || body === "sedan")) score += 14;
+  if (profile.bodyPreference === "suv" && body === "suv") score += 16;
+  if (profile.bodyPreference === "sedan" && body === "sedan") score += 16;
+  if ((profile.bodyPreference === "compact" || profile.bodyPreference === "no_mpv") && body === "mpv") score -= 18;
+  const range = releaseRangeKm(release);
+  if (range >= Number(profile.minRangeKm || 650)) score += 10;
+  else if (range && range < Number(profile.minRangeKm || 650) - 100) score -= 8;
+  if (profile.priorities?.includes("comfort") && release.score?.comfort >= 4) score += 5;
+  if (profile.priorities?.includes("interior") && release.score?.interior >= 4) score += 5;
+  if (profile.priorities?.includes("appearance") && release.score?.appearance >= 4) score += 4;
+  if (profile.priorities?.includes("adas") && /理想|小鹏|华为|问界|智界|阿维塔/i.test(text)) score += 5;
+  if (/理想\s*i6/i.test(profile.referenceCar || "") && /理想\s*i6/i.test(text)) score += 12;
+  if (vehicleHitsProfileDealBreaker(text, profile)) score -= 30;
+  return score;
+}
+
+function releaseIsNewEnergy(release) {
+  if (["ev", "phev", "erev", "hev", "new_energy"].includes(release.energyType)) return true;
+  return /纯电|插混|混动|增程|PHEV|EV|DM-i|DM|电动/i.test([
+    release.energyLabel,
+    release.seriesName,
+    ...(release.models || []).map((model) => [model.groupKey, ...(model.baseConfig || []), model.range, model.battery].join(" "))
+  ].join(" "));
+}
+
+function releaseBodyBucket(release) {
+  const text = `${release.carType || ""} ${release.seriesName || ""}`;
+  if (/SUV/i.test(text)) return "suv";
+  if (/MPV|六座|七座/.test(text)) return "mpv";
+  if (/轿车|轿跑|旅行|Sportback/i.test(text)) return "sedan";
+  return "other";
+}
+
+function releaseRangeKm(release) {
+  const values = [];
+  for (const model of release.models || []) {
+    const text = [model.groupKey, model.battery, model.range, ...(model.baseConfig || []), ...(model.highlightsConfig || [])].join(" ");
+    [...text.matchAll(/(\d{3,4})\s*(?:km|公里)/gi)].forEach((match) => values.push(Number(match[1])));
+    if (model.range && Number(model.range)) values.push(Number(model.range));
+  }
+  return values.filter((value) => Number.isFinite(value)).sort((a, b) => b - a)[0] || "";
+}
+
+function vehicleHitsProfileDealBreaker(text = "", profile = {}) {
+  const haystack = String(text);
+  const breakers = `${profile.dealBreakers || ""} ${profile.notes || ""}`;
+  if (/智界\s*R7/i.test(haystack) && /智界\s*R7|R7.*外观|不喜欢.*R7/i.test(breakers)) return true;
+  if (/阿维塔.*06|06T/i.test(haystack) && /阿维塔|方向盘|小.*方|方.*方向盘/i.test(breakers)) return true;
+  if (/事故|重大修复|火烧|泡水/i.test(haystack) && /事故|修复太多|泡水|火烧/i.test(breakers)) return true;
+  return false;
+}
+
+function scoreUsedListing(listing, profile = {}) {
   let score = 16;
   const reasons = [];
+  const budget = profileBudget(profile);
   if (/官方|自营|直营/.test(listing.sourceType)) {
     score += 14;
     reasons.push("懂车帝官方/自营车源");
   }
   if (listing.priceWan !== "") {
-    if (listing.priceWan >= 20 && listing.priceWan <= 31) {
+    if (listing.priceWan >= budget.min - 4 && listing.priceWan <= budget.max + 1) {
       score += 26;
-      reasons.push("价格落在30万左右");
-    } else if (listing.priceWan >= 15 && listing.priceWan < 20) {
+      reasons.push(`价格贴近画像预算 ${budget.min}-${budget.max}万`);
+    } else if (listing.priceWan >= Math.max(8, budget.min - 10) && listing.priceWan < budget.min - 4) {
       score += 12;
-      reasons.push("价格明显低于预算，可做性价比备选");
-    } else if (listing.priceWan > 31 && listing.priceWan <= 38) {
+      reasons.push("价格低于画像预算，可做性价比备选");
+    } else if (listing.priceWan > budget.max + 1 && listing.priceWan <= budget.max + 8) {
       score += 8;
       reasons.push("价格略超预算，适合观望压价");
-    } else if (listing.priceWan < 10) {
+    } else if (listing.priceWan < Math.max(8, budget.min - 14)) {
       score -= 10;
     } else {
       score -= 12;
@@ -293,12 +467,19 @@ function scoreUsedListing(listing) {
     reasons.push("品牌在你的关注池内");
   }
   if (["ev", "phev", "erev", "new_energy"].includes(listing.energyType)) {
-    score += 10;
-    reasons.push(energyLabelFromType(listing.energyType, "新能源"));
+    score += profile.energyTypes?.includes(listing.energyType) || listing.energyType === "new_energy" ? 12 : 8;
+    reasons.push(profile.energyTypes?.includes(listing.energyType) ? `符合画像能源：${energyLabelFromType(listing.energyType, "新能源")}` : energyLabelFromType(listing.energyType, "新能源"));
   }
-  if (listing.range >= 650) {
+  const minRange = Number(profile.minRangeKm || 650);
+  if (listing.range >= minRange) {
     score += 9;
     reasons.push(`续航 ${listing.range}km`);
+  } else if (listing.range && listing.range < minRange - 100) {
+    score -= 6;
+  }
+  if (listing.city && listing.city === (profile.city || "北京")) {
+    score += 5;
+    reasons.push(`符合用车城市：${listing.city}`);
   }
   if (listing.year >= 2025) {
     score += 18;
@@ -319,25 +500,28 @@ function scoreUsedListing(listing) {
     }
   }
   if (/ES8|L80|L90|六座|七座|MPV/i.test(text)) {
-    score -= 4;
-    reasons.push("两人用车略偏大");
+    const penalty = profile.bodyPreference === "compact" || profile.bodyPreference === "no_mpv" ? 8 : 4;
+    score -= penalty;
+    reasons.push(profile.people === "2" ? "两人用车略偏大" : "车身尺寸需要确认");
   }
-  if (/智界R7/i.test(text)) score -= 7;
+  if (vehicleHitsProfileDealBreaker(text, profile)) score -= 18;
   return {
     score: Math.max(0, Math.min(100, Math.round(score))),
     reasons: reasons.slice(0, 6)
   };
 }
 
-function usedListingRisks(listing) {
+function usedListingRisks(listing, profile = {}) {
   const risks = [];
   if (listing.authentication && !/官方认证/.test(listing.authentication)) risks.push("非品牌官方认证");
-  if (listing.city && listing.city !== "北京") risks.push(`异地车源：${listing.city}`);
+  const homeCity = profile.city || "北京";
+  if (listing.city && listing.city !== homeCity) risks.push(`异地车源：${listing.city}`);
   if (listing.year && listing.year < 2023) risks.push("车龄偏老");
   if (listing.mileageWan !== "" && listing.mileageWan >= 5) risks.push("里程偏高");
   if (!listing.priceWan) risks.push("价格字段需二次确认");
   if (/蔚来|ES6|ES8|ET5|ET7/i.test(`${listing.brandName} ${listing.seriesName}`)) risks.push("蔚来权益/NOP+需确认");
   if (/车衣|改色/i.test(listing.title)) risks.push("膜下漆面需复检");
+  if (vehicleHitsProfileDealBreaker(`${listing.brandName} ${listing.seriesName} ${listing.title}`, profile)) risks.push("命中画像中的明确排除项");
   if (!risks.length) risks.push("仍需看检测报告和出险记录");
   return risks.slice(0, 5);
 }
@@ -352,8 +536,9 @@ function mergeUsedListings(listings) {
   return [...map.values()];
 }
 
-function usedPriceSort(listing) {
-  return listing.priceWan === "" ? 999 : Math.abs(Number(listing.priceWan) - 28);
+function usedPriceSort(listing, profile = {}) {
+  const { center } = profileBudget(profile);
+  return listing.priceWan === "" ? 999 : Math.abs(Number(listing.priceWan) - center);
 }
 
 function parseYear(text = "") {
