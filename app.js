@@ -3,17 +3,17 @@ const AUTH_PROFILE_KEY = "newcar-auth-profile";
 const INDICATOR_DEADLINE = new Date("2027-05-26T23:59:59+08:00");
 const INFO_IMAGE_MAX_EDGE = 1600;
 const INFO_IMAGE_QUALITY = 0.82;
-const DEEPSEEK_ANALYZER_URL = window.NEWCAR_AI_CONFIG?.deepseekAnalyzerUrl || window.NEWCAR_AI_CONFIG?.geminiAnalyzerUrl || "/api/analyze";
-const LOCAL_DEEPSEEK_ANALYZER_URL = window.NEWCAR_AI_CONFIG?.localDeepSeekAnalyzerUrl || window.NEWCAR_AI_CONFIG?.localGeminiAnalyzerUrl || "http://127.0.0.1:8787/analyze";
-const DEEPSEEK_RECOMMENDER_URL = window.NEWCAR_AI_CONFIG?.deepseekRecommenderUrl || window.NEWCAR_AI_CONFIG?.geminiRecommenderUrl || "/api/recommend";
-const LOCAL_DEEPSEEK_RECOMMENDER_URL = window.NEWCAR_AI_CONFIG?.localDeepSeekRecommenderUrl || window.NEWCAR_AI_CONFIG?.localGeminiRecommenderUrl || "http://127.0.0.1:8787/recommend";
+const GEMINI_ANALYZER_URL = window.NEWCAR_AI_CONFIG?.geminiAnalyzerUrl || "/api/analyze";
+const LOCAL_GEMINI_ANALYZER_URL = window.NEWCAR_AI_CONFIG?.localGeminiAnalyzerUrl || "http://127.0.0.1:8787/analyze";
+const GEMINI_RECOMMENDER_URL = window.NEWCAR_AI_CONFIG?.geminiRecommenderUrl || "/api/recommend";
+const LOCAL_GEMINI_RECOMMENDER_URL = window.NEWCAR_AI_CONFIG?.localGeminiRecommenderUrl || "http://127.0.0.1:8787/recommend";
 const DONGCHEDI_NEWCAR_URL = window.NEWCAR_DATA_CONFIG?.dongchediNewcarUrl || "/api/dongchedi/recent-models";
 const LOCAL_DONGCHEDI_NEWCAR_URL = window.NEWCAR_DATA_CONFIG?.localDongchediNewcarUrl || "http://127.0.0.1:8788/dongchedi/recent-models";
 const DONGCHEDI_USEDCAR_URL = window.NEWCAR_DATA_CONFIG?.dongchediUsedcarUrl || "/api/dongchedi/official-usedcars";
 const LOCAL_DONGCHEDI_USEDCAR_URL = window.NEWCAR_DATA_CONFIG?.localDongchediUsedcarUrl || "http://127.0.0.1:8788/dongchedi/official-usedcars";
 
-let deepseekAnalysisRunning = false;
-let deepseekUnavailableNotified = false;
+let geminiAnalysisRunning = false;
+let geminiUnavailableNotified = false;
 let requirementAnalysisRunning = false;
 let requirementEditMode = false;
 let newCarRefreshRunning = false;
@@ -916,7 +916,7 @@ function recommendationClass(value) {
 function evidenceTypeLabel(type) {
   return {
     note: "自由记录",
-    analysis: "DeepSeek 分析",
+    analysis: "Gemini 分析",
     listing: "车源截图",
     config: "配置单",
     report: "检测报告",
@@ -1529,7 +1529,7 @@ function renderDashboard() {
         <span>指标到期</span>
         <strong>${daysUntilDeadline()} 天</strong>
       </div>
-      <button class="secondary-button" id="analyzeDashboardCar" data-dashboard-deepseek type="button" ${best ? "" : "disabled"}>DeepSeek 重新分析</button>
+      <button class="secondary-button" id="analyzeDashboardCar" data-dashboard-gemini type="button" ${best ? "" : "disabled"}>Gemini 重新分析</button>
     </div>
   `;
 
@@ -2538,7 +2538,7 @@ function renderRisks() {
     if (analyzeButton) analyzeButton.disabled = true;
     return;
   }
-  if (analyzeButton) analyzeButton.disabled = deepseekAnalysisRunning;
+  if (analyzeButton) analyzeButton.disabled = geminiAnalysisRunning;
   const result = analyzeCar(car);
   document.querySelector("#riskDetail").innerHTML = `
     <div class="risk-summary">
@@ -2566,7 +2566,7 @@ function renderRisks() {
   `).join("");
 }
 
-function analyzeRiskCarWithDeepSeek() {
+function analyzeRiskCarWithGemini() {
   const carId = document.querySelector("#riskCarSelect")?.value || selectedCarId;
   if (!carId || !state.cars.some((car) => car.id === carId)) {
     showToast("请先选择一台车源。", "warn");
@@ -2574,10 +2574,10 @@ function analyzeRiskCarWithDeepSeek() {
   }
   selectedCarId = carId;
   activeView = "risks";
-  analyzeCurrentCarWithDeepSeek({ auto: false });
+  analyzeCurrentCarWithGemini({ auto: false });
 }
 
-function analyzeDashboardBestWithDeepSeek() {
+function analyzeDashboardBestWithGemini() {
   const best = [...state.cars].sort((a, b) => fitScore(b) - fitScore(a))[0];
   if (!best) {
     showToast("请先添加一台车源。", "warn");
@@ -2585,7 +2585,7 @@ function analyzeDashboardBestWithDeepSeek() {
   }
   selectedCarId = best.id;
   activeView = "dashboard";
-  analyzeCurrentCarWithDeepSeek({ auto: false });
+  analyzeCurrentCarWithGemini({ auto: false });
 }
 
 function renderSellers() {
@@ -2841,8 +2841,8 @@ async function addEvidenceFromForm() {
   ["#evidenceTitle", "#evidenceUrl", "#evidenceNotes"].forEach((selector) => setValue(selector, ""));
   if (document.querySelector("#evidenceFiles")) document.querySelector("#evidenceFiles").value = "";
   render();
-  showToast("信息已加入当前候选，正在调用 DeepSeek 分析。", "ok");
-  analyzeCurrentCarWithDeepSeek({ auto: true, focusInfoId: item.id });
+  showToast("信息已加入当前候选，正在调用 Gemini 分析。", "ok");
+  analyzeCurrentCarWithGemini({ auto: true, focusInfoId: item.id });
 }
 
 async function filesToInfoAttachments(fileList) {
@@ -2881,19 +2881,19 @@ function compressInfoImage(file) {
   });
 }
 
-async function analyzeCurrentCarWithDeepSeek({ auto = false, focusInfoId = "" } = {}) {
-  if (deepseekAnalysisRunning) {
-    if (!auto) showToast("DeepSeek 正在分析中。", "warn");
+async function analyzeCurrentCarWithGemini({ auto = false, focusInfoId = "" } = {}) {
+  if (geminiAnalysisRunning) {
+    if (!auto) showToast("Gemini 正在分析中。", "warn");
     return;
   }
   const car = state.cars.find((item) => item.id === selectedCarId);
   if (!car) return;
-  deepseekAnalysisRunning = true;
-  setDeepSeekButtonState(true);
-  if (!auto) showToast("正在调用 DeepSeek 分析信息墙。", "ok");
+  geminiAnalysisRunning = true;
+  setGeminiButtonState(true);
+  if (!auto) showToast("正在调用 Gemini 分析信息墙。", "ok");
   try {
-    const payload = buildDeepSeekPayload(car, focusInfoId);
-    const urls = getDeepSeekAnalyzerUrls();
+    const payload = buildGeminiPayload(car, focusInfoId);
+    const urls = getGeminiAnalyzerUrls();
     let result = null;
     let lastError = "";
     for (const url of urls) {
@@ -2905,50 +2905,50 @@ async function analyzeCurrentCarWithDeepSeek({ auto = false, focusInfoId = "" } 
         });
         result = await response.json().catch(() => ({}));
         if (!response.ok || result.ok === false) {
-          throw new Error(result.error || `DeepSeek 分析失败：${response.status}`);
+          throw new Error(result.error || `Gemini 分析失败：${response.status}`);
         }
         break;
       } catch (error) {
-        lastError = error?.message || "DeepSeek 分析失败。";
+        lastError = error?.message || "Gemini 分析失败。";
         result = null;
       }
     }
-    if (!result) throw new Error(lastError || "DeepSeek 分析服务未就绪。");
-    applyDeepSeekAnalysis(result, focusInfoId);
-    deepseekUnavailableNotified = false;
+    if (!result) throw new Error(lastError || "Gemini 分析服务未就绪。");
+    applyGeminiAnalysis(result, focusInfoId);
+    geminiUnavailableNotified = false;
     render();
-    showToast("DeepSeek 已分析并更新车源信息。", "ok");
+    showToast("Gemini 已分析并更新车源信息。", "ok");
   } catch (error) {
-    const message = error?.message || "DeepSeek 分析失败。";
+    const message = error?.message || "Gemini 分析失败。";
     if (auto) {
-      if (!deepseekUnavailableNotified) {
-        showToast("信息已保存；DeepSeek 分析服务未就绪，可稍后点 DeepSeek 分析。", "warn");
-        deepseekUnavailableNotified = true;
+      if (!geminiUnavailableNotified) {
+        showToast("信息已保存；Gemini 分析服务未就绪，可稍后点 Gemini 分析。", "warn");
+        geminiUnavailableNotified = true;
       }
     } else {
-      showToast(message.includes("Failed to fetch") ? "DeepSeek 分析服务未就绪，请检查线上服务或本机服务。" : message, "danger");
+      showToast(message.includes("Failed to fetch") ? "Gemini 分析服务未就绪，请检查线上服务或本机服务。" : message, "danger");
     }
   } finally {
-    deepseekAnalysisRunning = false;
-    setDeepSeekButtonState(false);
+    geminiAnalysisRunning = false;
+    setGeminiButtonState(false);
   }
 }
 
-function getDeepSeekAnalyzerUrls() {
+function getGeminiAnalyzerUrls() {
   const urls = [];
   if (location.protocol === "http:" || location.protocol === "https:") {
-    urls.push(DEEPSEEK_ANALYZER_URL);
+    urls.push(GEMINI_ANALYZER_URL);
   }
-  urls.push(LOCAL_DEEPSEEK_ANALYZER_URL);
+  urls.push(LOCAL_GEMINI_ANALYZER_URL);
   return [...new Set(urls)];
 }
 
-function getDeepSeekRecommenderUrls() {
+function getGeminiRecommenderUrls() {
   const urls = [];
   if (location.protocol === "http:" || location.protocol === "https:") {
-    urls.push(DEEPSEEK_RECOMMENDER_URL);
+    urls.push(GEMINI_RECOMMENDER_URL);
   }
-  urls.push(LOCAL_DEEPSEEK_RECOMMENDER_URL);
+  urls.push(LOCAL_GEMINI_RECOMMENDER_URL);
   return [...new Set(urls)];
 }
 
@@ -2999,13 +2999,13 @@ async function analyzeRequirementAndCollectCars() {
   requirementEditMode = false;
   requirementAnalysisRunning = true;
   renderRequirementPanel();
-  showToast("正在刷新车型池并调用 DeepSeek 理解需求。", "ok");
+  showToast("正在刷新车型池并调用 Gemini 理解需求。", "ok");
   try {
     await refreshDongchediNewCars({ silent: true });
-    const payload = buildRequirementDeepSeekPayload();
+    const payload = buildRequirementGeminiPayload();
     let result = null;
     let lastError = "";
-    for (const url of getDeepSeekRecommenderUrls()) {
+    for (const url of getGeminiRecommenderUrls()) {
       try {
         const response = await fetch(url, {
           method: "POST",
@@ -3020,15 +3020,15 @@ async function analyzeRequirementAndCollectCars() {
         result = null;
       }
     }
-    if (!result) throw new Error(lastError || "DeepSeek 推荐服务未就绪。");
-    applyRequirementAnalysis(result, "DeepSeek");
+    if (!result) throw new Error(lastError || "Gemini 推荐服务未就绪。");
+    applyRequirementAnalysis(result, "Gemini");
     render();
     showToast("已根据用车需求生成候选车型。", "ok");
   } catch (error) {
-    const fallback = buildLocalRequirementRecommendations(error?.message || "DeepSeek 推荐服务未就绪");
+    const fallback = buildLocalRequirementRecommendations(error?.message || "Gemini 推荐服务未就绪");
     applyRequirementAnalysis(fallback, "本地规则兜底");
     render();
-    showToast("DeepSeek 暂不可用，已先用本地规则给出候选。", "warn");
+    showToast("Gemini 暂不可用，已先用本地规则给出候选。", "warn");
   } finally {
     requirementAnalysisRunning = false;
     setRequirementAnalyzeState(false);
@@ -3042,7 +3042,7 @@ function setRequirementAnalyzeState(isRunning) {
   button.textContent = isRunning ? "正在找车..." : "理解需求并找车";
 }
 
-function buildRequirementDeepSeekPayload() {
+function buildRequirementGeminiPayload() {
   return {
     profile: state.userRequirement,
     garageCars: state.cars.map((car) => ({
@@ -3165,7 +3165,7 @@ function buildLocalRequirementRecommendations(error = "") {
   return {
     ok: true,
     error,
-    summary: "DeepSeek 暂时不可用，已用预算、续航、车身和舒适取向做本地排序；建议恢复 DeepSeek 后再细化取舍。",
+    summary: "Gemini 暂时不可用，已用预算、续航、车身和舒适取向做本地排序；建议恢复 Gemini 后再细化取舍。",
     searchStrategy: "优先 30 万附近、长续航新能源、北京通勤友好、舒适/智能优先的近期发布或热门车型。",
     candidates: [...releaseCandidates, ...garageCandidates, ...usedCandidates]
       .sort((a, b) => b.fitScore - a.fitScore)
@@ -3265,25 +3265,25 @@ function usedListingToRequirementCandidate(listing) {
   });
 }
 
-function setDeepSeekButtonState(isRunning) {
+function setGeminiButtonState(isRunning) {
   const button = document.querySelector("#analyzeInfoWall");
   if (button) {
     button.disabled = isRunning;
-    button.textContent = isRunning ? "分析中..." : "DeepSeek 分析";
+    button.textContent = isRunning ? "分析中..." : "Gemini 分析";
   }
   const riskButton = document.querySelector("#analyzeRiskCar");
   if (riskButton) {
     riskButton.disabled = isRunning || !state.cars.length;
-    riskButton.textContent = isRunning ? "分析中..." : "DeepSeek 重新分析";
+    riskButton.textContent = isRunning ? "分析中..." : "Gemini 重新分析";
   }
   const dashboardButton = document.querySelector("#analyzeDashboardCar");
   if (dashboardButton) {
     dashboardButton.disabled = isRunning || !state.cars.length;
-    dashboardButton.textContent = isRunning ? "分析中..." : "DeepSeek 重新分析";
+    dashboardButton.textContent = isRunning ? "分析中..." : "Gemini 重新分析";
   }
 }
 
-function buildDeepSeekPayload(car, focusInfoId) {
+function buildGeminiPayload(car, focusInfoId) {
   return {
     profile: {
       city: "北京",
@@ -3293,7 +3293,7 @@ function buildDeepSeekPayload(car, focusInfoId) {
       i6Baseline: "用户试驾理想 i6 后认为驾驶和乘坐体验很好，希望找到类似体验但价格更合理、风险可控的车源。"
     },
     focusInfoId,
-    car: cloneCarForDeepSeek(car),
+    car: cloneCarForGemini(car),
     infoWall: getCarEvidence(car.id).slice(0, 30).map((item) => ({
       id: item.id,
       title: item.title,
@@ -3321,7 +3321,7 @@ function buildDeepSeekPayload(car, focusInfoId) {
   };
 }
 
-function cloneCarForDeepSeek(car) {
+function cloneCarForGemini(car) {
   return {
     kind: carKind(car),
     name: car.name,
@@ -3359,7 +3359,7 @@ function cloneCarForDeepSeek(car) {
   };
 }
 
-function applyDeepSeekAnalysis(result, focusInfoId) {
+function applyGeminiAnalysis(result, focusInfoId) {
   const car = state.cars.find((item) => item.id === selectedCarId);
   if (!car) return;
   applyCarPatch(car, result.carPatch || {});
@@ -3369,12 +3369,12 @@ function applyDeepSeekAnalysis(result, focusInfoId) {
     if (result.infoCard.notes) focusInfo.notes = String(result.infoCard.notes);
     if (["valid", "pending", "conflict", "expired"].includes(result.infoCard.status)) focusInfo.status = result.infoCard.status;
   }
-  const analysisNotes = formatDeepSeekAnalysisNotes(result.analysis, result.carPatch);
+  const analysisNotes = formatGeminiAnalysisNotes(result.analysis, result.carPatch);
   if (analysisNotes) {
     state.evidence.unshift({
       id: makeId("ev"),
       carId: car.id,
-      title: "DeepSeek 分析结果",
+      title: "Gemini 分析结果",
       type: "analysis",
       status: result.analysis?.riskLevel === "high" ? "conflict" : result.analysis?.confidence === "low" ? "pending" : "valid",
       url: "",
@@ -3412,7 +3412,7 @@ function applyEnumPatch(car, patch, field, allowed) {
   if (allowed.includes(patch[field])) car[field] = patch[field];
 }
 
-function formatDeepSeekAnalysisNotes(analysis, patch) {
+function formatGeminiAnalysisNotes(analysis, patch) {
   if (!analysis && !patch) return "";
   const lines = [];
   if (analysis?.summary) lines.push(`结论：${analysis.summary}`);
@@ -3676,7 +3676,7 @@ function addUsedListingToGarage(skuId) {
       `商家/来源：${listing.seller || listing.sourceType || "-"}`,
       `平台标签：${listing.tags.join("、") || "-"}`,
       `初步风险：${risks.join("、") || "仍需核验检测报告和出险记录"}`,
-      "请 DeepSeek 继续做商家信息梳理、风险评估，并和候选库里的新车车型、理想 i6、蔚来 ES6、极氪 7X 等候选做对比评估。"
+      "请 Gemini 继续做商家信息梳理、风险评估，并和候选库里的新车车型、理想 i6、蔚来 ES6、极氪 7X 等候选做对比评估。"
     ].join("\n"),
     attachments: [],
     createdAt: new Date().toISOString().slice(0, 10)
@@ -3685,8 +3685,8 @@ function addUsedListingToGarage(skuId) {
   selectedCarId = car.id;
   selectedCompare.add(car.id);
   setActiveView("detail");
-  showToast("已加入二手车源，正在调用 DeepSeek 做车源分析。", "ok");
-  analyzeCurrentCarWithDeepSeek({ auto: true, focusInfoId: evidence.id });
+  showToast("已加入二手车源，正在调用 Gemini 做车源分析。", "ok");
+  analyzeCurrentCarWithGemini({ auto: true, focusInfoId: evidence.id });
 }
 
 function addRequirementCandidateToGarage(candidateId) {
@@ -3862,7 +3862,7 @@ document.body.addEventListener("click", (event) => {
   if (usedListingId) addUsedListingToGarage(usedListingId);
   if (requirementCandidateId) addRequirementCandidateToGarage(requirementCandidateId);
   if (openSourceAppId) openSourceInApp(openSourceAppId);
-  if (event.target.closest("[data-dashboard-deepseek]")) analyzeDashboardBestWithDeepSeek();
+  if (event.target.closest("[data-dashboard-gemini]")) analyzeDashboardBestWithGemini();
   if (deleteEvidenceId) {
     if (!window.confirm("确定删除这条信息吗？")) return;
     state.evidence = state.evidence.filter((item) => item.id !== deleteEvidenceId);
@@ -3948,8 +3948,8 @@ document.querySelector("#editCurrentCar").addEventListener("click", () => {
 });
 
 document.querySelector("#exportChecklist").addEventListener("click", exportChecklist);
-document.querySelector("#analyzeInfoWall").addEventListener("click", () => analyzeCurrentCarWithDeepSeek({ auto: false }));
-document.querySelector("#analyzeRiskCar").addEventListener("click", analyzeRiskCarWithDeepSeek);
+document.querySelector("#analyzeInfoWall").addEventListener("click", () => analyzeCurrentCarWithGemini({ auto: false }));
+document.querySelector("#analyzeRiskCar").addEventListener("click", analyzeRiskCarWithGemini);
 document.querySelector("#refreshDcdNewCars").addEventListener("click", refreshDongchediNewCars);
 document.querySelector("#refreshDcdUsedCars").addEventListener("click", refreshDongchediUsedCars);
 

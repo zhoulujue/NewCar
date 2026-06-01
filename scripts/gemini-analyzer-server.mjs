@@ -1,14 +1,12 @@
 import { createServer } from "node:http";
+import { spawn } from "node:child_process";
 
-const HOST = process.env.DEEPSEEK_ANALYZER_HOST || process.env.GEMINI_ANALYZER_HOST || "127.0.0.1";
-const PORT = Number(process.env.DEEPSEEK_ANALYZER_PORT || process.env.GEMINI_ANALYZER_PORT || 8787);
-const MODEL = process.env.DEEPSEEK_MODEL || "deepseek-v4-flash";
-const BASE_URL = (process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com").replace(/\/$/, "");
-const MAX_BODY_BYTES = Number(process.env.DEEPSEEK_ANALYZER_MAX_BODY_MB || process.env.GEMINI_ANALYZER_MAX_BODY_MB || 28) * 1024 * 1024;
-const MAX_INLINE_IMAGES = Number(process.env.DEEPSEEK_ANALYZER_MAX_IMAGES || process.env.GEMINI_ANALYZER_MAX_IMAGES || 10);
-const TIMEOUT_MS = Number(process.env.DEEPSEEK_ANALYZER_TIMEOUT_MS || process.env.GEMINI_ANALYZER_TIMEOUT_MS || 120000);
-const MAX_TOKENS = Number(process.env.DEEPSEEK_MAX_TOKENS || 8192);
-const THINKING_TYPE = process.env.DEEPSEEK_THINKING_TYPE || "disabled";
+const HOST = process.env.GEMINI_ANALYZER_HOST || "127.0.0.1";
+const PORT = Number(process.env.GEMINI_ANALYZER_PORT || 8787);
+const MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+const MODE = process.env.GEMINI_ANALYZER_MODE || (process.env.GEMINI_API_KEY ? "api" : "cli");
+const MAX_BODY_BYTES = Number(process.env.GEMINI_ANALYZER_MAX_BODY_MB || 28) * 1024 * 1024;
+const MAX_INLINE_IMAGES = Number(process.env.GEMINI_ANALYZER_MAX_IMAGES || 10);
 
 const server = createServer(async (req, res) => {
   applyCors(req, res);
@@ -18,19 +16,19 @@ const server = createServer(async (req, res) => {
     return;
   }
   try {
-    if (req.method === "GET" && ["/health", "/api/gemini-health", "/api/deepseek-health"].includes(req.url)) {
-      sendJson(res, 200, { ok: true, service: "newcar-deepseek-analyzer", provider: "deepseek", model: MODEL, baseUrl: BASE_URL });
+    if (req.method === "GET" && ["/health", "/api/gemini-health"].includes(req.url)) {
+      sendJson(res, 200, { ok: true, service: "newcar-gemini-analyzer", mode: MODE, model: MODEL });
       return;
     }
     if (req.method === "POST" && ["/analyze", "/api/analyze"].includes(req.url)) {
       const payload = await readJson(req);
-      const result = await analyzeWithDeepSeekApi(payload);
+      const result = MODE === "api" ? await analyzeWithGeminiApi(payload) : await analyzeWithGeminiCli(payload);
       sendJson(res, 200, { ok: true, ...result });
       return;
     }
     if (req.method === "POST" && ["/recommend", "/api/recommend"].includes(req.url)) {
       const payload = await readJson(req);
-      const result = await recommendWithDeepSeekApi(payload);
+      const result = MODE === "api" ? await recommendWithGeminiApi(payload) : await recommendWithGeminiCli(payload);
       sendJson(res, 200, { ok: true, ...result });
       return;
     }
@@ -41,8 +39,8 @@ const server = createServer(async (req, res) => {
 });
 
 server.listen(PORT, HOST, () => {
-  console.log(`NewCar DeepSeek analyzer listening on http://${HOST}:${PORT}`);
-  console.log(`Provider: DeepSeek; model: ${MODEL}; base URL: ${BASE_URL}`);
+  console.log(`NewCar Gemini analyzer listening on http://${HOST}:${PORT}`);
+  console.log(`Mode: ${MODE}; model: ${MODEL}`);
 });
 
 function applyCors(req, res) {
@@ -83,55 +81,98 @@ function readJson(req) {
   });
 }
 
-async function analyzeWithDeepSeekApi(payload) {
-  const prompt = buildPrompt(payload, false);
-  return requestDeepSeekJson(prompt, 0.15);
-}
-
-async function recommendWithDeepSeekApi(payload) {
-  const prompt = buildRecommendationPrompt(payload);
-  return requestDeepSeekJson(prompt, 0.2);
-}
-
-async function requestDeepSeekJson(prompt, temperature) {
-  const apiKey = process.env.DEEPSEEK_API_KEY;
-  if (!apiKey) throw new Error("未找到 DEEPSEEK_API_KEY，请先在服务端环境文件中配置 DeepSeek API Key。");
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-  const body = {
-    model: MODEL,
-    messages: [
-      {
-        role: "system",
-        content: "你是 NewCar 购车工作台的结构化 JSON 分析引擎。请严格输出 JSON，不要输出 Markdown 或解释。"
-      },
-      { role: "user", content: prompt }
-    ],
-    stream: false,
-    response_format: { type: "json_object" },
-    max_tokens: MAX_TOKENS,
-    thinking: { type: THINKING_TYPE }
-  };
-  if (THINKING_TYPE === "disabled") {
-    body.temperature = temperature;
-  } else {
-    body.reasoning_effort = process.env.DEEPSEEK_REASONING_EFFORT || "high";
-  }
-  const response = await fetch(`${BASE_URL}/chat/completions`, {
+async function analyzeWithGeminiApi(payload) {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) throw new Error("未找到 GEMINI_API_KEY，请先配置本机 Gemini API Key，或设置 GEMINI_ANALYZER_MODE=cli。");
+  const prompt = buildPrompt(payload, true);
+  const parts = [{ text: prompt }];
+  collectImages(payload).forEach((image) => {
+    parts.push({
+      inline_data: {
+        mime_type: image.mimeType,
+        data: image.base64
+      }
+    });
+  });
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${apiKey}`
-    },
-    body: JSON.stringify(body),
-    signal: controller.signal
-  }).finally(() => clearTimeout(timer));
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [{ role: "user", parts }],
+      generationConfig: {
+        temperature: 0.15,
+        responseMimeType: "application/json"
+      }
+    })
+  });
   const json = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(json.error?.message || `DeepSeek API 返回 ${response.status}`);
+    throw new Error(json.error?.message || `Gemini API 返回 ${response.status}`);
   }
-  const text = json.choices?.[0]?.message?.content || "";
+  const text = json.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("\n");
   return parseModelJson(text);
+}
+
+async function analyzeWithGeminiCli(payload) {
+  const prompt = buildPrompt(stripImageData(payload), false);
+  const text = await runGeminiCli(prompt);
+  return parseModelJson(text);
+}
+
+async function recommendWithGeminiApi(payload) {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) throw new Error("未找到 GEMINI_API_KEY，请先配置本机 Gemini API Key，或设置 GEMINI_ANALYZER_MODE=cli。");
+  const prompt = buildRecommendationPrompt(payload);
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig: {
+        temperature: 0.2,
+        responseMimeType: "application/json"
+      }
+    })
+  });
+  const json = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(json.error?.message || `Gemini API 返回 ${response.status}`);
+  }
+  const text = json.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("\n");
+  return parseModelJson(text);
+}
+
+async function recommendWithGeminiCli(payload) {
+  const prompt = buildRecommendationPrompt(payload);
+  const text = await runGeminiCli(prompt);
+  return parseModelJson(text);
+}
+
+function runGeminiCli(prompt) {
+  return new Promise((resolve, reject) => {
+    const child = spawn("gemini", ["-p", prompt, "--model", MODEL, "--output-format", "text"], {
+      env: process.env,
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    let stdout = "";
+    let stderr = "";
+    const timer = setTimeout(() => {
+      child.kill("SIGTERM");
+      reject(new Error("Gemini CLI 分析超时。"));
+    }, Number(process.env.GEMINI_ANALYZER_TIMEOUT_MS || 90000));
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk.toString();
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk.toString();
+    });
+    child.on("error", reject);
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      if (code === 0 && stdout.trim()) resolve(stdout);
+      else reject(new Error(stderr || stdout || `Gemini CLI 退出：${code}`));
+    });
+  });
 }
 
 function buildPrompt(payload, withImages) {
@@ -141,7 +182,6 @@ function buildPrompt(payload, withImages) {
 
 要求：
 - 只依据输入信息推断，不要编造没有证据的事实。
-- 当前 DeepSeek 接入按文本 JSON 分析处理；如果上传了图片，请仅依据图片文件名、所属信息标题和用户文本描述判断，不要假装看见图片内容。
 - 如果图片或文本里出现价格、里程、过户、城市、电池、权益、检测、事故/修复、商家承诺、配置，请回填到 carPatch。
 - 如果信息来自懂车帝二手车源，请重点梳理商家/平台主体、平台保障、检测报告、退换/质保承诺，以及仍需要电话核验的问题。
 - 请把当前候选和用户已关注候选做对比评估，尤其以理想 i6 的驾驶/乘坐体感作为舒适性标尺；差距或优势写入 notes、nextAction 或 questions。
@@ -338,15 +378,15 @@ function parseModelJson(text = "") {
   const start = cleaned.indexOf("{");
   const end = cleaned.lastIndexOf("}");
   if (start < 0 || end < start) {
-    throw new Error("DeepSeek 没有返回可解析的 JSON。");
+    throw new Error("Gemini 没有返回可解析的 JSON。");
   }
   return JSON.parse(cleaned.slice(start, end + 1));
 }
 
 function normalizeError(error) {
   const message = error?.message || String(error);
-  if (/aborted|AbortError/i.test(message)) {
-    return "DeepSeek API 请求超时，请稍后重试或调高 DEEPSEEK_ANALYZER_TIMEOUT_MS。";
+  if (/User location is not supported/i.test(message)) {
+    return "Gemini API 当前网络区域不可用，请检查代理、API 区域或改用可用的本地 Gemini 配置。";
   }
   return message;
 }

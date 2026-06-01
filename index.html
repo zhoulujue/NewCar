@@ -9,7 +9,7 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="format-detection" content="telephone=no">
     <title>NewCar 购车工作台</title>
-    <link rel="stylesheet" href="./styles.css?v=20260601-deepseek">
+    <link rel="stylesheet" href="./styles.css?v=20260601-profile-preview">
     <script src="./auth-config.js"></script>
     <script src="https://accounts.google.com/gsi/client" async defer></script>
   </head>
@@ -80,7 +80,7 @@
             <div class="panel-head requirement-head">
               <div>
                 <h2>用车画像</h2>
-                <span class="muted">先把长期偏好保存下来，再用 DeepSeek 按当前画像刷新新车和二手车候选。</span>
+                <span class="muted">先把长期偏好保存下来，再用 Gemini 按当前画像刷新新车和二手车候选。</span>
               </div>
               <div class="requirement-actions">
                 <button class="secondary-button" id="editRequirement" type="button">修改画像</button>
@@ -356,7 +356,7 @@
                     <h2>信息墙</h2>
                     <span class="muted">随手存聊天截图、检测照片、配置单、口头承诺和自己的判断</span>
                   </div>
-                  <button class="secondary-button" id="analyzeInfoWall" type="button">DeepSeek 分析</button>
+                  <button class="secondary-button" id="analyzeInfoWall" type="button">Gemini 分析</button>
                 </div>
                 <form id="evidenceForm" class="evidence-form">
                   <input id="evidenceTitle" class="input" placeholder="标题，可留空">
@@ -462,7 +462,7 @@
                 <h2>风险雷达</h2>
                 <div class="risk-head-actions">
                   <select id="riskCarSelect" class="select"></select>
-                  <button class="secondary-button" id="analyzeRiskCar" type="button">DeepSeek 重新分析</button>
+                  <button class="secondary-button" id="analyzeRiskCar" type="button">Gemini 重新分析</button>
                 </div>
               </div>
               <div id="riskDetail"></div>
@@ -622,6 +622,6 @@
       </form>
     </dialog>
 
-    <script src="./app.js?v=20260601-deepseek"></script>
+    <script src="./app.js?v=20260601-profile-preview"></script>
   </body>
 </html>

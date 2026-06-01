@@ -1,6 +1,6 @@
 # NewCar 本地数据服务
 
-前端是静态页面，浏览器不能稳定直接跨域读取懂车帝页面，也不能直接安全持有 DeepSeek API Key。需要在本机或服务器旁边启动两个轻量 Node 服务。
+前端是静态页面，浏览器不能稳定直接跨域读取懂车帝页面，也不能直接安全持有 Gemini API Key。需要在本机或服务器旁边启动两个轻量 Node 服务。
 
 ## 懂车帝近期新车
 
@@ -33,7 +33,7 @@ curl http://127.0.0.1:8788/health
 DCD_NEWCAR_PORT=8788 DCD_NEWCAR_CACHE_MINUTES=10 node scripts/dongchedi-newcar-server.mjs
 ```
 
-## DeepSeek 信息墙分析
+## Gemini 信息墙分析
 
 ```bash
 node scripts/gemini-analyzer-server.mjs
@@ -46,14 +46,14 @@ http://127.0.0.1:8787/analyze
 http://127.0.0.1:8787/recommend
 ```
 
-`/analyze` 用于单台车的信息墙/风险分析，`/recommend` 用于首页“用车需求 -> 候选车型”推荐。服务使用 DeepSeek OpenAI 兼容接口，默认模型是 `deepseek-v4-flash`。不要把 API Key 写进代码或提交到仓库。
+`/analyze` 用于单台车的信息墙/风险分析，`/recommend` 用于首页“用车需求 -> 候选车型”推荐。如果本机配置了 `GEMINI_API_KEY`，服务会走 Gemini API；否则会尝试调用本机 `gemini` CLI。不要把 API Key 写进代码或提交到仓库。
 
-线上部署时，`car.zhoulujue.com/api/analyze` 和 `car.zhoulujue.com/api/recommend` 都应由 Caddy 代理到服务器内的 DeepSeek analyzer。当前 `huoshan-johor` 上 8787 已被其他服务占用，因此线上 analyzer 使用 `127.0.0.1:8790`。DeepSeek API Key 应写在服务器环境文件，例如 `/etc/newcar/deepseek.env`，并通过 systemd 的 `EnvironmentFile` 加载，不要提交到仓库。
+线上部署时，`car.zhoulujue.com/api/analyze` 和 `car.zhoulujue.com/api/recommend` 都应由 Caddy 代理到服务器内的 Gemini analyzer。当前 `huoshan-johor` 上 8787 已被其他服务占用，因此线上 analyzer 使用 `127.0.0.1:8790`。Gemini API Key 应写在服务器环境文件，例如 `/etc/newcar/gemini.env`，并通过 systemd 的 `EnvironmentFile` 加载，不要提交到仓库。
 
 可选环境变量：
 
 ```bash
-DEEPSEEK_API_KEY=sk-xxx DEEPSEEK_MODEL=deepseek-v4-flash DEEPSEEK_ANALYZER_PORT=8787 node scripts/gemini-analyzer-server.mjs
+GEMINI_MODEL=gemini-2.5-flash GEMINI_ANALYZER_PORT=8787 node scripts/gemini-analyzer-server.mjs
 ```
 
-DeepSeek 当前接入按文本 JSON 分析处理：信息墙里的文字、链接、图片文件名会进入模型；图片本身不会作为视觉输入发送。前端会保留你上传的信息，稍后可以手动再点“DeepSeek 分析”。
+如果返回“当前网络区域不可用”，说明本机 Gemini API/CLI 的网络或区域还没打通，前端会保留你上传的信息，稍后可以手动再点“Gemini 分析”。
