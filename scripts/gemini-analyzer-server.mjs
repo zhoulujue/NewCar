@@ -164,43 +164,53 @@ async function recommendWithGeminiCli(payload) {
 }
 
 async function analyzeWithProviderFallback(payload, startedAt = Date.now()) {
-  try {
-    const result = MODE === "api" ? await analyzeWithGeminiApi(payload) : await analyzeWithGeminiCli(payload);
-    console.log(`[analyze] gemini ok ${Date.now() - startedAt}ms images=${collectImages(payload).length}`);
-    return { provider: "gemini", ...result };
-  } catch (geminiError) {
-    const geminiMessage = normalizeError(geminiError);
-    console.warn(`[analyze] gemini failed ${Date.now() - startedAt}ms: ${geminiMessage}`);
-    try {
-      const result = await analyzeWithDeepSeekApi(payload);
-      console.log(`[analyze] deepseek ok ${Date.now() - startedAt}ms after gemini failure`);
-      return { provider: "deepseek", providerFallbackFrom: "gemini", ...result };
-    } catch (deepseekError) {
-      const deepseekMessage = normalizeError(deepseekError);
-      console.warn(`[analyze] deepseek failed ${Date.now() - startedAt}ms: ${deepseekMessage}`);
-      throw new Error(`Gemini 和 DeepSeek 均不可用。Gemini：${geminiMessage}；DeepSeek：${deepseekMessage}`);
-    }
+  const result = await firstSuccessfulProvider([
+    { provider: "gemini", run: () => (MODE === "api" ? analyzeWithGeminiApi(payload) : analyzeWithGeminiCli(payload)) },
+    { provider: "deepseek", run: () => analyzeWithDeepSeekApi(payload) }
+  ]);
+  if (result.ok) {
+    console.log(`[analyze] ${result.provider} ok ${Date.now() - startedAt}ms images=${collectImages(payload).length}`);
+    return { provider: result.provider, providerFallbackFrom: result.provider === "gemini" ? "" : "gemini", ...result.value };
   }
+  console.warn(`[analyze] providers failed ${Date.now() - startedAt}ms: ${formatProviderErrors(result.errors)}`);
+  throw new Error(`Gemini 和 DeepSeek 均不可用。${formatProviderErrors(result.errors)}`);
 }
 
 async function recommendWithFallback(payload, startedAt = Date.now()) {
-  try {
-    const result = MODE === "api" ? await recommendWithGeminiApi(payload) : await recommendWithGeminiCli(payload);
-    console.log(`[recommend] gemini ok ${Date.now() - startedAt}ms models=${(payload.recentModels || []).length} used=${(payload.usedListings || []).length}`);
-    return { provider: "gemini", ...result };
-  } catch (geminiError) {
-    const geminiMessage = normalizeError(geminiError);
-    console.warn(`[recommend] gemini failed ${Date.now() - startedAt}ms models=${(payload.recentModels || []).length} used=${(payload.usedListings || []).length}: ${geminiMessage}`);
-    try {
-      const result = await recommendWithDeepSeekApi(payload);
-      console.log(`[recommend] deepseek ok ${Date.now() - startedAt}ms after gemini failure models=${(payload.recentModels || []).length} used=${(payload.usedListings || []).length}`);
-      return { provider: "deepseek", providerFallbackFrom: "gemini", ...result };
-    } catch (deepseekError) {
-      const deepseekMessage = normalizeError(deepseekError);
-      console.warn(`[recommend] server fallback ${Date.now() - startedAt}ms models=${(payload.recentModels || []).length} used=${(payload.usedListings || []).length}: ${deepseekMessage}`);
-      return buildServerRecommendationFallback(payload, `Gemini：${geminiMessage}；DeepSeek：${deepseekMessage}`);
-    }
+  const result = await firstSuccessfulProvider([
+    { provider: "gemini", run: () => (MODE === "api" ? recommendWithGeminiApi(payload) : recommendWithGeminiCli(payload)) },
+    { provider: "deepseek", run: () => recommendWithDeepSeekApi(payload) }
+  ]);
+  if (result.ok) {
+    console.log(`[recommend] ${result.provider} ok ${Date.now() - startedAt}ms models=${(payload.recentModels || []).length} used=${(payload.usedListings || []).length}`);
+    return { provider: result.provider, providerFallbackFrom: result.provider === "gemini" ? "" : "gemini", ...result.value };
   }
+  console.warn(`[recommend] server fallback ${Date.now() - startedAt}ms models=${(payload.recentModels || []).length} used=${(payload.usedListings || []).length}: ${formatProviderErrors(result.errors)}`);
+  return buildServerRecommendationFallback(payload, formatProviderErrors(result.errors));
+}
+
+async function firstSuccessfulProvider(tasks = []) {
+  const outcomes = [];
+  return new Promise((resolve) => {
+    let pending = tasks.length;
+    if (!pending) {
+      resolve({ ok: false, errors: [] });
+      return;
+    }
+    tasks.forEach((task) => {
+      task.run()
+        .then((value) => resolve({ ok: true, provider: task.provider, value, errors: outcomes }))
+        .catch((error) => {
+          outcomes.push({ provider: task.provider, message: normalizeError(error) });
+          pending -= 1;
+          if (pending === 0) resolve({ ok: false, errors: outcomes });
+        });
+    });
+  });
+}
+
+function formatProviderErrors(errors = []) {
+  return errors.map((item) => `${item.provider}: ${item.message}`).join("；") || "无可用模型";
 }
 
 async function analyzeWithDeepSeekApi(payload) {
