@@ -76,6 +76,7 @@ textarea:focus-visible {
 .sidebar {
   position: sticky;
   top: 0;
+  align-self: start;
   height: 100vh;
   padding: 22px 16px;
   background: var(--nav);

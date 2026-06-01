@@ -241,6 +241,7 @@ let state = normalizeState(loadState());
 let activeView = "dashboard";
 let selectedCarId = state.selectedCarId || state.cars[0]?.id || "";
 let selectedCompare = new Set(state.selectedCompare?.length ? state.selectedCompare : state.cars.slice(0, 3).map((car) => car.id));
+const viewScrollPositions = {};
 
 const viewMeta = {
   dashboard: ["总览", "一眼看到当前最值得看的车、关键风险和今天该做什么。"],
@@ -1274,17 +1275,45 @@ function renderNav() {
   document.querySelector(`#${activeView}View`)?.classList.add("active");
 }
 
-function setActiveView(view, { scroll = true } = {}) {
+function setActiveView(view, { scroll = "restore" } = {}) {
   if (!viewMeta[view]) return;
+  if (view === activeView) {
+    if (scroll === true || scroll === "top") {
+      render();
+      scrollPageToTop();
+    }
+    return;
+  }
+  saveViewScrollPosition(activeView);
   activeView = view;
   render();
-  if (scroll) scrollPageToTop();
+  if (scroll === true || scroll === "top") {
+    scrollPageToTop();
+  } else if (scroll === "restore") {
+    restoreViewScrollPosition(view);
+  }
 }
 
 function scrollPageToTop() {
   requestAnimationFrame(() => {
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
     document.querySelector(".main")?.scrollTo?.({ top: 0, left: 0, behavior: "auto" });
+  });
+}
+
+function saveViewScrollPosition(view = activeView) {
+  if (!viewMeta[view]) return;
+  viewScrollPositions[view] = {
+    windowTop: window.scrollY || document.documentElement.scrollTop || 0,
+    mainTop: document.querySelector(".main")?.scrollTop || 0
+  };
+}
+
+function restoreViewScrollPosition(view = activeView) {
+  const position = viewScrollPositions[view] || { windowTop: 0, mainTop: 0 };
+  requestAnimationFrame(() => {
+    window.scrollTo({ top: position.windowTop || 0, left: 0, behavior: "auto" });
+    document.querySelector(".main")?.scrollTo?.({ top: position.mainTop || 0, left: 0, behavior: "auto" });
   });
 }
 
@@ -3883,7 +3912,7 @@ function addReleaseToGarage(seriesId) {
   state.cars.unshift(car);
   selectedCarId = car.id;
   selectedCompare.add(car.id);
-  setActiveView("detail");
+  setActiveView("detail", { scroll: "top" });
   showToast("已加入新车候选，可以继续补车型信息和试驾记录。", "ok");
 }
 
@@ -3958,7 +3987,7 @@ function addUsedListingToGarage(skuId) {
   state.evidence.unshift(evidence);
   selectedCarId = car.id;
   selectedCompare.add(car.id);
-  setActiveView("detail");
+  setActiveView("detail", { scroll: "top" });
   showToast("已加入二手车源，正在调用 Gemini 做车源分析。", "ok");
   analyzeCurrentCarWithGemini({ auto: true, focusInfoId: evidence.id });
 }
@@ -4031,7 +4060,7 @@ function addRequirementCandidateToGarage(candidateId) {
   });
   selectedCarId = car.id;
   selectedCompare.add(car.id);
-  setActiveView("detail");
+  setActiveView("detail", { scroll: "top" });
   showToast(`已从需求推荐加入${carKindLabel(car.kind)}。`, "ok");
 }
 
@@ -4097,7 +4126,7 @@ function numberValue(selector) {
 
 function switchToDetail(carId) {
   selectedCarId = carId;
-  setActiveView("detail");
+  setActiveView("detail", { scroll: "top" });
 }
 
 function escapeHtml(value) {
