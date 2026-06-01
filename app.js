@@ -5,6 +5,8 @@ const INFO_IMAGE_MAX_EDGE = 1600;
 const INFO_IMAGE_QUALITY = 0.82;
 const GEMINI_ANALYZER_URL = window.NEWCAR_AI_CONFIG?.geminiAnalyzerUrl || "/api/analyze";
 const LOCAL_GEMINI_ANALYZER_URL = window.NEWCAR_AI_CONFIG?.localGeminiAnalyzerUrl || "http://127.0.0.1:8787/analyze";
+const GEMINI_RECOMMENDER_URL = window.NEWCAR_AI_CONFIG?.geminiRecommenderUrl || "/api/recommend";
+const LOCAL_GEMINI_RECOMMENDER_URL = window.NEWCAR_AI_CONFIG?.localGeminiRecommenderUrl || "http://127.0.0.1:8787/recommend";
 const DONGCHEDI_NEWCAR_URL = window.NEWCAR_DATA_CONFIG?.dongchediNewcarUrl || "/api/dongchedi/recent-models";
 const LOCAL_DONGCHEDI_NEWCAR_URL = window.NEWCAR_DATA_CONFIG?.localDongchediNewcarUrl || "http://127.0.0.1:8788/dongchedi/recent-models";
 const DONGCHEDI_USEDCAR_URL = window.NEWCAR_DATA_CONFIG?.dongchediUsedcarUrl || "/api/dongchedi/official-usedcars";
@@ -12,6 +14,7 @@ const LOCAL_DONGCHEDI_USEDCAR_URL = window.NEWCAR_DATA_CONFIG?.localDongchediUse
 
 let geminiAnalysisRunning = false;
 let geminiUnavailableNotified = false;
+let requirementAnalysisRunning = false;
 let newCarRefreshRunning = false;
 let usedCarRefreshRunning = false;
 
@@ -209,6 +212,25 @@ const seedEvidence = [
   }
 ];
 
+const seedRequirement = {
+  city: "北京",
+  people: "2",
+  scenes: ["city", "highway", "holiday"],
+  budgetMinWan: 24,
+  budgetMaxWan: 31,
+  energyTypes: ["ev", "erev", "phev"],
+  minRangeKm: 650,
+  minPhevRangeKm: 300,
+  priorities: ["comfort", "range", "cockpit", "adas", "interior", "appearance"],
+  seatFocus: "front",
+  bodyPreference: "suv_sedan",
+  purchaseTiming: "2027-05-26 前上牌，7-8月也可阶段性决策",
+  mustHaves: "北京可正常上牌；长续航；车机流畅；高速 NOA 好用；前排座椅舒适；静谧和底盘滤震优秀。",
+  dealBreakers: "外观不能浮夸；方向盘造型不能太小太方；不喜欢智界 R7 外观；二手车事故修复太多不接受。",
+  referenceCar: "理想 i6：用户开过一个月，认为驾驶和乘坐体验非常好，希望找到类似体验。",
+  notes: "2人用车，没有小孩老人，后排需求弱；预算落地价30万左右，性能不是重点，平顺好开即可。"
+};
+
 let currentUser = loadAuthProfile();
 let googleAuthReady = false;
 let googleAuthAttempts = 0;
@@ -252,11 +274,76 @@ function normalizeState(rawState) {
     cars,
     evidence,
     drives,
+    userRequirement: normalizeUserRequirement(rawState.userRequirement),
+    requirementAnalysis: normalizeRequirementAnalysis(rawState.requirementAnalysis),
     market: normalizeMarket(rawState.market),
     usedMarket: normalizeUsedMarket(rawState.usedMarket),
     selectedCarId: rawState.selectedCarId || cars[0]?.id || "",
     selectedCompare: Array.isArray(rawState.selectedCompare) ? rawState.selectedCompare.filter((id) => carIds.has(id)) : []
   };
+}
+
+function normalizeUserRequirement(requirement = {}) {
+  const merged = { ...seedRequirement, ...(requirement || {}) };
+  return {
+    city: merged.city || "北京",
+    people: String(merged.people || "2"),
+    scenes: normalizeStringArray(merged.scenes).length ? normalizeStringArray(merged.scenes) : [...seedRequirement.scenes],
+    budgetMinWan: numberOrDefault(merged.budgetMinWan, seedRequirement.budgetMinWan),
+    budgetMaxWan: numberOrDefault(merged.budgetMaxWan, seedRequirement.budgetMaxWan),
+    energyTypes: normalizeStringArray(merged.energyTypes).length ? normalizeStringArray(merged.energyTypes) : [...seedRequirement.energyTypes],
+    minRangeKm: numberOrDefault(merged.minRangeKm, seedRequirement.minRangeKm),
+    minPhevRangeKm: numberOrDefault(merged.minPhevRangeKm, seedRequirement.minPhevRangeKm),
+    priorities: normalizeStringArray(merged.priorities).length ? normalizeStringArray(merged.priorities) : [...seedRequirement.priorities],
+    seatFocus: merged.seatFocus || "front",
+    bodyPreference: merged.bodyPreference || "suv_sedan",
+    purchaseTiming: merged.purchaseTiming || seedRequirement.purchaseTiming,
+    mustHaves: merged.mustHaves || seedRequirement.mustHaves,
+    dealBreakers: merged.dealBreakers || seedRequirement.dealBreakers,
+    referenceCar: merged.referenceCar || seedRequirement.referenceCar,
+    notes: merged.notes || seedRequirement.notes
+  };
+}
+
+function normalizeRequirementAnalysis(analysis = {}) {
+  return {
+    summary: analysis.summary || "",
+    searchStrategy: analysis.searchStrategy || "",
+    questions: normalizeStringArray(analysis.questions),
+    source: analysis.source || "",
+    lastAnalyzedAt: analysis.lastAnalyzedAt || "",
+    error: analysis.error || "",
+    candidates: Array.isArray(analysis.candidates) ? analysis.candidates.map(normalizeRequirementCandidate).filter(Boolean) : []
+  };
+}
+
+function normalizeRequirementCandidate(candidate) {
+  if (!candidate?.name) return null;
+  return {
+    id: candidate.id || makeId("rec"),
+    source: candidate.source || "manual",
+    seriesId: candidate.seriesId === "" || candidate.seriesId === undefined ? "" : Number(candidate.seriesId),
+    carId: candidate.carId || "",
+    skuId: candidate.skuId === "" || candidate.skuId === undefined ? "" : Number(candidate.skuId),
+    name: candidate.name || "",
+    trim: candidate.trim || "",
+    priceWan: numberOrBlank(candidate.priceWan),
+    energyType: candidate.energyType || "unknown",
+    rangeKm: numberOrBlank(candidate.rangeKm),
+    fitScore: Math.max(0, Math.min(100, Math.round(numberOrDefault(candidate.fitScore, 0)))),
+    confidence: candidate.confidence || "medium",
+    why: candidate.why || "",
+    nextAction: candidate.nextAction || "",
+    tags: normalizeStringArray(candidate.tags),
+    tradeoffs: normalizeStringArray(candidate.tradeoffs),
+    sourceUrl: candidate.sourceUrl || ""
+  };
+}
+
+function normalizeStringArray(value) {
+  if (Array.isArray(value)) return value.filter(Boolean).map(String);
+  if (typeof value === "string" && value.trim()) return value.split(/[,，、\n]/).map((item) => item.trim()).filter(Boolean);
+  return [];
 }
 
 function normalizeCar(car) {
@@ -1090,7 +1177,134 @@ function scrollPageToTop() {
   });
 }
 
+function renderRequirementPanel() {
+  const panel = document.querySelector("#requirementPanel");
+  if (!panel) return;
+  const requirement = state.userRequirement;
+  const analysis = state.requirementAnalysis;
+  if (!panel.contains(document.activeElement)) {
+    setValue("#reqPeople", requirement.people);
+    setValue("#reqBudgetMin", requirement.budgetMinWan);
+    setValue("#reqBudgetMax", requirement.budgetMaxWan);
+    setValue("#reqEnergy", requirement.energyTypes.includes("ev") && requirement.energyTypes.length === 1 ? "ev" : requirement.energyTypes.includes("erev") && !requirement.energyTypes.includes("ev") ? "hybrid" : "all");
+    setValue("#reqRange", requirement.minRangeKm);
+    setValue("#reqBody", requirement.bodyPreference);
+    setValue("#reqTiming", requirement.purchaseTiming);
+    setValue("#reqMustHaves", requirement.mustHaves);
+    setValue("#reqDealBreakers", requirement.dealBreakers);
+    setValue("#reqNotes", requirement.notes);
+    setRequirementCheckboxes("reqScene", requirement.scenes);
+    setRequirementCheckboxes("reqPriority", requirement.priorities);
+  }
+
+  document.querySelector("#requirementSummary").innerHTML = renderRequirementSummary(requirement, analysis);
+  document.querySelector("#requirementRecommendations").innerHTML = renderRequirementRecommendations(analysis);
+  setRequirementAnalyzeState(requirementAnalysisRunning);
+}
+
+function renderRequirementSummary(requirement, analysis) {
+  const chips = [
+    `${peopleLabel(requirement.people)}乘坐`,
+    `${formatWan(requirement.budgetMinWan)}-${formatWan(requirement.budgetMaxWan)}`,
+    energyPreferenceLabel(requirement.energyTypes),
+    `纯电续航≥${requirement.minRangeKm}km`,
+    bodyPreferenceLabel(requirement.bodyPreference)
+  ];
+  return `
+    <div class="requirement-summary-text">
+      <div class="chip-row tight">${chips.map((chip) => `<span class="chip">${escapeHtml(chip)}</span>`).join("")}</div>
+      <p>${escapeHtml(analysis.summary || "填写画像后，系统会刷新懂车帝车型池，并用 Gemini 把你的需求转成可挑选的候选车型。")}</p>
+      ${analysis.searchStrategy ? `<p class="muted">${escapeHtml(analysis.searchStrategy)}</p>` : ""}
+      ${analysis.error ? `<p class="requirement-error">${escapeHtml(analysis.error)}</p>` : ""}
+    </div>
+  `;
+}
+
+function renderRequirementRecommendations(analysis) {
+  if (!analysis.candidates.length) {
+    return `
+      <div class="requirement-empty">
+        <strong>还没有候选车型</strong>
+        <span>点击“理解需求并找车”，会先拉取近期发布/热门车型，再输出可加入车源库的清单。</span>
+      </div>
+    `;
+  }
+  return `
+    <div class="requirement-result-head">
+      <div>
+        <strong>候选车型 ${analysis.candidates.length} 款</strong>
+        <span class="muted">${analysis.lastAnalyzedAt ? `上次分析：${formatDateTime(analysis.lastAnalyzedAt)}` : "按当前画像排序"}</span>
+      </div>
+      ${analysis.source ? `<span class="chip info">${escapeHtml(analysis.source)}</span>` : ""}
+    </div>
+    <div class="requirement-candidate-grid">
+      ${analysis.candidates.map(renderRequirementCandidateCard).join("")}
+    </div>
+    ${analysis.questions.length ? `
+      <div class="requirement-questions">
+        ${analysis.questions.slice(0, 4).map((question) => `<span>${escapeHtml(question)}</span>`).join("")}
+      </div>
+    ` : ""}
+  `;
+}
+
+function renderRequirementCandidateCard(candidate) {
+  const sourceLabel = candidate.source === "release" ? "懂车帝车型" : candidate.source === "used" ? "二手车源" : candidate.source === "garage" ? "车源库" : "LLM建议";
+  return `
+    <article class="requirement-candidate">
+      <div class="requirement-candidate-top">
+        <div>
+          <h3>${escapeHtml(candidate.name)}</h3>
+          <p class="muted">${escapeHtml(candidate.trim || sourceLabel)}</p>
+        </div>
+        <div class="fit-score">${candidate.fitScore || "-"}</div>
+      </div>
+      <div class="chip-row">
+        <span class="chip ${candidate.fitScore >= 76 ? "ok" : candidate.fitScore >= 60 ? "warn" : "info"}">匹配度</span>
+        <span class="chip">${escapeHtml(sourceLabel)}</span>
+        ${candidate.priceWan !== "" ? `<span class="chip">${formatWan(candidate.priceWan)}</span>` : ""}
+        ${candidate.rangeKm !== "" ? `<span class="chip">续航 ${candidate.rangeKm}km</span>` : ""}
+        ${candidate.tags.slice(0, 3).map((tag) => `<span class="chip">${escapeHtml(tag)}</span>`).join("")}
+      </div>
+      <p>${escapeHtml(candidate.why || "需要继续看配置、价格权益和试驾反馈。")}</p>
+      ${candidate.tradeoffs.length ? `<div class="requirement-tradeoffs">${candidate.tradeoffs.slice(0, 3).map((item) => `<span>${escapeHtml(item)}</span>`).join("")}</div>` : ""}
+      <div class="card-actions">
+        <button data-add-requirement-candidate="${candidate.id}" type="button">${candidate.source === "garage" ? "查看车源" : "加入车源库"}</button>
+        ${candidate.sourceUrl ? `<a href="${escapeAttr(candidate.sourceUrl)}" target="_blank" rel="noreferrer">外部信息</a>` : ""}
+      </div>
+    </article>
+  `;
+}
+
+function peopleLabel(value) {
+  return { "1": "1人", "2": "2人", "3-4": "3-4人", "5+": "5人以上" }[value] || `${value}人`;
+}
+
+function energyPreferenceLabel(types) {
+  if (types.includes("ev") && types.length === 1) return "只看纯电";
+  if (!types.includes("ev") && (types.includes("erev") || types.includes("phev"))) return "增程/插混";
+  return "新能源不限";
+}
+
+function bodyPreferenceLabel(value) {
+  return {
+    suv_sedan: "SUV/轿车均可",
+    suv: "优先SUV",
+    sedan: "优先轿车/旅行",
+    compact: "优先好停车",
+    no_mpv: "不看MPV"
+  }[value] || "车身不限";
+}
+
+function setRequirementCheckboxes(name, values) {
+  const set = new Set(values);
+  document.querySelectorAll(`input[name="${name}"]`).forEach((input) => {
+    input.checked = set.has(input.value);
+  });
+}
+
 function renderDashboard() {
+  renderRequirementPanel();
   const risks = state.cars.map(analyzeCar);
   const highCount = risks.filter((risk) => risk.level === "high").length;
   const avgRisk = risks.length ? Math.round(risks.reduce((sum, item) => sum + item.score, 0) / risks.length) : 0;
@@ -2486,6 +2700,314 @@ function getGeminiAnalyzerUrls() {
   return [...new Set(urls)];
 }
 
+function getGeminiRecommenderUrls() {
+  const urls = [];
+  if (location.protocol === "http:" || location.protocol === "https:") {
+    urls.push(GEMINI_RECOMMENDER_URL);
+  }
+  urls.push(LOCAL_GEMINI_RECOMMENDER_URL);
+  return [...new Set(urls)];
+}
+
+function saveRequirementFromForm() {
+  const energy = getValue("#reqEnergy");
+  state.userRequirement = normalizeUserRequirement({
+    city: "北京",
+    people: getValue("#reqPeople") || "2",
+    scenes: checkedValues("reqScene"),
+    budgetMinWan: numberValue("#reqBudgetMin"),
+    budgetMaxWan: numberValue("#reqBudgetMax"),
+    energyTypes: energy === "ev" ? ["ev"] : energy === "hybrid" ? ["erev", "phev"] : ["ev", "erev", "phev"],
+    minRangeKm: numberValue("#reqRange"),
+    minPhevRangeKm: seedRequirement.minPhevRangeKm,
+    priorities: checkedValues("reqPriority"),
+    seatFocus: "front",
+    bodyPreference: getValue("#reqBody") || "suv_sedan",
+    purchaseTiming: getValue("#reqTiming"),
+    mustHaves: getValue("#reqMustHaves"),
+    dealBreakers: getValue("#reqDealBreakers"),
+    referenceCar: seedRequirement.referenceCar,
+    notes: getValue("#reqNotes")
+  });
+}
+
+function checkedValues(name) {
+  return [...document.querySelectorAll(`input[name="${name}"]:checked`)].map((input) => input.value);
+}
+
+async function analyzeRequirementAndCollectCars() {
+  if (requirementAnalysisRunning) {
+    showToast("正在理解用车需求。", "warn");
+    return;
+  }
+  saveRequirementFromForm();
+  requirementAnalysisRunning = true;
+  setRequirementAnalyzeState(true);
+  showToast("正在刷新车型池并调用 Gemini 理解需求。", "ok");
+  try {
+    await refreshDongchediNewCars({ silent: true });
+    const payload = buildRequirementGeminiPayload();
+    let result = null;
+    let lastError = "";
+    for (const url of getGeminiRecommenderUrls()) {
+      try {
+        const response = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        result = await response.json().catch(() => ({}));
+        if (!response.ok || result.ok === false) throw new Error(result.error || `需求分析失败：${response.status}`);
+        break;
+      } catch (error) {
+        lastError = error?.message || "需求分析失败";
+        result = null;
+      }
+    }
+    if (!result) throw new Error(lastError || "Gemini 推荐服务未就绪。");
+    applyRequirementAnalysis(result, "Gemini");
+    render();
+    showToast("已根据用车需求生成候选车型。", "ok");
+  } catch (error) {
+    const fallback = buildLocalRequirementRecommendations(error?.message || "Gemini 推荐服务未就绪");
+    applyRequirementAnalysis(fallback, "本地规则兜底");
+    render();
+    showToast("Gemini 暂不可用，已先用本地规则给出候选。", "warn");
+  } finally {
+    requirementAnalysisRunning = false;
+    setRequirementAnalyzeState(false);
+  }
+}
+
+function setRequirementAnalyzeState(isRunning) {
+  const button = document.querySelector("#analyzeRequirement");
+  if (!button) return;
+  button.disabled = isRunning;
+  button.textContent = isRunning ? "正在找车..." : "理解需求并找车";
+}
+
+function buildRequirementGeminiPayload() {
+  return {
+    profile: state.userRequirement,
+    garageCars: state.cars.map((car) => ({
+      id: car.id,
+      name: car.name,
+      trim: car.trim,
+      priceWan: car.price,
+      rangeKm: car.range,
+      battery: car.battery,
+      city: car.city,
+      source: car.source,
+      notes: car.notes,
+      issues: car.issues,
+      experience: car.experience,
+      fitScore: fitScore(car),
+      risk: analyzeCar(car)
+    })),
+    recentModels: (state.market.releases || []).slice(0, 80).map((release) => ({
+      seriesId: release.seriesId,
+      brandName: release.brandName,
+      seriesName: release.seriesName,
+      carType: release.carType,
+      energyType: release.energyType,
+      energyLabel: release.energyLabel,
+      priceText: release.priceText,
+      priceMinWan: release.priceMinWan,
+      priceMaxWan: release.priceMaxWan,
+      releaseDate: release.releaseDate,
+      sourceTypes: release.sourceTypes,
+      dcdUrl: release.dcdUrl,
+      dimensions: release.dimensions,
+      tags: release.tags,
+      score: release.score,
+      fitScore: newReleaseFitScore(release),
+      fitReasons: newReleaseFitReasons(release),
+      models: release.models.slice(0, 8).map((model) => ({
+        id: model.id,
+        year: model.year,
+        name: model.name,
+        officialPrice: model.officialPrice,
+        dealerPrice: model.dealerPrice,
+        battery: model.battery,
+        range: model.range,
+        power: model.power,
+        drive: model.drive,
+        baseConfig: model.baseConfig.slice(0, 8),
+        highlightsConfig: model.highlightsConfig.slice(0, 8)
+      }))
+    })),
+    usedListings: (state.usedMarket.listings || []).slice(0, 60).map((listing) => ({
+      skuId: listing.skuId,
+      title: listing.title,
+      seriesName: listing.seriesName,
+      trim: listing.trim,
+      priceWan: listing.priceWan,
+      officialPriceWan: listing.officialPriceWan,
+      city: listing.city,
+      sourceType: listing.sourceType,
+      mileageWan: listing.mileageWan,
+      year: listing.year,
+      range: listing.range,
+      energyType: listing.energyType,
+      url: listing.url,
+      fitScore: usedListingClientScore(listing),
+      fitReasons: listing.fitReasons,
+      riskFlags: listing.riskFlags
+    })),
+    outputRules: {
+      maxCandidates: 8,
+      candidateSources: ["release", "used", "garage", "manual"],
+      fitScoreRange: "0-100",
+      priceUnit: "万元"
+    }
+  };
+}
+
+function applyRequirementAnalysis(result, source) {
+  if (result.profilePatch && typeof result.profilePatch === "object") {
+    state.userRequirement = normalizeUserRequirement({ ...state.userRequirement, ...result.profilePatch });
+  }
+  state.requirementAnalysis = normalizeRequirementAnalysis({
+    summary: result.summary || result.analysis?.summary || "",
+    searchStrategy: result.searchStrategy || result.analysis?.searchStrategy || "",
+    questions: result.questions || result.analysis?.questions || [],
+    source,
+    lastAnalyzedAt: new Date().toISOString(),
+    error: result.error || "",
+    candidates: mergeRequirementCandidates(result.candidates || [])
+  });
+}
+
+function mergeRequirementCandidates(candidates) {
+  const seen = new Set();
+  return candidates.map((candidate) => {
+    const normalized = normalizeRequirementCandidate(candidate);
+    if (!normalized) return null;
+    const key = `${normalized.source}:${normalized.seriesId || normalized.skuId || normalized.carId || normalized.name}`;
+    if (seen.has(key)) return null;
+    seen.add(key);
+    return normalized;
+  }).filter(Boolean).slice(0, 8);
+}
+
+function buildLocalRequirementRecommendations(error = "") {
+  const releaseCandidates = [...(state.market.releases || [])]
+    .filter(releaseMatchesUserRequirement)
+    .sort((a, b) => requirementReleaseScore(b) - requirementReleaseScore(a))
+    .slice(0, 8)
+    .map((release) => releaseToRequirementCandidate(release));
+  const garageCandidates = state.cars
+    .map((car) => carToRequirementCandidate(car))
+    .sort((a, b) => b.fitScore - a.fitScore)
+    .slice(0, 3);
+  const usedCandidates = state.usedMarket.listings
+    .filter(listingMatchesUserRequirement)
+    .sort((a, b) => usedListingClientScore(b) - usedListingClientScore(a))
+    .slice(0, 3)
+    .map((listing) => usedListingToRequirementCandidate(listing));
+  return {
+    ok: true,
+    error,
+    summary: "Gemini 暂时不可用，已用预算、续航、车身和舒适取向做本地排序；建议恢复 Gemini 后再细化取舍。",
+    searchStrategy: "优先 30 万附近、长续航新能源、北京通勤友好、舒适/智能优先的近期发布或热门车型。",
+    candidates: [...releaseCandidates, ...garageCandidates, ...usedCandidates]
+      .sort((a, b) => b.fitScore - a.fitScore)
+      .slice(0, 8),
+    questions: ["是否必须纯电？", "是否接受中大型/六座车带来的停车压力？", "是否优先等 7-8 月价格变化？"]
+  };
+}
+
+function releaseMatchesUserRequirement(release) {
+  const req = state.userRequirement;
+  if (!isNewEnergyRelease(release)) return false;
+  const min = release.priceMinWan;
+  const max = release.priceMaxWan || min;
+  if (min !== "" && max < Number(req.budgetMinWan) - 3) return false;
+  if (min !== "" && min > Number(req.budgetMaxWan) + 8) return false;
+  if (req.bodyPreference === "no_mpv" && newReleaseBodyBucket(release) === "mpv") return false;
+  if (req.bodyPreference === "suv" && newReleaseBodyBucket(release) !== "suv") return false;
+  if (req.bodyPreference === "sedan" && newReleaseBodyBucket(release) !== "sedan") return false;
+  return true;
+}
+
+function requirementReleaseScore(release) {
+  const req = state.userRequirement;
+  let score = newReleaseFitScore(release);
+  const center = (Number(req.budgetMinWan) + Number(req.budgetMaxWan)) / 2;
+  const price = release.priceMinWan === "" ? center : Number(release.priceMinWan);
+  score += Math.max(-14, 16 - Math.abs(price - center) * 2.2);
+  if (req.energyTypes.includes(release.energyType)) score += 8;
+  if (req.priorities.includes("comfort") && /理想|蔚来|乐道|奥迪|极氪/i.test(`${release.brandName} ${release.seriesName}`)) score += 8;
+  if (req.priorities.includes("adas") && /理想|小鹏|华为|问界|智界|阿维塔/i.test(`${release.brandName} ${release.seriesName}`)) score += 7;
+  return Math.max(0, Math.min(100, Math.round(score)));
+}
+
+function releaseToRequirementCandidate(release) {
+  const facts = getReleaseModelFacts(release);
+  return normalizeRequirementCandidate({
+    source: "release",
+    seriesId: release.seriesId,
+    name: `${release.brandName} ${release.seriesName}`.trim(),
+    trim: release.models[0] ? `${release.models[0].year || ""}款 ${release.models[0].name || ""}`.trim() : release.priceText,
+    priceWan: release.priceMinWan,
+    energyType: release.energyType,
+    rangeKm: Number(firstModelMatch(release, /续航\s*(\d+)\s*km/i) || firstModelMatch(release, /(\d+)\s*km/i)) || "",
+    fitScore: requirementReleaseScore(release),
+    confidence: "medium",
+    why: newReleaseFitReasons(release).join("；"),
+    tradeoffs: release.tags.slice(0, 3),
+    nextAction: "加入车源库后继续看版本、权益、试驾和价格走势。",
+    tags: [release.energyLabel, releaseSourceText(release), facts.energy].filter(Boolean),
+    sourceUrl: release.dcdUrl
+  });
+}
+
+function carToRequirementCandidate(car) {
+  return normalizeRequirementCandidate({
+    source: "garage",
+    carId: car.id,
+    name: car.name,
+    trim: car.trim,
+    priceWan: car.price,
+    energyType: car.battery === "baas" ? "ev" : "new_energy",
+    rangeKm: car.range,
+    fitScore: fitScore(car),
+    confidence: "high",
+    why: car.nextAction || car.notes || "已在车源库中，可直接进入详情继续判断。",
+    tradeoffs: analyzeCar(car).risks.slice(0, 3).map((risk) => risk.title),
+    nextAction: car.nextAction || "查看详情并补齐信息墙。",
+    tags: [car.city, car.source, batteryLabel(car.battery)].filter(Boolean),
+    sourceUrl: car.url ? getExternalSourceUrl(car) : ""
+  });
+}
+
+function listingMatchesUserRequirement(listing) {
+  const req = state.userRequirement;
+  if (listing.priceWan !== "" && listing.priceWan > Number(req.budgetMaxWan) + 3) return false;
+  if (listing.priceWan !== "" && listing.priceWan < Math.max(10, Number(req.budgetMinWan) - 8)) return false;
+  if (req.minRangeKm && listing.range && listing.range < Number(req.minRangeKm) - 80) return false;
+  return usedListingClientScore(listing) >= 50;
+}
+
+function usedListingToRequirementCandidate(listing) {
+  return normalizeRequirementCandidate({
+    source: "used",
+    skuId: listing.skuId,
+    name: listing.seriesName || listing.title,
+    trim: listing.trim || listing.title,
+    priceWan: listing.priceWan,
+    energyType: listing.energyType,
+    rangeKm: listing.range,
+    fitScore: usedListingClientScore(listing),
+    confidence: "medium",
+    why: listing.fitReasons.join("；") || "二手车源匹配预算和基本偏好。",
+    tradeoffs: listing.riskFlags.slice(0, 3),
+    nextAction: "加入车源库后索要检测报告、出险记录和权益截图。",
+    tags: [listing.city, listing.sourceType, listing.mileageText].filter(Boolean),
+    sourceUrl: getExternalSourceUrl(listing)
+  });
+}
+
 function setGeminiButtonState(isRunning) {
   const button = document.querySelector("#analyzeInfoWall");
   if (button) {
@@ -2649,14 +3171,14 @@ function formatGeminiAnalysisNotes(analysis, patch) {
   return lines.join("\n");
 }
 
-async function refreshDongchediNewCars() {
+async function refreshDongchediNewCars({ silent = false } = {}) {
   if (newCarRefreshRunning) {
-    showToast("正在刷新懂车帝数据。", "warn");
-    return;
+    if (!silent) showToast("正在刷新懂车帝数据。", "warn");
+    return false;
   }
   newCarRefreshRunning = true;
   setNewCarRefreshState(true);
-  showToast("正在从懂车帝刷新近期发布和热门车型。", "ok");
+  if (!silent) showToast("正在从懂车帝刷新近期发布和热门车型。", "ok");
   const urls = getDongchediFeedUrls();
   let lastError = "";
   try {
@@ -2669,8 +3191,8 @@ async function refreshDongchediNewCars() {
         }
         applyDongchediNewCarsPayload(result);
         render();
-        showToast(`已刷新 ${state.market.releases.length} 款近期发布/热门车型。`, "ok");
-        return;
+        if (!silent) showToast(`已刷新 ${state.market.releases.length} 款近期发布/热门车型。`, "ok");
+        return true;
       } catch (error) {
         lastError = error?.message || "刷新失败";
       }
@@ -2679,7 +3201,8 @@ async function refreshDongchediNewCars() {
   } catch (error) {
     state.market.error = error?.message || "刷新失败";
     renderNewCars();
-    showToast("刷新失败，请确认新车数据服务已启动。", "danger");
+    if (!silent) showToast("刷新失败，请确认新车数据服务已启动。", "danger");
+    return false;
   } finally {
     newCarRefreshRunning = false;
     setNewCarRefreshState(false);
@@ -2906,6 +3429,77 @@ function addUsedListingToGarage(skuId) {
   analyzeCurrentCarWithGemini({ auto: true, focusInfoId: evidence.id });
 }
 
+function addRequirementCandidateToGarage(candidateId) {
+  const candidate = state.requirementAnalysis.candidates.find((item) => item.id === candidateId);
+  if (!candidate) return;
+  if (candidate.source === "release" && candidate.seriesId) {
+    addReleaseToGarage(candidate.seriesId);
+    return;
+  }
+  if (candidate.source === "used" && candidate.skuId) {
+    addUsedListingToGarage(candidate.skuId);
+    return;
+  }
+  if (candidate.source === "garage" && candidate.carId) {
+    switchToDetail(candidate.carId);
+    return;
+  }
+  const existing = state.cars.find((car) => `${car.name} ${car.trim}`.includes(candidate.name) || candidate.name.includes(car.name));
+  if (existing) {
+    switchToDetail(existing.id);
+    showToast("这款车已经在车源库里。", "warn");
+    return;
+  }
+  const car = normalizeCar({
+    id: makeId("car"),
+    name: candidate.name,
+    trim: candidate.trim || "需求推荐车型",
+    stage: "watching",
+    recommendation: candidate.fitScore >= 72 ? "worthViewing" : "watch",
+    url: candidate.sourceUrl,
+    city: state.userRequirement.city || "北京",
+    source: "需求推荐",
+    seller: "官方渠道/车源待确认",
+    price: candidate.priceWan,
+    newPrice: candidate.priceWan,
+    targetPrice: candidate.priceWan !== "" ? Math.max(0, Number(candidate.priceWan) - 1) : "",
+    landing: candidate.priceWan !== "" ? Number(candidate.priceWan) + 1.2 : "",
+    battery: "buyout",
+    range: candidate.rangeKm,
+    exterior: "待确认",
+    interior: "待确认",
+    nop: "unknown",
+    report: "none",
+    certified: "unknown",
+    options: candidate.tags.join(" / "),
+    issues: candidate.tradeoffs.join("；") || "由需求推荐生成，仍需核验配置、权益、价格和交付。",
+    rightsNotes: "请确认订金/退订、质保、智驾、充电补能、金融和置换权益。",
+    sellerNotes: "需补充官方渠道或车源主体。",
+    nextAction: candidate.nextAction || "先看车型页和北京门店试驾，再补齐信息墙。",
+    notes: candidate.why
+  });
+  state.cars.unshift(car);
+  state.evidence.unshift({
+    id: makeId("ev"),
+    carId: car.id,
+    title: "需求推荐来源",
+    type: "analysis",
+    status: "pending",
+    url: candidate.sourceUrl,
+    notes: [
+      `推荐理由：${candidate.why || "-"}`,
+      `取舍点：${candidate.tradeoffs.join("、") || "-"}`,
+      `下一步：${candidate.nextAction || "-"}`
+    ].join("\n"),
+    attachments: [],
+    createdAt: new Date().toISOString().slice(0, 10)
+  });
+  selectedCarId = car.id;
+  selectedCompare.add(car.id);
+  setActiveView("detail");
+  showToast("已从需求推荐加入车源库。", "ok");
+}
+
 function exportChecklist() {
   const car = state.cars.find((item) => item.id === selectedCarId);
   if (!car) return;
@@ -2982,6 +3576,7 @@ document.body.addEventListener("click", (event) => {
   const compareId = event.target.closest("[data-compare]")?.dataset.compare;
   const releaseId = event.target.closest("[data-add-release]")?.dataset.addRelease;
   const usedListingId = event.target.closest("[data-add-used-listing]")?.dataset.addUsedListing;
+  const requirementCandidateId = event.target.closest("[data-add-requirement-candidate]")?.dataset.addRequirementCandidate;
   const openSourceAppId = event.target.closest("[data-open-source-app]")?.dataset.openSourceApp;
   const deleteEvidenceId = event.target.closest("[data-delete-evidence]")?.dataset.deleteEvidence;
   const shouldAddEvidence = Boolean(event.target.closest("[data-add-evidence]"));
@@ -3004,6 +3599,7 @@ document.body.addEventListener("click", (event) => {
   }
   if (releaseId) addReleaseToGarage(releaseId);
   if (usedListingId) addUsedListingToGarage(usedListingId);
+  if (requirementCandidateId) addRequirementCandidateToGarage(requirementCandidateId);
   if (openSourceAppId) openSourceInApp(openSourceAppId);
   if (event.target.closest("[data-dashboard-gemini]")) analyzeDashboardBestWithGemini();
   if (deleteEvidenceId) {
@@ -3030,6 +3626,11 @@ document.querySelector("#carForm").addEventListener("submit", (event) => {
   event.preventDefault();
   saveCarFromForm();
   document.querySelector("#carDialog").close();
+});
+
+document.querySelector("#requirementForm")?.addEventListener("submit", (event) => {
+  event.preventDefault();
+  analyzeRequirementAndCollectCars();
 });
 
 document.querySelector("#deleteCar").addEventListener("click", () => {
@@ -3143,7 +3744,9 @@ document.querySelector("#resetSeed").addEventListener("click", () => {
   state = normalizeState({
     cars: seedCars.map((car) => ({ ...car, id: idMap[car.id] || makeId("car") })),
     evidence: seedEvidence.map((item) => ({ ...item, id: makeId("ev"), carId: idMap[item.carId] || item.carId })),
-    drives: []
+    drives: [],
+    userRequirement: seedRequirement,
+    requirementAnalysis: {}
   });
   selectedCarId = state.cars[0]?.id || "";
   selectedCompare = new Set(state.cars.slice(0, 3).map((car) => car.id));

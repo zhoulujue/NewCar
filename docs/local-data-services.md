@@ -43,11 +43,12 @@ node scripts/gemini-analyzer-server.mjs
 
 ```text
 http://127.0.0.1:8787/analyze
+http://127.0.0.1:8787/recommend
 ```
 
-如果本机配置了 `GEMINI_API_KEY`，服务会走 Gemini API；否则会尝试调用本机 `gemini` CLI。不要把 API Key 写进代码或提交到仓库。
+`/analyze` 用于单台车的信息墙/风险分析，`/recommend` 用于首页“用车需求 -> 候选车型”推荐。如果本机配置了 `GEMINI_API_KEY`，服务会走 Gemini API；否则会尝试调用本机 `gemini` CLI。不要把 API Key 写进代码或提交到仓库。
 
-线上部署时，`car.zhoulujue.com/api/analyze` 会由 Caddy 代理到服务器内的 Gemini analyzer。当前 `huoshan-johor` 上 8787 已被其他服务占用，因此线上 analyzer 使用 `127.0.0.1:8790`。Gemini API Key 应写在服务器环境文件，例如 `/etc/newcar/gemini.env`，并通过 systemd 的 `EnvironmentFile` 加载，不要提交到仓库。
+线上部署时，`car.zhoulujue.com/api/analyze` 和 `car.zhoulujue.com/api/recommend` 都应由 Caddy 代理到服务器内的 Gemini analyzer。当前 `huoshan-johor` 上 8787 已被其他服务占用，因此线上 analyzer 使用 `127.0.0.1:8790`。Gemini API Key 应写在服务器环境文件，例如 `/etc/newcar/gemini.env`，并通过 systemd 的 `EnvironmentFile` 加载，不要提交到仓库。
 
 可选环境变量：
 

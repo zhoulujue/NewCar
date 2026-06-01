@@ -356,6 +356,189 @@ h3 {
   display: block;
 }
 
+.requirement-panel {
+  margin-bottom: 14px;
+  overflow: hidden;
+}
+
+.requirement-head {
+  align-items: flex-start;
+}
+
+.requirement-head > div {
+  min-width: 0;
+}
+
+.requirement-head .primary-button {
+  white-space: nowrap;
+}
+
+.requirement-form {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel-2);
+}
+
+.requirement-field {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 680;
+}
+
+.requirement-field.compact {
+  grid-column: span 2;
+}
+
+.requirement-field.budget-pair {
+  grid-column: span 2;
+  grid-template-columns: 1fr 1fr;
+  align-items: end;
+}
+
+.requirement-field.budget-pair label {
+  display: grid;
+  gap: 7px;
+  grid-column: span 1;
+}
+
+.requirement-field.priorities,
+.requirement-field.wide {
+  grid-column: span 3;
+}
+
+.requirement-field > span {
+  color: var(--muted);
+}
+
+.choice-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.choice-grid label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #fff;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.choice-grid input {
+  accent-color: var(--primary);
+}
+
+.requirement-summary {
+  margin-top: 12px;
+}
+
+.requirement-summary-text {
+  display: grid;
+  gap: 8px;
+}
+
+.requirement-summary-text p {
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.requirement-error {
+  color: var(--warn) !important;
+}
+
+.requirement-recommendations {
+  margin-top: 12px;
+}
+
+.requirement-empty {
+  display: grid;
+  gap: 4px;
+  padding: 14px;
+  border: 1px dashed #cbd5df;
+  border-radius: var(--radius);
+  background: #fff;
+  color: var(--muted);
+}
+
+.requirement-empty strong {
+  color: var(--text);
+}
+
+.requirement-result-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.requirement-result-head > div {
+  display: grid;
+  gap: 2px;
+}
+
+.requirement-candidate-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+.requirement-candidate {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #fff;
+}
+
+.requirement-candidate-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+}
+
+.requirement-candidate h3,
+.requirement-candidate p {
+  overflow-wrap: anywhere;
+}
+
+.requirement-tradeoffs,
+.requirement-questions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.requirement-tradeoffs span,
+.requirement-questions span {
+  padding: 7px 9px;
+  border-radius: 999px;
+  background: #fff7ed;
+  color: #9a4b12;
+  font-size: 12px;
+}
+
+.requirement-questions {
+  margin-top: 10px;
+}
+
 .decision-strip {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 156px;
@@ -1875,6 +2058,10 @@ button:disabled {
     grid-template-columns: 1fr;
   }
 
+  .requirement-form {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
   .topbar {
     grid-template-columns: 1fr;
   }
@@ -1994,6 +2181,7 @@ button:disabled {
 
   .metrics-grid,
   .form-grid,
+  .requirement-form,
   .score-grid,
   .car-meta,
   .risk-summary,
@@ -2027,6 +2215,30 @@ button:disabled {
   .detail-actions button {
     width: 100%;
     min-width: 0;
+  }
+
+  .requirement-head {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .requirement-head .primary-button {
+    width: 100%;
+  }
+
+  .requirement-field.compact,
+  .requirement-field.budget-pair,
+  .requirement-field.priorities,
+  .requirement-field.wide {
+    grid-column: 1 / -1;
+  }
+
+  .requirement-field.budget-pair {
+    grid-template-columns: 1fr;
+  }
+
+  .requirement-candidate-grid {
+    grid-template-columns: 1fr;
   }
 
   .topbar p {
@@ -2350,6 +2562,27 @@ button:disabled {
   .panel-head {
     gap: 8px;
     margin-bottom: 12px;
+  }
+
+  .requirement-form {
+    grid-template-columns: 1fr;
+    padding: 12px;
+    border-radius: 10px;
+  }
+
+  .requirement-field.compact,
+  .requirement-field.budget-pair,
+  .requirement-field.priorities,
+  .requirement-field.wide {
+    grid-column: 1 / -1;
+  }
+
+  .requirement-field.budget-pair {
+    grid-template-columns: 1fr;
+  }
+
+  .requirement-candidate-grid {
+    grid-template-columns: 1fr;
   }
 
   .panel-head .select {

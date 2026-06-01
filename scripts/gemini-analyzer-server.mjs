@@ -26,6 +26,12 @@ const server = createServer(async (req, res) => {
       sendJson(res, 200, { ok: true, ...result });
       return;
     }
+    if (req.method === "POST" && ["/recommend", "/api/recommend"].includes(req.url)) {
+      const payload = await readJson(req);
+      const result = MODE === "api" ? await recommendWithGeminiApi(payload) : await recommendWithGeminiCli(payload);
+      sendJson(res, 200, { ok: true, ...result });
+      return;
+    }
     sendJson(res, 404, { ok: false, error: "Not found" });
   } catch (error) {
     sendJson(res, 500, { ok: false, error: normalizeError(error) });
@@ -109,6 +115,35 @@ async function analyzeWithGeminiApi(payload) {
 
 async function analyzeWithGeminiCli(payload) {
   const prompt = buildPrompt(stripImageData(payload), false);
+  const text = await runGeminiCli(prompt);
+  return parseModelJson(text);
+}
+
+async function recommendWithGeminiApi(payload) {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) throw new Error("未找到 GEMINI_API_KEY，请先配置本机 Gemini API Key，或设置 GEMINI_ANALYZER_MODE=cli。");
+  const prompt = buildRecommendationPrompt(payload);
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig: {
+        temperature: 0.2,
+        responseMimeType: "application/json"
+      }
+    })
+  });
+  const json = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(json.error?.message || `Gemini API 返回 ${response.status}`);
+  }
+  const text = json.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("\n");
+  return parseModelJson(text);
+}
+
+async function recommendWithGeminiCli(payload) {
+  const prompt = buildRecommendationPrompt(payload);
   const text = await runGeminiCli(prompt);
   return parseModelJson(text);
 }
@@ -212,6 +247,88 @@ ${imageList.length ? imageList.join("\n") : "无图片"}
 输入数据：
 ${JSON.stringify(stripImageData(payload), null, 2)}
 `;
+}
+
+function buildRecommendationPrompt(payload) {
+  return `
+你是一个严谨的新能源车购车需求分析与车型筛选助手。请根据用户填写的用车画像，以及输入里的懂车帝近期发布/热门车型、二手车源和已收藏车源，输出一组最值得用户挑选的候选车型。
+
+用户画像重点：
+- 用户在北京用车，新能源指标有效期到 2027-05-26。
+- 主要 2 人用车，市区通勤 + 假期高速，前排舒适、长续航、智能座舱、高速智驾、静谧、底盘滤震、内饰质感、外观耐看优先。
+- 用户开过理想 i6，认为驾驶和乘坐体验很好，倾向找类似体验。
+- 用户不喜欢智界 R7 外观，不能接受阿维塔 06T 又小又方的方向盘，对性能没有强诉求。
+
+要求：
+- 只依据输入车型池筛选；如果输入池不足，可以给 manual 建议，但要标低置信度并说明需要补充信息。
+- 不要罗列所有车，只给最多 8 个候选，并按匹配度从高到低排序。
+- 候选既可以来自 recentModels，也可以来自 usedListings 或 garageCars；如果同一车系重复，只保留最适合的一条。
+- 紧扣用户需求：预算、北京场景、续航、智能化、舒适/NVH、内饰/外观、二手风险。
+- 对“价格太高、车太大、续航不足、智驾弱、内饰廉价、二手风险大”等取舍要明确写入 tradeoffs。
+- 输出必须是严格 JSON，不要 Markdown，不要解释。
+
+返回 JSON 结构：
+{
+  "profilePatch": {
+    "people": "1|2|3-4|5+",
+    "budgetMinWan": number,
+    "budgetMaxWan": number,
+    "energyTypes": ["ev","erev","phev"],
+    "minRangeKm": number,
+    "priorities": ["comfort","range","cockpit","adas","interior","appearance"],
+    "bodyPreference": "suv_sedan|suv|sedan|compact|no_mpv",
+    "mustHaves": string,
+    "dealBreakers": string,
+    "notes": string
+  },
+  "summary": string,
+  "searchStrategy": string,
+  "candidates": [
+    {
+      "source": "release|used|garage|manual",
+      "seriesId": number,
+      "skuId": number,
+      "carId": string,
+      "name": string,
+      "trim": string,
+      "priceWan": number,
+      "energyType": "ev|erev|phev|new_energy|unknown",
+      "rangeKm": number,
+      "fitScore": number,
+      "confidence": "low|medium|high",
+      "why": string,
+      "tradeoffs": [string],
+      "nextAction": string,
+      "tags": [string],
+      "sourceUrl": string
+    }
+  ],
+  "questions": [string]
+}
+
+字段约束：
+- fitScore 是 0-100 的整数。
+- 如果 source=release，尽量返回输入中的 seriesId 和 sourceUrl/dcdUrl。
+- 如果 source=used，尽量返回输入中的 skuId 和 sourceUrl/url。
+- 如果 source=garage，返回输入中的 carId。
+- 如果某个字段没有依据，可以省略，不要编造精确参数。
+
+输入数据：
+${JSON.stringify(trimRecommendationPayload(payload), null, 2)}
+`;
+}
+
+function trimRecommendationPayload(payload) {
+  return {
+    profile: payload.profile || {},
+    outputRules: payload.outputRules || {},
+    garageCars: (payload.garageCars || []).slice(0, 20),
+    recentModels: (payload.recentModels || []).slice(0, 80).map((release) => ({
+      ...release,
+      models: (release.models || []).slice(0, 8)
+    })),
+    usedListings: (payload.usedListings || []).slice(0, 60)
+  };
 }
 
 function collectImages(payload) {

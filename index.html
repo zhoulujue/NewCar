@@ -76,6 +76,90 @@
         </header>
 
         <section class="view active" id="dashboardView">
+          <section class="panel requirement-panel" id="requirementPanel">
+            <div class="panel-head requirement-head">
+              <div>
+                <h2>先说清楚你要什么车</h2>
+                <span class="muted">填写用车画像后，Gemini 会理解偏好，并从懂车帝近期发布/热门车型池里挑出候选。</span>
+              </div>
+              <button class="primary-button" id="analyzeRequirement" form="requirementForm" type="submit">理解需求并找车</button>
+            </div>
+            <form id="requirementForm" class="requirement-form">
+              <div class="requirement-field compact">
+                <label for="reqPeople">一般几人乘坐</label>
+                <select id="reqPeople" class="input">
+                  <option value="1">1人</option>
+                  <option value="2">2人</option>
+                  <option value="3-4">3-4人</option>
+                  <option value="5+">5人以上</option>
+                </select>
+              </div>
+              <div class="requirement-field">
+                <span>用车场景</span>
+                <div class="choice-grid">
+                  <label><input name="reqScene" type="checkbox" value="city">市区通勤</label>
+                  <label><input name="reqScene" type="checkbox" value="highway">高速长途</label>
+                  <label><input name="reqScene" type="checkbox" value="holiday">假期出行</label>
+                  <label><input name="reqScene" type="checkbox" value="parking">北京停车</label>
+                </div>
+              </div>
+              <div class="requirement-field budget-pair">
+                <label>预算下限/万<input id="reqBudgetMin" class="input" type="number" step="0.1"></label>
+                <label>预算上限/万<input id="reqBudgetMax" class="input" type="number" step="0.1"></label>
+              </div>
+              <div class="requirement-field compact">
+                <label for="reqEnergy">能源偏好</label>
+                <select id="reqEnergy" class="input">
+                  <option value="all">纯电/增程/插混都看</option>
+                  <option value="ev">只看纯电</option>
+                  <option value="hybrid">增程/插混优先</option>
+                </select>
+              </div>
+              <div class="requirement-field compact">
+                <label for="reqRange">纯电续航底线/km</label>
+                <input id="reqRange" class="input" type="number" step="10">
+              </div>
+              <div class="requirement-field compact">
+                <label for="reqBody">车身偏好</label>
+                <select id="reqBody" class="input">
+                  <option value="suv_sedan">SUV/轿车均可</option>
+                  <option value="suv">优先 SUV</option>
+                  <option value="sedan">优先轿车/旅行</option>
+                  <option value="compact">优先好停车</option>
+                  <option value="no_mpv">不看 MPV</option>
+                </select>
+              </div>
+              <div class="requirement-field priorities">
+                <span>优先级</span>
+                <div class="choice-grid">
+                  <label><input name="reqPriority" type="checkbox" value="comfort">舒适/NVH</label>
+                  <label><input name="reqPriority" type="checkbox" value="range">续航补能</label>
+                  <label><input name="reqPriority" type="checkbox" value="cockpit">车机生态</label>
+                  <label><input name="reqPriority" type="checkbox" value="adas">高速智驾</label>
+                  <label><input name="reqPriority" type="checkbox" value="interior">内饰质感</label>
+                  <label><input name="reqPriority" type="checkbox" value="appearance">外观耐看</label>
+                </div>
+              </div>
+              <label class="requirement-field wide">
+                购车时间
+                <input id="reqTiming" class="input" placeholder="例如：7-8月可买，最晚2027-05-26前上牌">
+              </label>
+              <label class="requirement-field wide">
+                必须满足
+                <textarea id="reqMustHaves" class="input" rows="3" placeholder="例如：北京可上牌、长续航、高速NOA、前排舒适..."></textarea>
+              </label>
+              <label class="requirement-field wide">
+                不能接受
+                <textarea id="reqDealBreakers" class="input" rows="3" placeholder="例如：外观不喜欢、方向盘接受不了、修复太多..."></textarea>
+              </label>
+              <label class="requirement-field wide">
+                其他补充
+                <textarea id="reqNotes" class="input" rows="3" placeholder="可以写试驾感受、喜欢的车、不喜欢的设计、是否考虑二手..."></textarea>
+              </label>
+            </form>
+            <div id="requirementSummary" class="requirement-summary"></div>
+            <div id="requirementRecommendations" class="requirement-recommendations"></div>
+          </section>
           <section class="decision-strip" id="decisionSummary"></section>
           <div class="metrics-grid" id="metricsGrid"></div>
           <div class="three-column dashboard-grid">
