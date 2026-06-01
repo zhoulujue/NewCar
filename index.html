@@ -9,7 +9,7 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="format-detection" content="telephone=no">
     <title>NewCar 购车工作台</title>
-    <link rel="stylesheet" href="./styles.css?v=20260601-profile-preview">
+    <link rel="stylesheet" href="./styles.css?v=20260601-library-detail">
     <script src="./auth-config.js"></script>
     <script src="https://accounts.google.com/gsi/client" async defer></script>
   </head>
@@ -200,6 +200,7 @@
         </section>
 
         <section class="view" id="garageView">
+          <section id="garageListHeader" class="panel garage-list-header"></section>
           <div class="toolbar">
             <input id="searchInput" class="search" type="search" placeholder="搜索车型、商家、城市、备注">
             <select id="stageFilter" class="select">
@@ -323,11 +324,17 @@
 
         <section class="view" id="detailView">
           <div class="detail-topline">
-            <label>
-              当前候选
+            <div class="detail-breadcrumb">
+              <button class="text-button" id="backToGarage" type="button">返回候选库</button>
+              <span id="detailContextLabel">详情</span>
+            </div>
+            <label class="detail-selector">
+              切换候选
               <select id="detailCarSelect" class="select"></select>
             </label>
             <div class="detail-actions">
+              <button class="secondary-button" id="prevDetailCar" type="button">上一台</button>
+              <button class="secondary-button" id="nextDetailCar" type="button">下一台</button>
               <button class="secondary-button" id="editCurrentCar">编辑候选</button>
               <button class="secondary-button" id="exportChecklist">导出核验清单</button>
             </div>
@@ -622,6 +629,6 @@
       </form>
     </dialog>
 
-    <script src="./app.js?v=20260601-profile-preview"></script>
+    <script src="./app.js?v=20260601-library-detail"></script>
   </body>
 </html>

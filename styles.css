@@ -896,6 +896,55 @@ textarea.input {
   flex-wrap: wrap;
 }
 
+.garage-list-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.garage-list-copy {
+  min-width: 0;
+}
+
+.garage-list-copy h2 {
+  margin-top: 4px;
+  font-size: 20px;
+}
+
+.garage-list-copy p {
+  margin-top: 8px;
+  max-width: 780px;
+}
+
+.garage-list-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(76px, 1fr));
+  gap: 8px;
+}
+
+.garage-list-stats div {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel-2);
+  text-align: center;
+}
+
+.garage-list-stats span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.garage-list-stats strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 17px;
+}
+
 .newcar-refresh-panel {
   margin-bottom: 14px;
 }
@@ -1258,12 +1307,22 @@ textarea.input {
   font-weight: 720;
 }
 
-.car-photo img,
-.detail-image img {
+.car-photo img {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
+  object-fit: contain;
+  object-position: center;
+  padding: 10px;
+  display: block;
+  box-sizing: border-box;
+}
+
+.detail-image img {
+  width: 100%;
+  height: 100%;
+  max-height: 360px;
   object-fit: contain;
   object-position: center;
   padding: 10px;
@@ -1515,12 +1574,11 @@ textarea.input {
 }
 
 .detail-topline {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: auto minmax(280px, 1fr) auto;
   align-items: end;
   gap: 14px;
   margin-bottom: 14px;
-  flex-wrap: wrap;
   padding: 12px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -1528,12 +1586,31 @@ textarea.input {
   backdrop-filter: blur(10px);
 }
 
+.detail-breadcrumb {
+  display: grid;
+  gap: 6px;
+  align-self: stretch;
+  align-content: center;
+}
+
+.detail-breadcrumb .text-button {
+  justify-self: start;
+  padding-left: 0;
+}
+
+.detail-breadcrumb span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 720;
+  overflow-wrap: anywhere;
+}
+
 .detail-topline label {
   display: grid;
   gap: 6px;
   color: var(--muted);
   font-size: 13px;
-  flex: 1 1 320px;
+  min-width: 0;
 }
 
 .detail-topline .select {
@@ -1542,8 +1619,9 @@ textarea.input {
 
 .detail-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 360px;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 380px);
   gap: 14px;
+  align-items: start;
 }
 
 .detail-stack {
@@ -1561,14 +1639,23 @@ textarea.input {
 
 .detail-hero {
   display: grid;
-  grid-template-columns: 240px minmax(0, 1fr);
+  grid-template-columns: minmax(260px, 38%) minmax(0, 1fr);
   gap: 16px;
-  align-items: stretch;
+  align-items: start;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.detail-hero > * {
+  min-width: 0;
 }
 
 .detail-image {
   position: relative;
-  min-height: 0;
+  width: 100%;
+  min-width: 0;
+  min-height: 180px;
+  max-height: 360px;
   aspect-ratio: 4 / 3;
   border-radius: var(--radius);
   background: linear-gradient(135deg, #dde7ef, #f8fafc);
@@ -1577,6 +1664,12 @@ textarea.input {
   color: #52616f;
   font-weight: 720;
   overflow: hidden;
+}
+
+.detail-hero-copy {
+  display: grid;
+  align-content: start;
+  min-width: 0;
 }
 
 .detail-image.is-empty {
@@ -1676,6 +1769,10 @@ textarea.input {
   justify-content: center;
   min-width: 128px;
   text-decoration: none;
+}
+
+.detail-topline .detail-actions {
+  justify-content: flex-end;
 }
 
 .hero-facts {
@@ -2218,6 +2315,19 @@ button:disabled {
     grid-template-columns: 1fr;
   }
 
+  .garage-list-header,
+  .detail-topline {
+    grid-template-columns: 1fr;
+  }
+
+  .garage-list-stats {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .detail-topline .detail-actions {
+    justify-content: flex-start;
+  }
+
   .requirement-form {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
@@ -2347,6 +2457,7 @@ button:disabled {
   .risk-summary,
   .evidence-form,
   .toolbar,
+  .garage-list-stats,
   .hero-facts {
     grid-template-columns: 1fr;
   }

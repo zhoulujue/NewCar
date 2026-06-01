@@ -245,7 +245,7 @@ const viewMeta = {
   garage: ["候选库", "把新车车型候选和二手具体车源分开管理，避免车型和车源混在一起。"],
   newcars: ["新车情报", "刷新懂车帝近期发布和热门车型，按你的偏好筛出值得关注的新车。"],
   usedcars: ["二手车", "拉取懂车帝官方直营车源，按你的预算、体感偏好和二手风险排序。"],
-  detail: ["候选详情", "新车看版本、权益和试驾；二手看车况、价格和交易风险。"],
+  detail: ["候选库", "从列表进入详情层，集中看配置、车况、成本、风险和下一步核验。"],
   compare: ["对比", "按真实成本、i6体感、权益明确度和风险做取舍。"],
   drives: ["试驾", "记录前排舒适、静谧、底盘、车机、智驾和相对 i6 结论。"],
   risks: ["风险", "按候选类型提示新车待确认项或二手新能源风险。"],
@@ -1621,6 +1621,27 @@ function getFilteredCars() {
 
 function renderGarage() {
   const cars = getFilteredCars();
+  const allCars = state.cars;
+  const counts = {
+    all: allCars.length,
+    new: allCars.filter((car) => carKind(car) === "new").length,
+    used: allCars.filter((car) => carKind(car) === "used").length,
+    manual: allCars.filter((car) => carKind(car) === "manual").length,
+    filtered: cars.length
+  };
+  document.querySelector("#garageListHeader").innerHTML = `
+    <div class="garage-list-copy">
+      <div class="eyebrow">候选库列表</div>
+      <h2>先筛选候选，再进入单车详情</h2>
+      <p class="muted">列表页负责快速扫车型、价格、阶段和风险；点“查看详情”后进入第二层，集中看信息墙、核验清单、真实成本和外部车源。</p>
+    </div>
+    <div class="garage-list-stats">
+      <div><span>显示</span><strong>${counts.filtered}/${counts.all}</strong></div>
+      <div><span>新车</span><strong>${counts.new}</strong></div>
+      <div><span>二手</span><strong>${counts.used}</strong></div>
+      <div><span>手动</span><strong>${counts.manual}</strong></div>
+    </div>
+  `;
   const order = ["new", "used", "manual"];
   document.querySelector("#carGrid").innerHTML = order.map((kind) => {
     const group = cars.filter((car) => carKind(car) === kind);
@@ -1677,11 +1698,11 @@ function renderGarageCard(car) {
           </div>
           <p class="card-note">${escapeHtml(car.nextAction || analyzeCar(car).risks[0]?.question || "补齐车源信息后再判断。")}</p>
           <div class="card-actions">
-            <button data-detail="${car.id}">详情</button>
+            <button data-detail="${car.id}">查看详情</button>
             <button data-edit="${car.id}">编辑</button>
             <button data-risk="${car.id}">风险</button>
             <button data-compare="${car.id}">${selectedCompare.has(car.id) ? "移出" : "对比"}</button>
-            ${car.url ? `<a href="${escapeAttr(getExternalSourceUrl(car))}" target="_blank" rel="noopener noreferrer">打开详情</a>` : ""}
+            ${car.url ? `<a href="${escapeAttr(getExternalSourceUrl(car))}" target="_blank" rel="noopener noreferrer">外部链接</a>` : ""}
           </div>
         </div>
       </article>
@@ -2107,7 +2128,13 @@ function renderDetail() {
   select.innerHTML = state.cars.map((car) => `<option value="${car.id}">${escapeHtml(car.name)} ${escapeHtml(car.trim || "")}</option>`).join("");
   if (selectedCarId) select.value = selectedCarId;
   const car = state.cars.find((item) => item.id === selectedCarId);
+  const carIndex = getSelectedCarIndex();
+  const previousButton = document.querySelector("#prevDetailCar");
+  const nextButton = document.querySelector("#nextDetailCar");
+  if (previousButton) previousButton.disabled = carIndex <= 0;
+  if (nextButton) nextButton.disabled = carIndex < 0 || carIndex >= state.cars.length - 1;
   if (!car) {
+    document.querySelector("#detailContextLabel").textContent = "暂无候选";
     document.querySelector("#detailHero").innerHTML = `<div class="muted">暂无候选。</div>`;
     document.querySelector("#detailGallery").innerHTML = "";
     return;
@@ -2130,11 +2157,12 @@ function renderDetail() {
         ["折价", formatPct(discount)],
         ["目标价", formatWan(car.targetPrice)]
       ];
+  document.querySelector("#detailContextLabel").textContent = `${carKindLabel(kind)} · ${car.name}`;
 
   document.querySelector("#detailHero").innerHTML = `
     <div class="detail-hero">
       <div class="detail-image ${car.image ? "" : "is-empty"}">${car.image ? `<img src="${escapeAttr(car.image)}" alt="${escapeAttr(car.name)}">` : `<span>${escapeHtml(car.name)}</span>`}</div>
-      <div>
+      <div class="detail-hero-copy">
         <div class="chip-row tight">
           <span class="chip ${carKindClass(kind)}">${carKindLabel(kind)}</span>
           <span class="chip ${recommendationClass(rec)}">${recommendationLabel(rec)}</span>
@@ -2178,6 +2206,20 @@ function renderDetail() {
       <div>${escapeHtml(item)}</div>
     </div>
   `).join("");
+}
+
+function getSelectedCarIndex() {
+  return state.cars.findIndex((car) => car.id === selectedCarId);
+}
+
+function switchDetailByOffset(offset) {
+  const index = getSelectedCarIndex();
+  if (index < 0) return;
+  const next = state.cars[index + offset];
+  if (!next) return;
+  selectedCarId = next.id;
+  render();
+  scrollPageToTop();
 }
 
 function renderVehicleGallery(car) {
@@ -3947,6 +3989,9 @@ document.querySelector("#editCurrentCar").addEventListener("click", () => {
   if (selectedCarId) openCarDialog(selectedCarId);
 });
 
+document.querySelector("#backToGarage")?.addEventListener("click", () => setActiveView("garage"));
+document.querySelector("#prevDetailCar")?.addEventListener("click", () => switchDetailByOffset(-1));
+document.querySelector("#nextDetailCar")?.addEventListener("click", () => switchDetailByOffset(1));
 document.querySelector("#exportChecklist").addEventListener("click", exportChecklist);
 document.querySelector("#analyzeInfoWall").addEventListener("click", () => analyzeCurrentCarWithGemini({ auto: false }));
 document.querySelector("#analyzeRiskCar").addEventListener("click", analyzeRiskCarWithGemini);
