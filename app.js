@@ -1759,7 +1759,8 @@ function renderGarageCard(car) {
             <button data-detail="${car.id}">查看详情</button>
             <button data-edit="${car.id}">编辑</button>
             <button data-risk="${car.id}">风险</button>
-            <button data-compare="${car.id}">${selectedCompare.has(car.id) ? "移出" : "对比"}</button>
+            <button data-compare="${car.id}">${selectedCompare.has(car.id) ? "移出对比" : "加入对比"}</button>
+            <button class="danger-action" data-remove-car="${car.id}">移出候选</button>
             ${car.url ? `<a href="${escapeAttr(getExternalSourceUrl(car))}" target="_blank" rel="noopener noreferrer">外部链接</a>` : ""}
           </div>
         </div>
@@ -3950,6 +3951,22 @@ function addRequirementCandidateToGarage(candidateId) {
   showToast(`已从需求推荐加入${carKindLabel(car.kind)}。`, "ok");
 }
 
+function removeCarFromGarage(carId, { confirm = true } = {}) {
+  const car = state.cars.find((item) => item.id === carId);
+  if (!car) return false;
+  if (confirm && !window.confirm(`确定将「${car.name}」移出候选库吗？相关信息和试驾记录也会删除。`)) return false;
+  state.cars = state.cars.filter((item) => item.id !== carId);
+  state.evidence = state.evidence.filter((item) => item.carId !== carId);
+  state.drives = state.drives.filter((item) => item.carId !== carId);
+  state.requirementAnalysis.candidates = state.requirementAnalysis.candidates.filter((item) => item.carId !== carId);
+  selectedCompare.delete(carId);
+  if (selectedCarId === carId) selectedCarId = state.cars[0]?.id || "";
+  if (activeView === "detail") activeView = "garage";
+  render();
+  showToast("已移出候选库。", "warn");
+  return true;
+}
+
 function exportChecklist() {
   const car = state.cars.find((item) => item.id === selectedCarId);
   if (!car) return;
@@ -4024,6 +4041,7 @@ document.body.addEventListener("click", (event) => {
   const editId = event.target.closest("[data-edit]")?.dataset.edit;
   const riskId = event.target.closest("[data-risk]")?.dataset.risk;
   const compareId = event.target.closest("[data-compare]")?.dataset.compare;
+  const removeCarId = event.target.closest("[data-remove-car]")?.dataset.removeCar;
   const releaseId = event.target.closest("[data-add-release]")?.dataset.addRelease;
   const usedListingId = event.target.closest("[data-add-used-listing]")?.dataset.addUsedListing;
   const requirementCandidateId = event.target.closest("[data-add-requirement-candidate]")?.dataset.addRequirementCandidate;
@@ -4047,6 +4065,7 @@ document.body.addEventListener("click", (event) => {
     else selectedCompare.add(compareId);
     render();
   }
+  if (removeCarId) removeCarFromGarage(removeCarId);
   if (releaseId) addReleaseToGarage(releaseId);
   if (usedListingId) addUsedListingToGarage(usedListingId);
   if (requirementCandidateId) addRequirementCandidateToGarage(requirementCandidateId);
@@ -4097,16 +4116,7 @@ document.querySelector("#saveRequirement")?.addEventListener("click", () => {
 
 document.querySelector("#deleteCar").addEventListener("click", () => {
   const id = getValue("#carId");
-  const car = state.cars.find((item) => item.id === id);
-  if (car && !window.confirm(`确定删除「${car.name}」吗？相关信息和试驾记录也会删除。`)) return;
-  state.cars = state.cars.filter((car) => car.id !== id);
-  state.evidence = state.evidence.filter((item) => item.carId !== id);
-  state.drives = state.drives.filter((item) => item.carId !== id);
-  selectedCompare.delete(id);
-  if (selectedCarId === id) selectedCarId = state.cars[0]?.id || "";
-  document.querySelector("#carDialog").close();
-  render();
-  showToast("候选已删除。", "warn");
+  if (removeCarFromGarage(id)) document.querySelector("#carDialog").close();
 });
 
 [

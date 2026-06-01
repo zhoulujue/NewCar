@@ -1485,6 +1485,18 @@ textarea.input {
   text-decoration: none;
 }
 
+.card-actions .danger-action {
+  color: var(--danger);
+  border-color: rgba(194, 65, 12, 0.28);
+  background: #fff7ed;
+}
+
+.card-actions .danger-action:hover {
+  color: #fff;
+  border-color: var(--danger);
+  background: var(--danger);
+}
+
 .rank-list,
 .action-list,
 .drive-list,
