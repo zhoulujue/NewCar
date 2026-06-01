@@ -178,13 +178,13 @@ function runGeminiCli(prompt) {
 function buildPrompt(payload, withImages) {
   const imageList = collectImages(payload).map((image, index) => `${index + 1}. ${image.name}，来自信息「${image.infoTitle}」`);
   return `
-你是一个严谨的新能源二手车购车分析助手。请根据用户画像、当前车源字段、信息墙文本以及${withImages ? "随附图片" : "图片文件名"}，更新这个购车工作台里的外显信息。
+你是一个严谨的新能源购车分析助手。请根据用户画像、当前候选字段、信息墙文本以及${withImages ? "随附图片" : "图片文件名"}，更新这个购车工作台里的外显信息。
 
 要求：
 - 只依据输入信息推断，不要编造没有证据的事实。
 - 如果图片或文本里出现价格、里程、过户、城市、电池、权益、检测、事故/修复、商家承诺、配置，请回填到 carPatch。
 - 如果信息来自懂车帝二手车源，请重点梳理商家/平台主体、平台保障、检测报告、退换/质保承诺，以及仍需要电话核验的问题。
-- 请把当前车源和用户已关注车源做对比评估，尤其以理想 i6 的驾驶/乘坐体感作为舒适性标尺；差距或优势写入 notes、nextAction 或 questions。
+- 请把当前候选和用户已关注候选做对比评估，尤其以理想 i6 的驾驶/乘坐体感作为舒适性标尺；差距或优势写入 notes、nextAction 或 questions。
 - 如果不确定，用 notes/issues/rightsNotes/nextAction 提醒核验，不要强行下结论。
 - 输出必须是严格 JSON，不要 Markdown，不要解释。
 - 数值单位：价格为万元，里程为万公里，月租为元/月，续航为 km。
@@ -263,6 +263,7 @@ function buildRecommendationPrompt(payload) {
 - 只依据输入车型池筛选；如果输入池不足，可以给 manual 建议，但要标低置信度并说明需要补充信息。
 - 不要罗列所有车，只给最多 8 个候选，并按匹配度从高到低排序。
 - 候选既可以来自 recentModels，也可以来自 usedListings 或 garageCars；如果同一车系重复，只保留最适合的一条。
+- 必须区分两类对象：recentModels 是“新车车型/版本候选”，usedListings 是“二手具体车源”，garageCars 会带 kind 字段。不要把新车车型当成可检测二手车源，也不要把二手具体车源当成抽象车型。
 - 紧扣用户需求：预算、北京场景、续航、智能化、舒适/NVH、内饰/外观、二手风险。
 - 对“价格太高、车太大、续航不足、智驾弱、内饰廉价、二手风险大”等取舍要明确写入 tradeoffs。
 - 如果输入车型池为空或不足，只能给低置信度 manual 建议，并明确提示需要先刷新懂车帝车型池；不要基于常识编造精确配置或否定用户画像里的既有事实。

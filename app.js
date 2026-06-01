@@ -241,13 +241,13 @@ let selectedCompare = new Set(state.selectedCompare?.length ? state.selectedComp
 
 const viewMeta = {
   dashboard: ["总览", "一眼看到当前最值得看的车、关键风险和今天该做什么。"],
-  garage: ["车源库", "记录备选车、车源类型、成本、权益、信息和推荐状态。"],
+  garage: ["候选库", "把新车车型候选和二手具体车源分开管理，避免车型和车源混在一起。"],
   newcars: ["新车情报", "刷新懂车帝近期发布和热门车型，按你的偏好筛出值得关注的新车。"],
   usedcars: ["二手车", "拉取懂车帝官方直营车源，按你的预算、体感偏好和二手风险排序。"],
-  detail: ["车源详情", "围绕单台车回答：为什么便宜、是否接近 i6、风险是否值得折价。"],
+  detail: ["候选详情", "新车看版本、权益和试驾；二手看车况、价格和交易风险。"],
   compare: ["对比", "按真实成本、i6体感、权益明确度和风险做取舍。"],
   drives: ["试驾", "记录前排舒适、静谧、底盘、车机、智驾和相对 i6 结论。"],
-  risks: ["风险", "按车源信息自动提示二手新能源可能存在的坑。"],
+  risks: ["风险", "按候选类型提示新车待确认项或二手新能源风险。"],
   sellers: ["商家", "聚合卖家身份、承诺、保障和车源风险。"]
 };
 
@@ -346,11 +346,45 @@ function normalizeStringArray(value) {
   return [];
 }
 
+function normalizeCarKind(kind) {
+  return ["new", "used", "manual"].includes(kind) ? kind : "manual";
+}
+
+function deriveCarKind(car = {}) {
+  const text = `${car.source || ""} ${car.seller || ""} ${car.url || ""} ${car.notes || ""} ${car.trim || ""}`;
+  if (car.sourceSkuId || car.skuId || /usedcar|二手|自营|直营|个人|车商|过户|上牌|里程|检测报告/i.test(text)) return "used";
+  if (/新车|热门车型|近期发布|官方渠道|需求推荐|车型页/i.test(text)) return "new";
+  if (car.mileage || car.plateDate || (car.transfers !== undefined && car.transfers !== "" && car.transfers !== null)) return "used";
+  return "manual";
+}
+
+function carKind(car) {
+  return normalizeCarKind(car?.kind || deriveCarKind(car));
+}
+
+function carKindLabel(kind) {
+  return {
+    new: "新车车型",
+    used: "二手车源",
+    manual: "手动记录"
+  }[normalizeCarKind(kind)] || "手动记录";
+}
+
+function carKindClass(kind) {
+  return {
+    new: "info",
+    used: "official",
+    manual: "warn"
+  }[normalizeCarKind(kind)] || "warn";
+}
+
 function normalizeCar(car) {
   const experience = car.experience || {};
   const costs = car.costs || {};
+  const kind = normalizeCarKind(car.kind || deriveCarKind(car));
   return {
     id: car.id || makeId("car"),
+    kind,
     name: car.name || "",
     trim: car.trim || "",
     stage: car.stage || "watching",
@@ -918,6 +952,22 @@ function sourceBucket(source) {
   return "dealer";
 }
 
+function garageSectionTitle(kind) {
+  return {
+    new: "新车车型候选",
+    used: "二手具体车源",
+    manual: "手动补充"
+  }[normalizeCarKind(kind)] || "手动补充";
+}
+
+function garageSectionHint(kind, count) {
+  return {
+    new: `${count} 款车型。这里看版本、价格权益、交付节奏和试驾结论。`,
+    used: `${count} 台车源。这里看车况、商家、检测、权益和成交风险。`,
+    manual: `${count} 条记录。信息不足时先作为草稿，后续再归类。`
+  }[normalizeCarKind(kind)] || `${count} 条记录。`;
+}
+
 function getCarEvidence(carId) {
   return state.evidence.filter((item) => item.carId === carId);
 }
@@ -977,8 +1027,54 @@ function analyzeCar(car) {
   const discount = getDiscountPct(car);
   const text = `${car.name} ${car.trim} ${car.issues} ${car.notes} ${car.rightsNotes}`;
   const isNio = /蔚来|ES6|ES8|EC6|ET5/i.test(text);
+  const kind = carKind(car);
   const evidence = getCarEvidence(car.id);
   const validEvidenceCount = evidence.filter(hasInfoValue).length;
+
+  if (kind === "new") {
+    if (!car.price) {
+      risks.push({
+        level: "medium",
+        title: "价格版本待确认",
+        detail: "新车候选先确认推荐版本、指导价、权益价、金融/置换和预计落地价。",
+        question: "请补充官方配置单、北京门店报价或懂车帝车型页。"
+      });
+    }
+    if (/新车刚发布|首批|交付周期|刚发布/.test(`${car.issues} ${car.notes}`)) {
+      risks.push({
+        level: "medium",
+        title: "首批车与交付节奏",
+        detail: "刚发布车型要观察首批车质量、真实能耗、OTA稳定性和交付排产。",
+        question: "北京试驾车何时到店？7-8月是否会有价格或权益调整？"
+      });
+    }
+    if (car.nop === "unknown") {
+      risks.push({
+        level: "low",
+        title: "智驾配置口径待确认",
+        detail: "新车要确认高阶智驾是否标配、是否分版本、是否需要订阅。",
+        question: "目标版本是否含高速/城区NOA、激光雷达或端到端能力？"
+      });
+    }
+    if (validEvidenceCount === 0) {
+      risks.push({
+        level: "low",
+        title: "缺少车型依据",
+        detail: "新车候选需要车型页、配置表、权益截图或试驾记录支撑。",
+        question: "先补一条车型页或门店报价，再决定是否进入试驾。"
+      });
+    }
+    if (!car.url) {
+      risks.push({
+        level: "low",
+        title: "车型链接缺失",
+        detail: "补充官方或懂车帝车型页，便于后续刷新配置和价格。",
+        question: "补充车型页链接。"
+      });
+    }
+    const score = Math.min(100, risks.reduce((sum, item) => sum + ({ high: 34, medium: 18, low: 8 }[item.level] || 0), 0));
+    return { risks, score, level: riskLevelFromScore(score) };
+  }
 
   if (car.battery === "unknown") {
     risks.push({
@@ -1102,6 +1198,15 @@ function analyzeCar(car) {
 }
 
 function getChecklist(car) {
+  if (carKind(car) === "new") {
+    return [
+      "确认目标版本：官方指导价、权益价、必选/可选配置、交付周期。",
+      "北京门店试驾：前排座椅、静谧性、底盘滤震、车机语音、高速NOA逐项打分。",
+      "核实权益：订金退订、锁单规则、保险、金融、置换、充电/补能权益和质保。",
+      "等真实反馈：首批车主能耗、OTA稳定性、异响、底盘舒适性和辅助驾驶接管。",
+      "和二手候选分开比较：新车看确定性和权益，二手看折价和车况风险。"
+    ];
+  }
   const isNio = /蔚来|ES6|ES8|EC6|ET5/i.test(`${car.name} ${car.trim}`);
   const isLi = /理想|i6|L6|L7|L8|L9/i.test(`${car.name} ${car.trim}`);
   const items = [
@@ -1225,21 +1330,24 @@ function renderRequirementRecommendations(analysis) {
     return `
       <div class="requirement-empty">
         <strong>还没有候选车型</strong>
-        <span>点击“理解需求并找车”，会先拉取近期发布/热门车型，再输出可加入车源库的清单。</span>
+        <span>点击“理解需求并找车”，会先拉取近期发布/热门车型，再按新车车型和二手车源分栏输出。</span>
       </div>
     `;
   }
+  const newCandidates = analysis.candidates.filter((candidate) => requirementCandidateBucket(candidate) === "new");
+  const usedCandidates = analysis.candidates.filter((candidate) => requirementCandidateBucket(candidate) === "used");
+  const manualCandidates = analysis.candidates.filter((candidate) => requirementCandidateBucket(candidate) === "manual");
   return `
     <div class="requirement-result-head">
       <div>
-        <strong>候选车型 ${analysis.candidates.length} 款</strong>
+        <strong>候选结果 ${analysis.candidates.length} 个</strong>
         <span class="muted">${analysis.lastAnalyzedAt ? `上次分析：${formatDateTime(analysis.lastAnalyzedAt)}` : "按当前画像排序"}</span>
       </div>
       ${analysis.source ? `<span class="chip info">${escapeHtml(analysis.source)}</span>` : ""}
     </div>
-    <div class="requirement-candidate-grid">
-      ${analysis.candidates.map(renderRequirementCandidateCard).join("")}
-    </div>
+    ${renderRequirementCandidateGroup("新车车型候选", "先选车系和版本，再去新车情报里跟踪价格、权益和试驾。", newCandidates)}
+    ${renderRequirementCandidateGroup("二手具体车源", "这是可联系、可检测、可谈价的一台车，要按二手风险核验。", usedCandidates)}
+    ${renderRequirementCandidateGroup("手动建议/待归类", "车型池不足时先放这里，补链接后再归入新车或二手。", manualCandidates)}
     ${analysis.questions.length ? `
       <div class="requirement-questions">
         ${analysis.questions.slice(0, 4).map((question) => `<span>${escapeHtml(question)}</span>`).join("")}
@@ -1248,8 +1356,37 @@ function renderRequirementRecommendations(analysis) {
   `;
 }
 
+function requirementCandidateBucket(candidate) {
+  if (candidate.source === "used") return "used";
+  if (candidate.source === "release") return "new";
+  if (candidate.source === "garage" && candidate.carId) {
+    const car = state.cars.find((item) => item.id === candidate.carId);
+    return carKind(car);
+  }
+  if (candidate.skuId) return "used";
+  if (candidate.seriesId) return "new";
+  return "manual";
+}
+
+function renderRequirementCandidateGroup(title, hint, candidates) {
+  if (!candidates.length) return "";
+  return `
+    <section class="requirement-group">
+      <div class="requirement-group-head">
+        <h3>${escapeHtml(title)}</h3>
+        <span class="muted">${escapeHtml(hint)}</span>
+      </div>
+      <div class="requirement-candidate-grid">
+        ${candidates.map(renderRequirementCandidateCard).join("")}
+      </div>
+    </section>
+  `;
+}
+
 function renderRequirementCandidateCard(candidate) {
-  const sourceLabel = candidate.source === "release" ? "懂车帝车型" : candidate.source === "used" ? "二手车源" : candidate.source === "garage" ? "车源库" : "LLM建议";
+  const bucket = requirementCandidateBucket(candidate);
+  const sourceLabel = candidate.source === "release" ? "懂车帝车型" : candidate.source === "used" ? "二手车源" : candidate.source === "garage" ? "候选库" : "LLM建议";
+  const actionLabel = candidate.source === "garage" ? "查看详情" : bucket === "used" ? "加入二手车源" : bucket === "new" ? "加入新车候选" : "加入待归类";
   return `
     <article class="requirement-candidate">
       <div class="requirement-candidate-top">
@@ -1269,7 +1406,7 @@ function renderRequirementCandidateCard(candidate) {
       <p>${escapeHtml(candidate.why || "需要继续看配置、价格权益和试驾反馈。")}</p>
       ${candidate.tradeoffs.length ? `<div class="requirement-tradeoffs">${candidate.tradeoffs.slice(0, 3).map((item) => `<span>${escapeHtml(item)}</span>`).join("")}</div>` : ""}
       <div class="card-actions">
-        <button data-add-requirement-candidate="${candidate.id}" type="button">${candidate.source === "garage" ? "查看车源" : "加入车源库"}</button>
+        <button data-add-requirement-candidate="${candidate.id}" type="button">${actionLabel}</button>
         ${candidate.sourceUrl ? `<a href="${escapeAttr(candidate.sourceUrl)}" target="_blank" rel="noreferrer">外部信息</a>` : ""}
       </div>
     </article>
@@ -1352,6 +1489,7 @@ function renderDashboard() {
           <div class="car-name">${escapeHtml(car.name)}</div>
           <div class="car-trim">${escapeHtml(car.trim || "")}</div>
           <div class="chip-row tight">
+            <span class="chip ${carKindClass(carKind(car))}">${carKindLabel(carKind(car))}</span>
             <span class="chip ${recommendationClass(rec)}">${recommendationLabel(rec)}</span>
             <span class="chip ${risk.level}">${riskLabel(risk.level)} ${risk.score}</span>
           </div>
@@ -1393,6 +1531,7 @@ function metric(label, value, foot) {
 
 function getFilteredCars() {
   const query = document.querySelector("#searchInput")?.value.trim().toLowerCase() || "";
+  const kind = document.querySelector("#kindFilter")?.value || "all";
   const stage = document.querySelector("#stageFilter")?.value || "all";
   const risk = document.querySelector("#riskFilter")?.value || "all";
   const battery = document.querySelector("#batteryFilter")?.value || "all";
@@ -1400,23 +1539,43 @@ function getFilteredCars() {
   return state.cars.filter((car) => {
     const haystack = `${car.name} ${car.trim} ${car.city} ${car.seller} ${car.source} ${car.notes} ${car.issues}`.toLowerCase();
     const matchesQuery = !query || haystack.includes(query);
+    const matchesKind = kind === "all" || carKind(car) === kind;
     const matchesStage = stage === "all" || car.stage === stage;
     const riskLevel = analyzeCar(car).level;
     const matchesRisk = risk === "all" || riskLevel === risk;
     const matchesBattery = battery === "all" || car.battery === battery;
     const matchesSource = source === "all" || sourceBucket(car.source) === source;
-    return matchesQuery && matchesStage && matchesRisk && matchesBattery && matchesSource;
+    return matchesQuery && matchesKind && matchesStage && matchesRisk && matchesBattery && matchesSource;
   });
 }
 
 function renderGarage() {
   const cars = getFilteredCars();
-  document.querySelector("#carGrid").innerHTML = cars.map((car) => {
-    const risk = analyzeCar(car);
-    const discount = getDiscountPct(car);
-    const cost = costProfile(car);
-    const rec = deriveRecommendation(car);
+  const order = ["new", "used", "manual"];
+  document.querySelector("#carGrid").innerHTML = order.map((kind) => {
+    const group = cars.filter((car) => carKind(car) === kind);
+    if (!group.length) return "";
     return `
+      <section class="garage-section">
+        <div class="garage-section-head">
+          <h2>${garageSectionTitle(kind)}</h2>
+          <span class="muted">${garageSectionHint(kind, group.length)}</span>
+        </div>
+        <div class="garage-section-grid">
+          ${group.map(renderGarageCard).join("")}
+        </div>
+      </section>
+    `;
+  }).join("") || `<div class="muted">没有符合条件的候选。</div>`;
+}
+
+function renderGarageCard(car) {
+  const kind = carKind(car);
+  const risk = analyzeCar(car);
+  const discount = getDiscountPct(car);
+  const cost = costProfile(car);
+  const rec = deriveRecommendation(car);
+  return `
       <article class="car-card">
         <div class="car-photo">${car.image ? `<img src="${escapeAttr(car.image)}" alt="${escapeAttr(car.name)}">` : `<span>${escapeHtml(car.name)}</span>`}</div>
         <div class="car-body">
@@ -1428,6 +1587,7 @@ function renderGarage() {
             <div class="price">${formatWan(car.price)}</div>
           </div>
           <div class="chip-row">
+            <span class="chip ${carKindClass(kind)}">${carKindLabel(kind)}</span>
             <span class="chip ${recommendationClass(rec)}">${recommendationLabel(rec)}</span>
             <span class="chip ${risk.level}">${riskLabel(risk.level)} ${risk.score}</span>
             <span class="chip">${stageLabel(car.stage)}</span>
@@ -1435,7 +1595,7 @@ function renderGarage() {
             ${discount !== null ? `<span class="chip">折让 ${discount.toFixed(1)}%</span>` : ""}
           </div>
           <div class="car-meta">
-            <div class="meta-cell"><div class="meta-label">3年成本</div><div class="meta-value">${formatWan(cost.year3)}</div></div>
+            <div class="meta-cell"><div class="meta-label">${kind === "new" ? "落地估算" : "3年成本"}</div><div class="meta-value">${formatWan(kind === "new" ? car.landing || cost.year1 : cost.year3)}</div></div>
             <div class="meta-cell"><div class="meta-label">i6标尺</div><div class="meta-value">${i6Score(car)}/100</div></div>
             <div class="meta-cell"><div class="meta-label">目标价</div><div class="meta-value">${formatWan(car.targetPrice)}</div></div>
           </div>
@@ -1456,7 +1616,6 @@ function renderGarage() {
         </div>
       </article>
     `;
-  }).join("") || `<div class="muted">没有符合条件的车源。</div>`;
 }
 
 function renderNewCars() {
@@ -1477,7 +1636,7 @@ function renderNewCars() {
     spotlight.innerHTML = `
       <section class="panel newcar-empty">
         <h2>从懂车帝拉一份新车与热门车型清单</h2>
-        <p class="muted">刷新后会保存到本机缓存，后续可按近期发布、热门车型、新能源、车身形式、30万附近价格筛选，也能把感兴趣的车加入车源库继续跟踪。</p>
+        <p class="muted">刷新后会保存到本机缓存，后续可按近期发布、热门车型、新能源、车身形式、30万附近价格筛选，也能把感兴趣的车型加入新车候选继续跟踪。</p>
       </section>
     `;
     grid.innerHTML = "";
@@ -1529,7 +1688,7 @@ function renderNewCarSpotlight(release) {
           ${reasons.map((reason) => `<span>${escapeHtml(reason)}</span>`).join("")}
         </div>
         <div class="card-actions">
-          <button data-add-release="${release.seriesId}" type="button">加入车源库</button>
+          <button data-add-release="${release.seriesId}" type="button">加入新车候选</button>
           <a href="${escapeAttr(release.dcdUrl)}" target="_blank" rel="noreferrer">车型页</a>
           ${release.articleUrl ? `<a href="${escapeAttr(release.articleUrl)}" target="_blank" rel="noreferrer">上市资讯</a>` : ""}
         </div>
@@ -1585,7 +1744,7 @@ function renderNewCarCard(release) {
           </div>
         ` : ""}
         <div class="card-actions">
-          <button data-add-release="${release.seriesId}" type="button">加入观察</button>
+          <button data-add-release="${release.seriesId}" type="button">加入新车候选</button>
           <a href="${escapeAttr(release.dcdUrl)}" target="_blank" rel="noreferrer">懂车帝</a>
           ${release.articleUrl ? `<a href="${escapeAttr(release.articleUrl)}" target="_blank" rel="noreferrer">资讯</a>` : ""}
         </div>
@@ -1663,7 +1822,7 @@ function renderUsedCarSpotlight(listing, officialCount) {
           ${risks.map((risk) => `<span>${escapeHtml(risk)}</span>`).join("")}
         </div>
         <div class="card-actions">
-          <button data-add-used-listing="${listing.skuId}" type="button">加入车源库并分析</button>
+          <button data-add-used-listing="${listing.skuId}" type="button">加入二手车源并分析</button>
           <a href="${escapeAttr(getExternalSourceUrl(listing))}" target="_blank" rel="noopener noreferrer">懂车帝详情</a>
         </div>
       </div>
@@ -1706,7 +1865,7 @@ function renderUsedCarCard(listing) {
           ${listing.riskFlags.slice(0, 4).map((risk) => `<span>${escapeHtml(risk)}</span>`).join("")}
         </div>
         <div class="card-actions">
-          <button data-add-used-listing="${listing.skuId}" type="button">加入并分析</button>
+          <button data-add-used-listing="${listing.skuId}" type="button">加入二手车源</button>
           <a href="${escapeAttr(getExternalSourceUrl(listing))}" target="_blank" rel="noopener noreferrer">打开详情</a>
         </div>
       </div>
@@ -1879,7 +2038,7 @@ function renderDetail() {
   if (selectedCarId) select.value = selectedCarId;
   const car = state.cars.find((item) => item.id === selectedCarId);
   if (!car) {
-    document.querySelector("#detailHero").innerHTML = `<div class="muted">暂无车源。</div>`;
+    document.querySelector("#detailHero").innerHTML = `<div class="muted">暂无候选。</div>`;
     document.querySelector("#detailGallery").innerHTML = "";
     return;
   }
@@ -1887,12 +2046,27 @@ function renderDetail() {
   const rec = deriveRecommendation(car);
   const cost = costProfile(car);
   const discount = getDiscountPct(car);
+  const kind = carKind(car);
+  const heroFacts = kind === "new"
+    ? [
+        ["参考价", formatWan(car.price)],
+        ["目标落地", formatWan(car.landing || car.targetPrice)],
+        ["续航", formatNumber(car.range, "km")],
+        ["版本目标", car.trim || "-"]
+      ]
+    : [
+        ["售价", formatWan(car.price)],
+        ["新车参考", formatWan(car.newPrice)],
+        ["折价", formatPct(discount)],
+        ["目标价", formatWan(car.targetPrice)]
+      ];
 
   document.querySelector("#detailHero").innerHTML = `
     <div class="detail-hero">
       <div class="detail-image ${car.image ? "" : "is-empty"}">${car.image ? `<img src="${escapeAttr(car.image)}" alt="${escapeAttr(car.name)}">` : `<span>${escapeHtml(car.name)}</span>`}</div>
       <div>
         <div class="chip-row tight">
+          <span class="chip ${carKindClass(kind)}">${carKindLabel(kind)}</span>
           <span class="chip ${recommendationClass(rec)}">${recommendationLabel(rec)}</span>
           <span class="chip ${risk.level}">${riskLabel(risk.level)} ${risk.score}</span>
           <span class="chip">${stageLabel(car.stage)}</span>
@@ -1900,10 +2074,7 @@ function renderDetail() {
         <h2>${escapeHtml(car.name)} ${escapeHtml(car.trim || "")}</h2>
         <p class="muted">${escapeHtml(car.city || "未知城市")} · ${escapeHtml(car.source || "未知车源")} · ${escapeHtml(car.seller || "未知商家")}</p>
         <div class="hero-facts">
-          <div><span>售价</span><strong>${formatWan(car.price)}</strong></div>
-          <div><span>新车参考</span><strong>${formatWan(car.newPrice)}</strong></div>
-          <div><span>折价</span><strong>${formatPct(discount)}</strong></div>
-          <div><span>目标价</span><strong>${formatWan(car.targetPrice)}</strong></div>
+          ${heroFacts.map(([label, value]) => `<div><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`).join("")}
         </div>
         <p class="detail-note">${escapeHtml(car.notes || "暂无备注。")}</p>
         ${renderExternalSourceActions(car)}
@@ -2450,13 +2621,14 @@ function buildTimelineItems() {
 
 function openCarDialog(carId = null) {
   const car = carId ? state.cars.find((item) => item.id === carId) : null;
-  document.querySelector("#dialogTitle").textContent = car ? "编辑车源" : "新增车源";
+  document.querySelector("#dialogTitle").textContent = car ? "编辑候选" : "新增候选";
   document.querySelector("#deleteCar").style.display = car ? "inline-block" : "none";
   const data = normalizeCar(car || {});
   setValue("#carId", car ? data.id : "");
   setValue("#carName", data.name);
   setValue("#carTrim", data.trim);
   setValue("#carStage", data.stage);
+  setValue("#carKind", data.kind);
   setValue("#carRecommendation", data.recommendation);
   setValue("#carUrl", data.url);
   setValue("#carImage", data.image);
@@ -2507,6 +2679,7 @@ function saveCarFromForm() {
   const car = normalizeCar({
     ...(existing || {}),
     id,
+    kind: getValue("#carKind") || existing?.kind || "manual",
     name: getValue("#carName"),
     trim: getValue("#carTrim"),
     stage: getValue("#carStage"),
@@ -2562,7 +2735,7 @@ function saveCarFromForm() {
   else state.cars.unshift(car);
   selectedCarId = id;
   render();
-  showToast(index >= 0 ? "车源已更新。" : "车源已添加。", "ok");
+  showToast(index >= 0 ? "候选已更新。" : "候选已添加。", "ok");
 }
 
 async function addEvidenceFromForm() {
@@ -2598,7 +2771,7 @@ async function addEvidenceFromForm() {
   ["#evidenceTitle", "#evidenceUrl", "#evidenceNotes"].forEach((selector) => setValue(selector, ""));
   if (document.querySelector("#evidenceFiles")) document.querySelector("#evidenceFiles").value = "";
   render();
-  showToast("信息已加入当前车源，正在调用 Gemini 分析。", "ok");
+  showToast("信息已加入当前候选，正在调用 Gemini 分析。", "ok");
   analyzeCurrentCarWithGemini({ auto: true, focusInfoId: item.id });
 }
 
@@ -2791,6 +2964,7 @@ function buildRequirementGeminiPayload() {
     profile: state.userRequirement,
     garageCars: state.cars.map((car) => ({
       id: car.id,
+      kind: carKind(car),
       name: car.name,
       trim: car.trim,
       priceWan: car.price,
@@ -2956,7 +3130,7 @@ function releaseToRequirementCandidate(release) {
     confidence: "medium",
     why: newReleaseFitReasons(release).join("；"),
     tradeoffs: release.tags.slice(0, 3),
-    nextAction: "加入车源库后继续看版本、权益、试驾和价格走势。",
+    nextAction: "加入新车候选后继续看版本、权益、试驾和价格走势。",
     tags: [release.energyLabel, releaseSourceText(release), facts.energy].filter(Boolean),
     sourceUrl: release.dcdUrl
   });
@@ -2973,7 +3147,7 @@ function carToRequirementCandidate(car) {
     rangeKm: car.range,
     fitScore: fitScore(car),
     confidence: "high",
-    why: car.nextAction || car.notes || "已在车源库中，可直接进入详情继续判断。",
+    why: car.nextAction || car.notes || "已在候选库中，可直接进入详情继续判断。",
     tradeoffs: analyzeCar(car).risks.slice(0, 3).map((risk) => risk.title),
     nextAction: car.nextAction || "查看详情并补齐信息墙。",
     tags: [car.city, car.source, batteryLabel(car.battery)].filter(Boolean),
@@ -3002,7 +3176,7 @@ function usedListingToRequirementCandidate(listing) {
     confidence: "medium",
     why: listing.fitReasons.join("；") || "二手车源匹配预算和基本偏好。",
     tradeoffs: listing.riskFlags.slice(0, 3),
-    nextAction: "加入车源库后索要检测报告、出险记录和权益截图。",
+    nextAction: "加入二手车源后索要检测报告、出险记录和权益截图。",
     tags: [listing.city, listing.sourceType, listing.mileageText].filter(Boolean),
     sourceUrl: getExternalSourceUrl(listing)
   });
@@ -3066,6 +3240,7 @@ function buildGeminiPayload(car, focusInfoId) {
 
 function cloneCarForGemini(car) {
   return {
+    kind: carKind(car),
     name: car.name,
     trim: car.trim,
     stage: car.stage,
@@ -3312,13 +3487,14 @@ function addReleaseToGarage(seriesId) {
   const existing = state.cars.find((car) => car.url === release.dcdUrl || `${car.name} ${car.trim}`.includes(release.seriesName));
   if (existing) {
     switchToDetail(existing.id);
-    showToast("这款车已经在车源库里。", "warn");
+    showToast("这款车型已经在新车候选里。", "warn");
     return;
   }
   const facts = getReleaseModelFacts(release);
   const firstModel = release.models[0] || {};
   const car = normalizeCar({
     id: makeId("car"),
+    kind: "new",
     name: release.seriesName,
     trim: firstModel.year ? `${firstModel.year}款 ${firstModel.name || ""}`.trim() : firstModel.name || "近期/热门车型",
     stage: "watching",
@@ -3351,7 +3527,7 @@ function addReleaseToGarage(seriesId) {
   selectedCarId = car.id;
   selectedCompare.add(car.id);
   setActiveView("detail");
-  showToast("已加入车源库，可以继续补信息墙和试驾记录。", "ok");
+  showToast("已加入新车候选，可以继续补车型信息和试驾记录。", "ok");
 }
 
 function addUsedListingToGarage(skuId) {
@@ -3360,7 +3536,7 @@ function addUsedListingToGarage(skuId) {
   const existing = state.cars.find((car) => car.url === listing.url);
   if (existing) {
     switchToDetail(existing.id);
-    showToast("这台车源已经在车源库里。", "warn");
+    showToast("这台二手车源已经在候选库里。", "warn");
     return;
   }
   const risks = listing.riskFlags || [];
@@ -3368,6 +3544,7 @@ function addUsedListingToGarage(skuId) {
   const isLi = /理想|i6/i.test(`${listing.seriesName} ${listing.title}`);
   const car = normalizeCar({
     id: makeId("car"),
+    kind: "used",
     name: listing.seriesName || listing.brandName || listing.title,
     trim: listing.trim || listing.title,
     stage: "watching",
@@ -3416,7 +3593,7 @@ function addUsedListingToGarage(skuId) {
       `商家/来源：${listing.seller || listing.sourceType || "-"}`,
       `平台标签：${listing.tags.join("、") || "-"}`,
       `初步风险：${risks.join("、") || "仍需核验检测报告和出险记录"}`,
-      "请 Gemini 继续做商家信息梳理、风险评估，并和当前车源库里的理想 i6、蔚来 ES6、极氪 7X 等候选做对比评估。"
+      "请 Gemini 继续做商家信息梳理、风险评估，并和候选库里的新车车型、理想 i6、蔚来 ES6、极氪 7X 等候选做对比评估。"
     ].join("\n"),
     attachments: [],
     createdAt: new Date().toISOString().slice(0, 10)
@@ -3425,7 +3602,7 @@ function addUsedListingToGarage(skuId) {
   selectedCarId = car.id;
   selectedCompare.add(car.id);
   setActiveView("detail");
-  showToast("已加入车源库，正在调用 Gemini 做车源分析。", "ok");
+  showToast("已加入二手车源，正在调用 Gemini 做车源分析。", "ok");
   analyzeCurrentCarWithGemini({ auto: true, focusInfoId: evidence.id });
 }
 
@@ -3447,11 +3624,12 @@ function addRequirementCandidateToGarage(candidateId) {
   const existing = state.cars.find((car) => `${car.name} ${car.trim}`.includes(candidate.name) || candidate.name.includes(car.name));
   if (existing) {
     switchToDetail(existing.id);
-    showToast("这款车已经在车源库里。", "warn");
+    showToast("这个候选已经在候选库里。", "warn");
     return;
   }
   const car = normalizeCar({
     id: makeId("car"),
+    kind: requirementCandidateBucket(candidate),
     name: candidate.name,
     trim: candidate.trim || "需求推荐车型",
     stage: "watching",
@@ -3497,7 +3675,7 @@ function addRequirementCandidateToGarage(candidateId) {
   selectedCarId = car.id;
   selectedCompare.add(car.id);
   setActiveView("detail");
-  showToast("已从需求推荐加入车源库。", "ok");
+  showToast(`已从需求推荐加入${carKindLabel(car.kind)}。`, "ok");
 }
 
 function exportChecklist() {
@@ -3644,11 +3822,12 @@ document.querySelector("#deleteCar").addEventListener("click", () => {
   if (selectedCarId === id) selectedCarId = state.cars[0]?.id || "";
   document.querySelector("#carDialog").close();
   render();
-  showToast("车源已删除。", "warn");
+  showToast("候选已删除。", "warn");
 });
 
 [
   "#searchInput",
+  "#kindFilter",
   "#stageFilter",
   "#riskFilter",
   "#batteryFilter",

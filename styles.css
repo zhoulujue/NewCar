@@ -491,6 +491,20 @@ h3 {
   gap: 2px;
 }
 
+.requirement-group {
+  display: grid;
+  gap: 10px;
+}
+
+.requirement-group + .requirement-group {
+  margin-top: 14px;
+}
+
+.requirement-group-head {
+  display: grid;
+  gap: 2px;
+}
+
 .requirement-candidate-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -730,10 +744,32 @@ textarea.input {
   resize: vertical;
 }
 
-.car-grid {
+.car-grid,
+.garage-section-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
   gap: 14px;
+}
+
+.car-grid {
+  grid-template-columns: 1fr;
+}
+
+.garage-section {
+  display: grid;
+  gap: 10px;
+}
+
+.garage-section + .garage-section {
+  margin-top: 16px;
+}
+
+.garage-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .newcar-refresh-panel {
@@ -2638,7 +2674,8 @@ button:disabled {
     width: auto;
   }
 
-  .car-grid {
+  .car-grid,
+  .garage-section-grid {
     grid-template-columns: 1fr;
     gap: 12px;
   }
