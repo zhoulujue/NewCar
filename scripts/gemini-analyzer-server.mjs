@@ -7,6 +7,8 @@ const MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 const MODE = process.env.GEMINI_ANALYZER_MODE || (process.env.GEMINI_API_KEY ? "api" : "cli");
 const MAX_BODY_BYTES = Number(process.env.GEMINI_ANALYZER_MAX_BODY_MB || 28) * 1024 * 1024;
 const MAX_INLINE_IMAGES = Number(process.env.GEMINI_ANALYZER_MAX_IMAGES || 10);
+const GEMINI_API_TIMEOUT_MS = Number(process.env.GEMINI_API_TIMEOUT_MS || 90000);
+const GEMINI_RECOMMEND_TIMEOUT_MS = Number(process.env.GEMINI_RECOMMEND_TIMEOUT_MS || 45000);
 
 const server = createServer(async (req, res) => {
   applyCors(req, res);
@@ -94,7 +96,7 @@ async function analyzeWithGeminiApi(payload) {
       }
     });
   });
-  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`, {
+  const response = await fetchWithTimeout(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -104,7 +106,7 @@ async function analyzeWithGeminiApi(payload) {
         responseMimeType: "application/json"
       }
     })
-  });
+  }, GEMINI_API_TIMEOUT_MS);
   const json = await response.json().catch(() => ({}));
   if (!response.ok) {
     throw new Error(json.error?.message || `Gemini API 返回 ${response.status}`);
@@ -123,7 +125,7 @@ async function recommendWithGeminiApi(payload) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error("未找到 GEMINI_API_KEY，请先配置本机 Gemini API Key，或设置 GEMINI_ANALYZER_MODE=cli。");
   const prompt = buildRecommendationPrompt(payload);
-  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`, {
+  const response = await fetchWithTimeout(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -133,7 +135,7 @@ async function recommendWithGeminiApi(payload) {
         responseMimeType: "application/json"
       }
     })
-  });
+  }, GEMINI_RECOMMEND_TIMEOUT_MS);
   const json = await response.json().catch(() => ({}));
   if (!response.ok) {
     throw new Error(json.error?.message || `Gemini API 返回 ${response.status}`);
@@ -173,6 +175,16 @@ function runGeminiCli(prompt) {
       else reject(new Error(stderr || stdout || `Gemini CLI 退出：${code}`));
     });
   });
+}
+
+async function fetchWithTimeout(url, options = {}, timeoutMs = 90000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function buildPrompt(payload, withImages) {
@@ -251,69 +263,12 @@ ${JSON.stringify(stripImageData(payload), null, 2)}
 
 function buildRecommendationPrompt(payload) {
   return `
-你是一个严谨的新能源车购车需求分析与车型筛选助手。请根据用户填写的用车画像，以及输入里的懂车帝近期发布/热门车型、二手车源和已收藏车源，输出一组最值得用户挑选的候选车型。
-
-用户画像重点：
-- 用户在北京用车，新能源指标有效期到 2027-05-26。
-- 主要 2 人用车，市区通勤 + 假期高速，前排舒适、长续航、智能座舱、高速智驾、静谧、底盘滤震、内饰质感、外观耐看优先。
-- 用户开过理想 i6，认为驾驶和乘坐体验很好，倾向找类似体验。不要质疑“理想 i6”这个基准车，也不要把它改写或纠正为理想 L6、智己 L6 等其他车型。
-- 用户不喜欢智界 R7 外观，不能接受阿维塔 06T 又小又方的方向盘，对性能没有强诉求。
-
-要求：
-- 只依据输入车型池筛选；如果输入池不足，可以给 manual 建议，但要标低置信度并说明需要补充信息。
-- 不要罗列所有车，只给最多 8 个候选，并按匹配度从高到低排序。
-- 候选既可以来自 recentModels，也可以来自 usedListings 或 garageCars；如果同一车系重复，只保留最适合的一条。
-- 必须区分两类对象：recentModels 是“新车车型/版本候选”，usedListings 是“二手具体车源”，garageCars 会带 kind 字段。不要把新车车型当成可检测二手车源，也不要把二手具体车源当成抽象车型。
-- 紧扣用户需求：预算、北京场景、续航、智能化、舒适/NVH、内饰/外观、二手风险。
-- 对“价格太高、车太大、续航不足、智驾弱、内饰廉价、二手风险大”等取舍要明确写入 tradeoffs。
-- 如果输入车型池为空或不足，只能给低置信度 manual 建议，并明确提示需要先刷新懂车帝车型池；不要基于常识编造精确配置或否定用户画像里的既有事实。
-- 输出必须是严格 JSON，不要 Markdown，不要解释。
-
-返回 JSON 结构：
-{
-  "profilePatch": {
-    "people": "1|2|3-4|5+",
-    "budgetMinWan": number,
-    "budgetMaxWan": number,
-    "energyTypes": ["ev","erev","phev"],
-    "minRangeKm": number,
-    "priorities": ["comfort","range","cockpit","adas","interior","appearance"],
-    "bodyPreference": "suv_sedan|suv|sedan|compact|no_mpv",
-    "mustHaves": string,
-    "dealBreakers": string,
-    "notes": string
-  },
-  "summary": string,
-  "searchStrategy": string,
-  "candidates": [
-    {
-      "source": "release|used|garage|manual",
-      "seriesId": number,
-      "skuId": number,
-      "carId": string,
-      "name": string,
-      "trim": string,
-      "priceWan": number,
-      "energyType": "ev|erev|phev|new_energy|unknown",
-      "rangeKm": number,
-      "fitScore": number,
-      "confidence": "low|medium|high",
-      "why": string,
-      "tradeoffs": [string],
-      "nextAction": string,
-      "tags": [string],
-      "sourceUrl": string
-    }
-  ],
-  "questions": [string]
-}
-
-字段约束：
-- fitScore 是 0-100 的整数。
-- 如果 source=release，尽量返回输入中的 seriesId 和 sourceUrl/dcdUrl。
-- 如果 source=used，尽量返回输入中的 skuId 和 sourceUrl/url。
-- 如果 source=garage，返回输入中的 carId。
-- 如果某个字段没有依据，可以省略，不要编造精确参数。
+你是新能源购车筛选助手。基于输入画像和候选池，按匹配度返回最多 8 个候选。
+用户画像固定背景：北京新能源指标到 2027-05-26；2 人用车；市区通勤+假期高速；前排舒适、长续航、智能座舱、高速智驾、静谧、底盘、内饰、外观优先；理想 i6 是体验标杆；不喜欢智界 R7 外观；不能接受阿维塔 06T 方小方向盘；不追求性能。
+规则：只依据输入池；recentModels 是新车车型，usedListings 是二手具体车源，garageCars 是已入库候选；同车系去重；说明主要匹配点和风险/取舍；输出严格 JSON，不要 Markdown。
+JSON 结构：
+{"profilePatch":{"people":"1|2|3-4|5+","budgetMinWan":0,"budgetMaxWan":0,"energyTypes":["ev"],"minRangeKm":0,"priorities":["comfort"],"bodyPreference":"suv_sedan|suv|sedan|compact|no_mpv","mustHaves":"","dealBreakers":"","notes":""},"summary":"","searchStrategy":"","candidates":[{"source":"release|used|garage|manual","seriesId":0,"skuId":0,"carId":"","name":"","trim":"","priceWan":0,"energyType":"ev|erev|phev|new_energy|unknown","rangeKm":0,"fitScore":0,"confidence":"low|medium|high","why":"","tradeoffs":[""],"nextAction":"","tags":[""],"sourceUrl":""}],"questions":[""]}
+省略没有依据的字段；fitScore 为 0-100；source=release 保留 seriesId/dcdUrl，source=used 保留 skuId/url，source=garage 保留 carId。
 
 输入数据：
 ${JSON.stringify(trimRecommendationPayload(payload), null, 2)}
@@ -324,12 +279,27 @@ function trimRecommendationPayload(payload) {
   return {
     profile: payload.profile || {},
     outputRules: payload.outputRules || {},
-    garageCars: (payload.garageCars || []).slice(0, 20),
-    recentModels: (payload.recentModels || []).slice(0, 80).map((release) => ({
+    garageCars: (payload.garageCars || []).slice(0, 8),
+    recentModels: (payload.recentModels || []).slice(0, 16).map((release) => ({
       ...release,
-      models: (release.models || []).slice(0, 8)
+      fitReasons: (release.fitReasons || []).slice(0, 4),
+      tags: (release.tags || []).slice(0, 6),
+      models: (release.models || []).slice(0, 2).map((model) => ({
+        id: model.id,
+        year: model.year,
+        name: model.name,
+        officialPrice: model.officialPrice,
+        dealerPrice: model.dealerPrice,
+        battery: model.battery,
+        range: model.range,
+        drive: model.drive
+      }))
     })),
-    usedListings: (payload.usedListings || []).slice(0, 60)
+    usedListings: (payload.usedListings || []).slice(0, 10).map((listing) => ({
+      ...listing,
+      fitReasons: (listing.fitReasons || []).slice(0, 4),
+      riskFlags: (listing.riskFlags || []).slice(0, 4)
+    }))
   };
 }
 
@@ -387,6 +357,9 @@ function normalizeError(error) {
   const message = error?.message || String(error);
   if (/User location is not supported/i.test(message)) {
     return "Gemini API 当前网络区域不可用，请检查代理、API 区域或改用可用的本地 Gemini 配置。";
+  }
+  if (/AbortError|aborted|timeout/i.test(message)) {
+    return "Gemini 请求超时，请稍后重试或减少候选数量。";
   }
   return message;
 }

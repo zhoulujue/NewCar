@@ -11,6 +11,8 @@ const DONGCHEDI_NEWCAR_URL = window.NEWCAR_DATA_CONFIG?.dongchediNewcarUrl || "/
 const LOCAL_DONGCHEDI_NEWCAR_URL = window.NEWCAR_DATA_CONFIG?.localDongchediNewcarUrl || "http://127.0.0.1:8788/dongchedi/recent-models";
 const DONGCHEDI_USEDCAR_URL = window.NEWCAR_DATA_CONFIG?.dongchediUsedcarUrl || "/api/dongchedi/official-usedcars";
 const LOCAL_DONGCHEDI_USEDCAR_URL = window.NEWCAR_DATA_CONFIG?.localDongchediUsedcarUrl || "http://127.0.0.1:8788/dongchedi/official-usedcars";
+const REQUIREMENT_RECOMMEND_TIMEOUT_MS = 35000;
+const REQUIREMENT_MARKET_MAX_AGE_MS = 6 * 60 * 60 * 1000;
 
 let geminiAnalysisRunning = false;
 let geminiUnavailableNotified = false;
@@ -3223,17 +3225,17 @@ async function analyzeRequirementAndCollectCars() {
   renderRequirementPanel();
   showToast("正在刷新车型池并调用 Gemini 理解需求。", "ok");
   try {
-    await refreshDongchediNewCars({ silent: true });
+    await ensureRequirementMarketData();
     const payload = buildRequirementGeminiPayload();
     let result = null;
     let lastError = "";
     for (const url of getGeminiRecommenderUrls()) {
       try {
-        const response = await fetch(url, {
+        const response = await fetchWithTimeout(url, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload)
-        });
+        }, REQUIREMENT_RECOMMEND_TIMEOUT_MS);
         result = await response.json().catch(() => ({}));
         if (!response.ok || result.ok === false) throw new Error(result.error || `需求分析失败：${response.status}`);
         break;
@@ -3257,6 +3259,28 @@ async function analyzeRequirementAndCollectCars() {
   }
 }
 
+async function ensureRequirementMarketData() {
+  if (marketDataIsFreshForRequirement()) return true;
+  return refreshDongchediNewCars({ silent: true, limit: 90, detailLimit: 45 });
+}
+
+function marketDataIsFreshForRequirement() {
+  if ((state.market.releases || []).length < 24 || !state.market.lastFetchedAt) return false;
+  const timestamp = new Date(state.market.lastFetchedAt).getTime();
+  if (!Number.isFinite(timestamp)) return false;
+  return Date.now() - timestamp <= REQUIREMENT_MARKET_MAX_AGE_MS;
+}
+
+async function fetchWithTimeout(url, options = {}, timeoutMs = 30000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function setRequirementAnalyzeState(isRunning) {
   const button = document.querySelector("#analyzeRequirement");
   if (!button) return;
@@ -3267,23 +3291,26 @@ function setRequirementAnalyzeState(isRunning) {
 function buildRequirementGeminiPayload() {
   return {
     profile: state.userRequirement,
-    garageCars: state.cars.map((car) => ({
-      id: car.id,
-      kind: carKind(car),
-      name: car.name,
-      trim: car.trim,
-      priceWan: car.price,
-      rangeKm: car.range,
-      battery: car.battery,
-      city: car.city,
-      source: car.source,
-      notes: car.notes,
-      issues: car.issues,
-      experience: car.experience,
-      fitScore: fitScore(car),
-      risk: analyzeCar(car)
-    })),
-    recentModels: (state.market.releases || []).slice(0, 80).map((release) => ({
+    garageCars: state.cars
+      .map((car) => ({
+        id: car.id,
+        kind: carKind(car),
+        name: car.name,
+        trim: car.trim,
+        priceWan: car.price,
+        rangeKm: car.range,
+        battery: car.battery,
+        city: car.city,
+        source: car.source,
+        notes: car.notes,
+        issues: car.issues,
+        experience: car.experience,
+        fitScore: fitScore(car),
+        risk: analyzeCar(car)
+      }))
+      .sort((a, b) => b.fitScore - a.fitScore)
+      .slice(0, 8),
+    recentModels: getRequirementReleasePool().map((release) => ({
       seriesId: release.seriesId,
       brandName: release.brandName,
       seriesName: release.seriesName,
@@ -3296,12 +3323,10 @@ function buildRequirementGeminiPayload() {
       releaseDate: release.releaseDate,
       sourceTypes: release.sourceTypes,
       dcdUrl: release.dcdUrl,
-      dimensions: release.dimensions,
-      tags: release.tags,
-      score: release.score,
+      tags: release.tags.slice(0, 4),
       fitScore: newReleaseFitScore(release),
-      fitReasons: newReleaseFitReasons(release),
-      models: release.models.slice(0, 8).map((model) => ({
+      fitReasons: newReleaseFitReasons(release).slice(0, 4),
+      models: release.models.slice(0, 2).map((model) => ({
         id: model.id,
         year: model.year,
         name: model.name,
@@ -3309,13 +3334,10 @@ function buildRequirementGeminiPayload() {
         dealerPrice: model.dealerPrice,
         battery: model.battery,
         range: model.range,
-        power: model.power,
-        drive: model.drive,
-        baseConfig: model.baseConfig.slice(0, 8),
-        highlightsConfig: model.highlightsConfig.slice(0, 8)
+        drive: model.drive
       }))
     })),
-    usedListings: (state.usedMarket.listings || []).slice(0, 60).map((listing) => ({
+    usedListings: getRequirementUsedListingPool().map((listing) => ({
       skuId: listing.skuId,
       title: listing.title,
       seriesName: listing.seriesName,
@@ -3330,8 +3352,8 @@ function buildRequirementGeminiPayload() {
       energyType: listing.energyType,
       url: listing.url,
       fitScore: usedListingClientScore(listing),
-      fitReasons: listing.fitReasons,
-      riskFlags: listing.riskFlags
+      fitReasons: listing.fitReasons.slice(0, 4),
+      riskFlags: listing.riskFlags.slice(0, 4)
     })),
     outputRules: {
       maxCandidates: 8,
@@ -3340,6 +3362,21 @@ function buildRequirementGeminiPayload() {
       priceUnit: "万元"
     }
   };
+}
+
+function getRequirementReleasePool() {
+  return [...(state.market.releases || [])]
+    .filter((release) => isNewEnergyRelease(release))
+    .filter((release) => energyMatchesRequirement(release.energyType))
+    .sort((a, b) => requirementReleaseScore(b) - requirementReleaseScore(a))
+    .slice(0, 14);
+}
+
+function getRequirementUsedListingPool() {
+  return [...(state.usedMarket.listings || [])]
+    .filter(listingMatchesUserRequirement)
+    .sort((a, b) => usedListingClientScore(b) - usedListingClientScore(a))
+    .slice(0, 8);
 }
 
 function applyRequirementAnalysis(result, source) {
@@ -3654,7 +3691,7 @@ function formatGeminiAnalysisNotes(analysis, patch) {
   return lines.join("\n");
 }
 
-async function refreshDongchediNewCars({ silent = false } = {}) {
+async function refreshDongchediNewCars({ silent = false, limit = 120, detailLimit = 90 } = {}) {
   if (newCarRefreshRunning) {
     if (!silent) showToast("正在刷新懂车帝数据。", "warn");
     return false;
@@ -3662,7 +3699,7 @@ async function refreshDongchediNewCars({ silent = false } = {}) {
   newCarRefreshRunning = true;
   setNewCarRefreshState(true);
   if (!silent) showToast(`正在按首页画像刷新近期发布和热门车型：${buildRefreshProfileSummary()}。`, "ok");
-  const urls = getDongchediFeedUrls();
+  const urls = getDongchediFeedUrls({ limit, detailLimit });
   let lastError = "";
   try {
     for (const url of urls) {
@@ -3692,8 +3729,8 @@ async function refreshDongchediNewCars({ silent = false } = {}) {
   }
 }
 
-function getDongchediFeedUrls() {
-  const params = buildRefreshProfileParams({ limit: 120, detailLimit: 90 });
+function getDongchediFeedUrls({ limit = 120, detailLimit = 90 } = {}) {
+  const params = buildRefreshProfileParams({ limit, detailLimit });
   const urls = [];
   if (location.protocol === "http:" || location.protocol === "https:") {
     urls.push(withQuery(DONGCHEDI_NEWCAR_URL, params));
