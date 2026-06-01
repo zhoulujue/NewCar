@@ -11,7 +11,7 @@ const DONGCHEDI_NEWCAR_URL = window.NEWCAR_DATA_CONFIG?.dongchediNewcarUrl || "/
 const LOCAL_DONGCHEDI_NEWCAR_URL = window.NEWCAR_DATA_CONFIG?.localDongchediNewcarUrl || "http://127.0.0.1:8788/dongchedi/recent-models";
 const DONGCHEDI_USEDCAR_URL = window.NEWCAR_DATA_CONFIG?.dongchediUsedcarUrl || "/api/dongchedi/official-usedcars";
 const LOCAL_DONGCHEDI_USEDCAR_URL = window.NEWCAR_DATA_CONFIG?.localDongchediUsedcarUrl || "http://127.0.0.1:8788/dongchedi/official-usedcars";
-const REQUIREMENT_RECOMMEND_TIMEOUT_MS = 35000;
+const REQUIREMENT_RECOMMEND_TIMEOUT_MS = 70000;
 const REQUIREMENT_MARKET_MAX_AGE_MS = 6 * 60 * 60 * 1000;
 
 let geminiAnalysisRunning = false;
@@ -3245,7 +3245,7 @@ async function analyzeRequirementAndCollectCars() {
       }
     }
     if (!result) throw new Error(lastError || "Gemini 推荐服务未就绪。");
-    applyRequirementAnalysis(result, "Gemini");
+    applyRequirementAnalysis(result, result.fallback ? "服务器规则兜底" : "Gemini");
     render();
     showToast("已根据用车需求生成候选车型。", "ok");
   } catch (error) {

@@ -30,7 +30,8 @@ const server = createServer(async (req, res) => {
     }
     if (req.method === "POST" && ["/recommend", "/api/recommend"].includes(req.url)) {
       const payload = await readJson(req);
-      const result = MODE === "api" ? await recommendWithGeminiApi(payload) : await recommendWithGeminiCli(payload);
+      const startedAt = Date.now();
+      const result = await recommendWithFallback(payload, startedAt);
       sendJson(res, 200, { ok: true, ...result });
       return;
     }
@@ -148,6 +149,18 @@ async function recommendWithGeminiCli(payload) {
   const prompt = buildRecommendationPrompt(payload);
   const text = await runGeminiCli(prompt);
   return parseModelJson(text);
+}
+
+async function recommendWithFallback(payload, startedAt = Date.now()) {
+  try {
+    const result = MODE === "api" ? await recommendWithGeminiApi(payload) : await recommendWithGeminiCli(payload);
+    console.log(`[recommend] ok ${Date.now() - startedAt}ms models=${(payload.recentModels || []).length} used=${(payload.usedListings || []).length}`);
+    return result;
+  } catch (error) {
+    const normalized = normalizeError(error);
+    console.warn(`[recommend] fallback ${Date.now() - startedAt}ms models=${(payload.recentModels || []).length} used=${(payload.usedListings || []).length}: ${normalized}`);
+    return buildServerRecommendationFallback(payload, normalized);
+  }
 }
 
 function runGeminiCli(prompt) {
@@ -301,6 +314,174 @@ function trimRecommendationPayload(payload) {
       riskFlags: (listing.riskFlags || []).slice(0, 4)
     }))
   };
+}
+
+function buildServerRecommendationFallback(payload = {}, error = "") {
+  const profile = payload.profile || {};
+  const releaseCandidates = (payload.recentModels || [])
+    .filter((release) => energyAllowed(release.energyType, profile))
+    .map((release) => releaseToFallbackCandidate(release, profile))
+    .filter(Boolean);
+  const usedCandidates = (payload.usedListings || [])
+    .filter((listing) => energyAllowed(listing.energyType, profile))
+    .map((listing) => usedListingToFallbackCandidate(listing, profile))
+    .filter(Boolean);
+  const garageCandidates = (payload.garageCars || [])
+    .map((car) => garageCarToFallbackCandidate(car))
+    .filter(Boolean);
+  const candidates = [...releaseCandidates, ...usedCandidates, ...garageCandidates]
+    .sort((a, b) => Number(b.fitScore || 0) - Number(a.fitScore || 0))
+    .filter(uniqueCandidateById())
+    .slice(0, Number(payload.outputRules?.maxCandidates || 8));
+  return {
+    fallback: true,
+    error,
+    summary: "Gemini 本次响应不稳定，服务器已按你的画像、预算、纯电需求、续航、舒适/智驾优先级先完成候选筛选。",
+    searchStrategy: "优先保留纯电、30 万左右、续航更长、与理想 i6 体验标尺更接近、且风险更少的车型；后续可再次点击让 Gemini 细化理由。",
+    candidates,
+    questions: [
+      "是否接受等 7-8 月权益变化？",
+      "新车优先还是二手车高性价比优先？",
+      "是否愿意为了舒适/NVH 接受更大的车身尺寸？"
+    ]
+  };
+}
+
+function releaseToFallbackCandidate(release = {}, profile = {}) {
+  const name = `${release.brandName || ""} ${release.seriesName || ""}`.trim() || release.seriesName;
+  if (!name) return null;
+  const model = (release.models || [])[0] || {};
+  const score = fallbackReleaseScore(release, profile);
+  return {
+    source: "release",
+    seriesId: release.seriesId,
+    name,
+    trim: model.name ? `${model.year || ""}款 ${model.name}`.trim() : release.priceText || "",
+    priceWan: numberOrBlank(release.priceMinWan),
+    energyType: release.energyType || "unknown",
+    rangeKm: firstRangeKm(release),
+    fitScore: score,
+    confidence: score >= 75 ? "high" : "medium",
+    why: fallbackReleaseWhy(release, profile),
+    tradeoffs: fallbackReleaseTradeoffs(release),
+    nextAction: "加入候选库后继续看具体版本、权益、试驾反馈和交付节奏。",
+    tags: [release.energyLabel, release.priceText, ...(release.sourceTypes || [])].filter(Boolean).slice(0, 5),
+    sourceUrl: release.dcdUrl || ""
+  };
+}
+
+function usedListingToFallbackCandidate(listing = {}, profile = {}) {
+  const score = clampScore(Number(listing.fitScore || 58) + (listing.city === (profile.city || "北京") ? 4 : -2));
+  return {
+    source: "used",
+    skuId: listing.skuId,
+    name: listing.seriesName || listing.title || "二手车源",
+    trim: listing.trim || listing.title || "",
+    priceWan: numberOrBlank(listing.priceWan),
+    energyType: listing.energyType || "unknown",
+    rangeKm: numberOrBlank(listing.range),
+    fitScore: score,
+    confidence: listing.riskFlags?.length ? "medium" : "high",
+    why: (listing.fitReasons || []).slice(0, 2).join("；") || "价格和画像匹配，适合作为二手备选继续核验。",
+    tradeoffs: (listing.riskFlags || []).slice(0, 3),
+    nextAction: "索要检测报告、出险记录、三电权益和成交前复检承诺。",
+    tags: [listing.city, listing.sourceType, listing.mileageWan !== "" ? `${listing.mileageWan}万公里` : ""].filter(Boolean),
+    sourceUrl: listing.url || ""
+  };
+}
+
+function garageCarToFallbackCandidate(car = {}) {
+  if (!car.name) return null;
+  return {
+    source: "garage",
+    carId: car.id,
+    name: car.name,
+    trim: car.trim || "",
+    priceWan: numberOrBlank(car.priceWan),
+    energyType: "new_energy",
+    rangeKm: numberOrBlank(car.rangeKm),
+    fitScore: clampScore(car.fitScore || 60),
+    confidence: "medium",
+    why: car.notes || "已在候选库中，适合继续和新车/二手车源对比。",
+    tradeoffs: car.risk?.risks?.slice(0, 3).map((risk) => risk.title).filter(Boolean) || [],
+    nextAction: "补齐信息墙和试驾记录后再判断。",
+    tags: [car.city, car.source].filter(Boolean),
+    sourceUrl: ""
+  };
+}
+
+function fallbackReleaseScore(release = {}, profile = {}) {
+  let score = Number(release.fitScore || 58);
+  const price = numberOrBlank(release.priceMinWan);
+  const min = Number(profile.budgetMinWan || 24);
+  const max = Number(profile.budgetMaxWan || 31);
+  if (price !== "") {
+    if (price >= min - 2 && price <= max + 2) score += 8;
+    else if (price > max + 5) score -= 10;
+    else if (price < min - 8) score -= 3;
+  }
+  const text = `${release.brandName || ""} ${release.seriesName || ""}`;
+  if (/理想|蔚来|乐道|极氪|奥迪|小米|小鹏/i.test(text)) score += 6;
+  if (/i6|ES6|7X|Q6L|E7X|YU7|L80|GX|G7/i.test(text)) score += 6;
+  const range = firstRangeKm(release);
+  if (range >= Number(profile.minRangeKm || 650)) score += 5;
+  return clampScore(score);
+}
+
+function fallbackReleaseWhy(release = {}, profile = {}) {
+  const pieces = [];
+  if (energyAllowed(release.energyType, profile)) pieces.push("符合能源画像");
+  if (release.priceText) pieces.push(`价格 ${release.priceText}`);
+  const range = firstRangeKm(release);
+  if (range) pieces.push(`续航约 ${range}km`);
+  if ((release.fitReasons || []).length) pieces.push((release.fitReasons || [])[0]);
+  return pieces.slice(0, 3).join("；") || "与预算、能源和舒适取向较匹配。";
+}
+
+function fallbackReleaseTradeoffs(release = {}) {
+  const text = `${release.brandName || ""} ${release.seriesName || ""} ${release.carType || ""}`;
+  const tradeoffs = [];
+  if (/ES8|L80|大型|中大型|六座|七座/i.test(text)) tradeoffs.push("车身尺寸和停车便利性需试驾确认");
+  if (release.priceMinWan !== "" && Number(release.priceMinWan) > 31) tradeoffs.push("价格可能高于 30 万预算");
+  if (!firstRangeKm(release)) tradeoffs.push("续航/电池信息需继续核验");
+  if (!(release.models || []).length) tradeoffs.push("具体版本信息还需补齐");
+  return tradeoffs.slice(0, 3);
+}
+
+function firstRangeKm(release = {}) {
+  const text = (release.models || [])
+    .map((model) => [model.range, model.battery, model.name].filter(Boolean).join(" "))
+    .join(" ");
+  const match = text.match(/(\d{3,4})\s*(?:km|公里)?/i);
+  return match ? Number(match[1]) : "";
+}
+
+function energyAllowed(type = "unknown", profile = {}) {
+  const allowed = profile.energyTypes || [];
+  if (!allowed.length) return true;
+  if (allowed.length === 1 && allowed[0] === "ev") return type === "ev";
+  return allowed.includes(type) || (type === "new_energy" && allowed.some((item) => ["ev", "phev", "erev"].includes(item)));
+}
+
+function uniqueCandidateById() {
+  const seen = new Set();
+  return (candidate) => {
+    const key = `${candidate.source}:${candidate.seriesId || candidate.skuId || candidate.carId || candidate.name}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  };
+}
+
+function numberOrBlank(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : "";
+}
+
+function clampScore(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return 60;
+  return Math.max(0, Math.min(100, Math.round(number)));
 }
 
 function collectImages(payload) {
