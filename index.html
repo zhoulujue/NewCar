@@ -9,7 +9,7 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="format-detection" content="telephone=no">
     <title>NewCar 购车工作台</title>
-    <link rel="stylesheet" href="./styles.css?v=20260602-newcar-dedupe">
+    <link rel="stylesheet" href="./styles.css?v=20260602-ui-polish">
     <script src="./auth-config.js"></script>
     <script src="https://accounts.google.com/gsi/client" async defer></script>
   </head>
@@ -273,7 +273,7 @@
               </select>
             </div>
             <div class="newcar-source-row">
-              <span id="newcarStatus" class="muted">还没有刷新数据。</span>
+              <span id="newcarStatus" class="muted" aria-live="polite">还没有刷新数据。</span>
               <a href="https://www.dongchedi.com/" target="_blank" rel="noreferrer">打开懂车帝</a>
             </div>
           </section>
@@ -315,7 +315,7 @@
               </select>
             </div>
             <div class="usedcar-source-row">
-              <span id="usedcarStatus" class="muted">还没有刷新数据。</span>
+              <span id="usedcarStatus" class="muted" aria-live="polite">还没有刷新数据。</span>
               <a href="https://www.dongchedi.com/usedcar/x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x" target="_blank" rel="noreferrer">打开懂车帝二手车</a>
             </div>
           </section>
@@ -630,6 +630,6 @@
       </form>
     </dialog>
 
-    <script src="./app.js?v=20260602-newcar-dedupe"></script>
+    <script src="./app.js?v=20260602-ui-polish"></script>
   </body>
 </html>

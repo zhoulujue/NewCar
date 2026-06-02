@@ -1926,7 +1926,9 @@ function renderNewCars() {
   }
   const listReleases = releases.slice(1);
   spotlight.innerHTML = renderNewCarSpotlight(best);
-  grid.innerHTML = listReleases.map(renderNewCarCard).join("") || `<div class="muted">当前筛选只命中顶部这款车型。</div>`;
+  grid.innerHTML = listReleases.length
+    ? `${renderMarketListHeading("继续浏览车型", `${listReleases.length} 款`, "顶部已单独展示当前最匹配的一款。")}${listReleases.map(renderNewCarCard).join("")}`
+    : `<section class="panel market-empty-note"><h2>当前筛选只命中顶部这款车型</h2><p class="muted">可以切换筛选条件或刷新数据，继续扩展车型池。</p></section>`;
 }
 
 function getFilteredNewReleases() {
@@ -1958,6 +1960,7 @@ function renderNewCarSpotlight(release) {
     <section class="panel newcar-feature">
       <div class="newcar-feature-media">${release.coverUrl ? `<img src="${escapeAttr(release.coverUrl)}" alt="${escapeAttr(release.seriesName)}">` : `<span>${escapeHtml(release.seriesName)}</span>`}</div>
       <div class="newcar-feature-copy">
+        <span class="market-eyebrow">当前最匹配</span>
         <div class="chip-row tight">
           <span class="chip ok">适配度 ${fit}</span>
           ${renderReleaseSourceChips(release)}
@@ -1970,7 +1973,7 @@ function renderNewCarSpotlight(release) {
           ${reasons.map((reason) => `<span>${escapeHtml(reason)}</span>`).join("")}
         </div>
         <div class="card-actions">
-          <button data-add-release="${release.seriesId}" type="button">加入新车候选</button>
+          <button class="primary-card-action" data-add-release="${release.seriesId}" type="button">加入新车候选</button>
           <a href="${escapeAttr(release.dcdUrl)}" target="_blank" rel="noreferrer">车型页</a>
           ${release.articleUrl ? `<a href="${escapeAttr(release.articleUrl)}" target="_blank" rel="noreferrer">上市资讯</a>` : ""}
         </div>
@@ -2026,7 +2029,7 @@ function renderNewCarCard(release) {
           </div>
         ` : ""}
         <div class="card-actions">
-          <button data-add-release="${release.seriesId}" type="button">加入新车候选</button>
+          <button class="primary-card-action" data-add-release="${release.seriesId}" type="button">加入新车候选</button>
           <a href="${escapeAttr(release.dcdUrl)}" target="_blank" rel="noreferrer">懂车帝</a>
           ${release.articleUrl ? `<a href="${escapeAttr(release.articleUrl)}" target="_blank" rel="noreferrer">资讯</a>` : ""}
         </div>
@@ -2062,9 +2065,29 @@ function renderUsedCars() {
     return;
   }
 
-  const best = listings[0] || state.usedMarket.listings[0];
-  spotlight.innerHTML = best ? renderUsedCarSpotlight(best, officialCount) : "";
-  grid.innerHTML = listings.map(renderUsedCarCard).join("") || `<div class="muted">当前筛选条件下没有车源。</div>`;
+  const best = listings[0];
+  if (!best) {
+    spotlight.innerHTML = "";
+    grid.innerHTML = `<section class="panel market-empty-note"><h2>当前筛选条件下没有车源</h2><p class="muted">可以切换城市、风险筛选，或重新刷新懂车帝官方车源。</p></section>`;
+    return;
+  }
+  const listListings = listings.slice(1);
+  spotlight.innerHTML = renderUsedCarSpotlight(best, officialCount);
+  grid.innerHTML = listListings.length
+    ? `${renderMarketListHeading("继续浏览车源", `${listListings.length} 台`, "顶部已单独展示当前最值得先看的车源。")}${listListings.map(renderUsedCarCard).join("")}`
+    : `<section class="panel market-empty-note"><h2>当前筛选只命中顶部这台车源</h2><p class="muted">可以扩大城市范围、放宽风险筛选，或稍后重新刷新。</p></section>`;
+}
+
+function renderMarketListHeading(title, count, caption) {
+  return `
+    <div class="market-list-heading">
+      <div>
+        <h2>${escapeHtml(title)}</h2>
+        <p class="muted">${escapeHtml(caption)}</p>
+      </div>
+      <span>${escapeHtml(count)}</span>
+    </div>
+  `;
 }
 
 function getFilteredUsedListings() {
@@ -2094,6 +2117,7 @@ function renderUsedCarSpotlight(listing, officialCount) {
     <section class="panel usedcar-feature">
       <div class="usedcar-feature-media">${listing.image ? `<img src="${escapeAttr(listing.image)}" alt="${escapeAttr(listing.title)}">` : `<span>${escapeHtml(listing.seriesName)}</span>`}</div>
       <div class="usedcar-feature-copy">
+        <span class="market-eyebrow">优先核验车源</span>
         <div class="chip-row tight">
           <span class="chip ok">匹配度 ${usedListingClientScore(listing)}</span>
           <span class="chip official">${escapeHtml(listing.sourceType || "官方车源")}</span>
@@ -2109,7 +2133,7 @@ function renderUsedCarSpotlight(listing, officialCount) {
           ${risks.map((risk) => `<span>${escapeHtml(risk)}</span>`).join("")}
         </div>
         <div class="card-actions">
-          <button data-add-used-listing="${listing.skuId}" type="button">加入二手车源并分析</button>
+          <button class="primary-card-action" data-add-used-listing="${listing.skuId}" type="button">加入二手车源并分析</button>
           <a href="${escapeAttr(getExternalSourceUrl(listing))}" target="_blank" rel="noopener noreferrer">懂车帝详情</a>
         </div>
       </div>
@@ -2152,7 +2176,7 @@ function renderUsedCarCard(listing) {
           ${listing.riskFlags.slice(0, 4).map((risk) => `<span>${escapeHtml(risk)}</span>`).join("")}
         </div>
         <div class="card-actions">
-          <button data-add-used-listing="${listing.skuId}" type="button">加入二手车源</button>
+          <button class="primary-card-action" data-add-used-listing="${listing.skuId}" type="button">加入二手车源</button>
           <a href="${escapeAttr(getExternalSourceUrl(listing))}" target="_blank" rel="noopener noreferrer">打开详情</a>
         </div>
       </div>
