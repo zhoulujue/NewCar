@@ -486,14 +486,67 @@ function normalizeDrive(drive) {
 }
 
 function normalizeMarket(market = {}) {
+  const releases = Array.isArray(market.releases) ? market.releases.map(normalizeRelease).filter(Boolean) : [];
   return {
-    releases: Array.isArray(market.releases) ? market.releases.map(normalizeRelease).filter(Boolean) : [],
+    releases: mergeNormalizedReleases(releases),
     lastFetchedAt: market.lastFetchedAt || "",
     sourceUrl: market.sourceUrl || "",
     sourceLabel: market.sourceLabel || "懂车帝",
     profileSummary: market.profileSummary || "",
     error: market.error || ""
   };
+}
+
+function mergeNormalizedReleases(releases = []) {
+  const map = new Map();
+  for (const release of releases) {
+    const key = release.seriesId || `${release.brandName}-${release.seriesName}`;
+    if (!key) continue;
+    const existing = map.get(key);
+    map.set(key, existing ? mergeReleaseRecord(existing, release) : release);
+  }
+  return [...map.values()];
+}
+
+function mergeReleaseRecord(existing, incoming) {
+  const merged = { ...existing };
+  for (const [key, value] of Object.entries(incoming)) {
+    if (key === "sourceTypes" || key === "tags" || key === "highlights") {
+      merged[key] = unique([...(existing[key] || []), ...(value || [])]);
+    } else if (key === "models") {
+      merged.models = mergeReleaseModels(existing.models, value);
+    } else if (key === "news") {
+      merged.news = mergeReleaseNews(existing.news, value);
+    } else if (key === "score") {
+      merged.score = { ...existing.score, ...Object.fromEntries(Object.entries(value || {}).filter(([, fieldValue]) => fieldValue !== "")) };
+    } else if (key === "dimensions") {
+      merged.dimensions = { ...existing.dimensions, ...Object.fromEntries(Object.entries(value || {}).filter(([, fieldValue]) => fieldValue !== "")) };
+    } else if (isBlankValue(existing[key]) && !isBlankValue(value)) {
+      merged[key] = value;
+    }
+  }
+  return merged;
+}
+
+function mergeReleaseModels(existing = [], incoming = []) {
+  const map = new Map();
+  for (const model of [...existing, ...incoming]) {
+    const key = model.id || `${model.year}-${model.name}`;
+    if (!key) continue;
+    const current = map.get(key);
+    map.set(key, current ? { ...current, ...Object.fromEntries(Object.entries(model).filter(([, value]) => !isBlankValue(value))) } : model);
+  }
+  return [...map.values()];
+}
+
+function mergeReleaseNews(existing = [], incoming = []) {
+  const map = new Map();
+  for (const news of [...existing, ...incoming]) {
+    const key = news.url || news.title;
+    if (!key) continue;
+    if (!map.has(key)) map.set(key, news);
+  }
+  return [...map.values()];
 }
 
 function normalizeUsedMarket(usedMarket = {}) {
@@ -785,6 +838,23 @@ function signOut() {
 function numberOrBlank(value) {
   if (value === "" || value === undefined || value === null || Number.isNaN(Number(value))) return "";
   return Number(value);
+}
+
+function isBlankValue(value) {
+  return value === "" || value === undefined || value === null || (Array.isArray(value) && value.length === 0);
+}
+
+function unique(values = []) {
+  const seen = new Set();
+  const result = [];
+  for (const value of values) {
+    if (isBlankValue(value)) continue;
+    const key = String(value);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(value);
+  }
+  return result;
 }
 
 function numberOrDefault(value, fallback) {
@@ -1848,9 +1918,15 @@ function renderNewCars() {
     return;
   }
 
-  const best = releases[0] || state.market.releases[0];
-  spotlight.innerHTML = best ? renderNewCarSpotlight(best) : "";
-  grid.innerHTML = releases.map(renderNewCarCard).join("") || `<div class="muted">当前筛选条件下没有车型。</div>`;
+  const best = releases[0];
+  if (!best) {
+    spotlight.innerHTML = "";
+    grid.innerHTML = `<div class="muted">当前筛选条件下没有车型。</div>`;
+    return;
+  }
+  const listReleases = releases.slice(1);
+  spotlight.innerHTML = renderNewCarSpotlight(best);
+  grid.innerHTML = listReleases.map(renderNewCarCard).join("") || `<div class="muted">当前筛选只命中顶部这款车型。</div>`;
 }
 
 function getFilteredNewReleases() {
