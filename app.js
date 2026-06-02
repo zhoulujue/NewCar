@@ -248,7 +248,7 @@ const viewMeta = {
   garage: ["候选库", "把新车车型候选和二手具体车源分开管理，避免车型和车源混在一起。"],
   newcars: ["新车情报", "刷新懂车帝近期发布和热门车型，按你的偏好筛出值得关注的新车。"],
   usedcars: ["二手车", "拉取懂车帝官方直营车源，按你的预算、体感偏好和二手风险排序。"],
-  detail: ["候选库", "从列表进入详情层，集中看配置、车况、成本、风险和下一步核验。"],
+  detail: ["候选详情", "集中看配置、车况、成本、风险、信息墙和下一步核验。"],
   compare: ["对比", "按真实成本、i6体感、权益明确度和风险做取舍。"],
   drives: ["试驾", "记录前排舒适、静谧、底盘、车机、智驾和相对 i6 结论。"],
   risks: ["风险", "按候选类型提示新车待确认项或二手新能源风险。"],
@@ -1563,7 +1563,7 @@ function renderRequirementCandidateCard(candidate) {
       <p>${escapeHtml(candidate.why || "需要继续看配置、价格权益和试驾反馈。")}</p>
       ${candidate.tradeoffs.length ? `<div class="requirement-tradeoffs">${candidate.tradeoffs.slice(0, 3).map((item) => `<span>${escapeHtml(item)}</span>`).join("")}</div>` : ""}
       <div class="card-actions">
-        <button data-add-requirement-candidate="${candidate.id}" type="button">${actionLabel}</button>
+        <button class="primary-card-action" data-add-requirement-candidate="${candidate.id}" type="button">${actionLabel}</button>
         ${candidate.sourceUrl ? `<a href="${escapeAttr(candidate.sourceUrl)}" target="_blank" rel="noreferrer">外部信息</a>` : ""}
       </div>
     </article>
@@ -1870,10 +1870,10 @@ function renderGarageCard(car) {
           </div>
           <p class="card-note">${escapeHtml(car.nextAction || analyzeCar(car).risks[0]?.question || "补齐车源信息后再判断。")}</p>
           <div class="card-actions">
-            <button data-detail="${car.id}">查看详情</button>
+            <button class="primary-card-action" data-detail="${car.id}">查看详情</button>
             <button data-edit="${car.id}">编辑</button>
             <button data-risk="${car.id}">风险</button>
-            <button data-compare="${car.id}">${selectedCompare.has(car.id) ? "移出对比" : "加入对比"}</button>
+            <button class="${selectedCompare.has(car.id) ? "selected-card-action" : ""}" data-compare="${car.id}">${selectedCompare.has(car.id) ? "取消对比" : "加入对比"}</button>
             <button class="danger-action" data-remove-car="${car.id}">移出候选</button>
             ${car.url ? `<a href="${escapeAttr(getExternalSourceUrl(car))}" target="_blank" rel="noopener noreferrer">外部链接</a>` : ""}
           </div>
