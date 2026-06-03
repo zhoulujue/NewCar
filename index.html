@@ -9,7 +9,7 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="format-detection" content="telephone=no">
     <title>NewCar 购车工作台</title>
-    <link rel="stylesheet" href="./styles.css?v=20260602-full-ui-polish">
+    <link rel="stylesheet" href="./styles.css?v=20260603-v17-quality-grid">
     <script src="./auth-config.js"></script>
     <script src="https://accounts.google.com/gsi/client" async defer></script>
   </head>
@@ -25,12 +25,12 @@
         </div>
         <nav class="nav-list" aria-label="主导航">
           <button class="nav-button active" data-view="dashboard" data-mobile-label="总览">总览</button>
-          <button class="nav-button" data-view="garage" data-mobile-label="候选">候选库</button>
-          <button class="nav-button" data-view="newcars" data-mobile-label="新车">新车情报</button>
-          <button class="nav-button" data-view="usedcars" data-mobile-label="二手">二手车</button>
+          <button class="nav-button" data-view="garage" data-mobile-label="尽调">候选尽调</button>
+          <button class="nav-button" data-view="newcars" data-mobile-label="新车">新车观察</button>
+          <button class="nav-button" data-view="usedcars" data-mobile-label="车源">二手车源</button>
           <button class="nav-button" data-view="compare" data-mobile-label="对比">对比</button>
           <button class="nav-button" data-view="drives" data-mobile-label="试驾">试驾</button>
-          <button class="nav-button" data-view="risks" data-mobile-label="风险">风险</button>
+          <button class="nav-button" data-view="risks" data-mobile-label="风险">待关闭风险</button>
           <button class="nav-button" data-view="sellers" data-mobile-label="商家">商家</button>
         </nav>
         <div class="side-footer">
@@ -53,7 +53,7 @@
               <div id="authSignedOut" class="auth-signed-out">
                 <div>
                   <strong>账号</strong>
-                  <p class="muted">登录后按 Google 账号隔离本机数据。</p>
+                  <p class="muted">登录后按 Google 身份隔离本机数据。</p>
                 </div>
                 <div id="googleSignInButton" class="google-button"></div>
                 <div id="authSetupNotice" class="auth-setup muted"></div>
@@ -80,7 +80,7 @@
             <div class="panel-head requirement-head">
               <div>
                 <h2>用车画像</h2>
-                <span class="muted">先把长期偏好保存下来，再用 Gemini 按当前画像刷新新车和二手车候选。</span>
+                <span class="muted">先把长期偏好保存下来，再用 AI 按当前画像刷新新车和二手车候选。</span>
               </div>
               <div class="requirement-actions">
                 <button class="secondary-button" id="editRequirement" type="button">修改画像</button>
@@ -207,6 +207,7 @@
               <option value="all">全部阶段</option>
               <option value="watching">观察</option>
               <option value="contacted">已联系</option>
+              <option value="waiting-docs">等材料</option>
               <option value="test-drive">已试驾</option>
               <option value="negotiating">谈价</option>
               <option value="recheck">待复检</option>
@@ -326,7 +327,7 @@
         <section class="view" id="detailView">
           <div class="detail-topline">
             <div class="detail-breadcrumb">
-              <button class="text-button" id="backToGarage" type="button">返回候选库</button>
+              <button class="text-button" id="backToGarage" type="button">返回候选尽调</button>
               <span id="detailContextLabel">详情</span>
             </div>
             <label class="detail-selector">
@@ -337,7 +338,14 @@
               <button class="secondary-button" id="prevDetailCar" type="button">上一台</button>
               <button class="secondary-button" id="nextDetailCar" type="button">下一台</button>
               <button class="secondary-button" id="editCurrentCar">编辑候选</button>
-              <button class="secondary-button" id="exportChecklist">导出核验清单</button>
+              <details class="detail-more-actions">
+                <summary>更多操作</summary>
+                <div class="detail-more-menu">
+                  <button class="secondary-button" id="exportChecklist">导出核验清单</button>
+                  <button class="secondary-button" id="copyDecisionReport" type="button">复制决策报告</button>
+                  <button class="secondary-button" id="downloadDecisionReport" type="button">下载报告</button>
+                </div>
+              </details>
             </div>
           </div>
           <div class="detail-layout">
@@ -346,10 +354,43 @@
               <section id="detailGallery" class="panel"></section>
               <section class="panel">
                 <div class="panel-head">
+                  <div>
+                    <h2>决策报告预览</h2>
+                    <span class="muted">汇总画像匹配、成本、风险、证据、任务和日志</span>
+                  </div>
+                </div>
+                <div id="decisionReportPreview"></div>
+              </section>
+              <section class="panel">
+                <div class="panel-head">
                   <h2>真实成本</h2>
                   <span class="muted">含一次性费用、BaaS、智驾订阅和 3/5 年持有成本</span>
                 </div>
                 <div id="costPanel"></div>
+              </section>
+              <section class="panel">
+                <div class="panel-head">
+                  <div>
+                    <h2>质量与三电</h2>
+                    <span class="muted">车系级质量口碑 + 单车级 SOH、维保、故障码和三电质保</span>
+                  </div>
+                  <div class="panel-actions">
+                    <button class="primary-button" id="fetchQualityData" type="button">AI 检索质量线索</button>
+                    <button class="secondary-button" id="refreshQualityData" type="button">刷新评估</button>
+                    <button class="secondary-button" id="copyQualityQuestions" type="button">复制问商家清单</button>
+                  </div>
+                </div>
+                <div id="qualityPanel"></div>
+              </section>
+              <section class="panel">
+                <div class="panel-head">
+                  <div>
+                    <h2>价格时间线</h2>
+                    <span class="muted">记录报价、目标价、落地价和谈价变化</span>
+                  </div>
+                  <button class="secondary-button" id="addPriceEvent" type="button">记录当前报价</button>
+                </div>
+                <div id="priceTimeline"></div>
               </section>
               <section class="panel">
                 <div class="panel-head">
@@ -364,7 +405,7 @@
                     <h2>信息墙</h2>
                     <span class="muted">随手存聊天截图、检测照片、配置单、口头承诺和自己的判断</span>
                   </div>
-                  <button class="secondary-button" id="analyzeInfoWall" type="button">Gemini 分析</button>
+                  <button class="secondary-button" id="analyzeInfoWall" type="button">AI 分析</button>
                 </div>
                 <form id="evidenceForm" class="evidence-form">
                   <input id="evidenceTitle" class="input" placeholder="标题，可留空">
@@ -379,12 +420,26 @@
                 </form>
                 <div id="evidenceWall" class="evidence-grid"></div>
               </section>
+              <section class="panel">
+                <div class="panel-head">
+                  <h2>决策记录</h2>
+                  <span class="muted">任务、阶段、风险、价格和 AI 回填都会沉淀在这里</span>
+                </div>
+                <div id="decisionLog"></div>
+              </section>
             </div>
             <aside class="decision-rail">
               <section id="detailDecision" class="panel"></section>
+              <section id="workflowPanel" class="panel"></section>
               <section class="panel">
                 <div class="panel-head">
-                  <h2>为什么便宜</h2>
+                  <h2>尽调步骤</h2>
+                </div>
+                <div id="investigationSteps"></div>
+              </section>
+              <section class="panel">
+                <div class="panel-head">
+                  <h2>风险闭环</h2>
                 </div>
                 <div id="whyCheap" class="risk-list compact"></div>
               </section>
@@ -470,7 +525,7 @@
                 <h2>风险雷达</h2>
                 <div class="risk-head-actions">
                   <select id="riskCarSelect" class="select"></select>
-                  <button class="secondary-button" id="analyzeRiskCar" type="button">Gemini 重新分析</button>
+                  <button class="secondary-button" id="analyzeRiskCar" type="button">AI 重新分析</button>
                 </div>
               </div>
               <div id="riskDetail"></div>
@@ -516,6 +571,7 @@
             <select id="carStage" class="input">
               <option value="watching">观察</option>
               <option value="contacted">已联系</option>
+              <option value="waiting-docs">等材料</option>
               <option value="test-drive">已试驾</option>
               <option value="negotiating">谈价</option>
               <option value="recheck">待复检</option>
@@ -617,6 +673,47 @@
         </div>
 
         <label>选装/亮点<textarea id="carOptions" class="input" rows="3"></textarea></label>
+        <div class="form-section-title">质量与三电</div>
+        <div class="form-grid">
+          <label>投诉销量比<input id="carComplaintSalesRatio" class="input" type="number" step="0.01" placeholder="车质网，万分之"></label>
+          <label>三电投诉占比/%<input id="carThreeElectricShare" class="input" type="number" step="0.1"></label>
+          <label>召回/缺陷数量<input id="carRecallCount" class="input" type="number" step="1"></label>
+          <label>电池 SOH/%<input id="carBatterySoh" class="input" type="number" step="0.1"></label>
+          <label>维保记录
+            <select id="carMaintenanceStatus" class="input">
+              <option value="unknown">待确认</option>
+              <option value="missing">缺失</option>
+              <option value="partial">部分具备</option>
+              <option value="complete">完整</option>
+              <option value="clean">无异常</option>
+              <option value="issue">有异常</option>
+            </select>
+          </label>
+          <label>故障码/一致性
+            <select id="carTroubleCodeStatus" class="input">
+              <option value="unknown">待确认</option>
+              <option value="missing">缺失</option>
+              <option value="clean">无异常</option>
+              <option value="issue">有异常</option>
+            </select>
+          </label>
+          <label>三电质保
+            <select id="carWarrantyStatus" class="input">
+              <option value="unknown">待确认</option>
+              <option value="active">有效/随车</option>
+              <option value="expired">已过期</option>
+              <option value="not-transferable">不随车</option>
+            </select>
+          </label>
+          <label>电池/电驱维修
+            <select id="carBatteryRepairStatus" class="input">
+              <option value="unknown">待确认</option>
+              <option value="none">无记录</option>
+              <option value="repaired">有维修</option>
+            </select>
+          </label>
+        </div>
+        <label>质量数据备注<textarea id="carQualityNotes" class="input" rows="3" placeholder="召回是否已处理、车质网投诉关键词、J.D. Power/论坛口碑、SOH来源等"></textarea></label>
         <label>已知问题<textarea id="carIssues" class="input" rows="3"></textarea></label>
         <label>权益/检测备注<textarea id="carRightsNotes" class="input" rows="3"></textarea></label>
         <label>商家背调<textarea id="carSellerNotes" class="input" rows="3"></textarea></label>
@@ -630,6 +727,6 @@
       </form>
     </dialog>
 
-    <script src="./app.js?v=20260602-full-ui-polish"></script>
+    <script src="./app.js?v=20260603-v17-quality-grid"></script>
   </body>
 </html>

@@ -173,6 +173,7 @@ async function fetchOfficialUsedCars({ city, limit, pages, profile }) {
   const mergedListings = mergeUsedListings(payloads.flatMap((payload) => payload.listings || []));
   const cityListings = city === "全国" ? mergedListings : mergedListings.filter((listing) => listing.city === city);
   const listings = cityListings
+    .filter(isOfficialUsedListing)
     .filter((listing) => listingMatchesEnergyProfile(listing, profile))
     .sort((a, b) => b.fitScore - a.fitScore || usedPriceSort(a, profile) - usedPriceSort(b, profile))
     .slice(0, limit);
@@ -494,6 +495,10 @@ function listingMatchesEnergyProfile(listing, profile = {}) {
   if (profileRequiresPureEv(profile)) return listing.energyType === "ev";
   if (energyTypes.includes(listing.energyType)) return true;
   return listing.energyType === "new_energy" && energyTypes.some((type) => ["ev", "phev", "erev"].includes(type));
+}
+
+function isOfficialUsedListing(listing = {}) {
+  return /官方|自营|直营/.test(`${listing.sourceType || ""} ${listing.seller || ""} ${listing.authentication || ""} ${listing.officialHint || ""}`);
 }
 
 function scoreUsedListing(listing, profile = {}) {
@@ -990,12 +995,13 @@ function mergeReleases(items) {
   const map = new Map();
   for (const item of items) {
     if (!item?.seriesId) continue;
-    const existing = map.get(item.seriesId);
+    const key = releaseDedupKey(item);
+    const existing = map.get(key);
     if (!existing) {
-      map.set(item.seriesId, { ...item, tags: unique(item.tags || []), sourceTypes: unique(item.sourceTypes || []) });
+      map.set(key, { ...item, tags: unique(item.tags || []), sourceTypes: unique(item.sourceTypes || []) });
       continue;
     }
-    map.set(item.seriesId, {
+    map.set(key, {
       ...existing,
       ...Object.fromEntries(Object.entries(item).filter(([, value]) => value !== "" && value !== undefined && value !== null)),
       seriesName: existing.seriesName || item.seriesName,
@@ -1014,6 +1020,39 @@ function mergeReleases(items) {
     });
   }
   return [...map.values()].sort((a, b) => releaseSortScore(b) - releaseSortScore(a));
+}
+
+function releaseDedupKey(item = {}) {
+  const series = normalizeSeriesText(item.seriesName || "");
+  const brand = normalizeSeriesText(item.brandName || "");
+  const combined = normalizeSeriesText(`${item.brandName || ""}${item.seriesName || ""}`);
+  const alias = releaseAliasKey(series) || releaseAliasKey(combined);
+  if (alias) return `alias:${alias}`;
+  if (series && brand) return `name:${brand}:${series}`;
+  if (series) return `name:${series}`;
+  return `id:${item.seriesId}`;
+}
+
+function releaseAliasKey(value = "") {
+  const aliases = [
+    ["xiaomiyu7", "yu7", "小米yu7"],
+    ["xiaomisu7", "su7", "小米su7"],
+    ["xiaopenggx", "小鹏gx", "gxultrase"],
+    ["xiaopengg7", "小鹏g7"],
+    ["zeekr7x", "极氪7x"],
+    ["zeekr007gt", "极氪007gt", "007gt"],
+    ["lixiangi6", "理想i6"],
+    ["nioes6", "蔚来es6"],
+    ["nioes8", "蔚来es8"],
+    ["audie7x", "奥迪e7x"],
+    ["audiq6letron", "奥迪q6letron", "q6letron"],
+    ["onvol80", "乐道l80"],
+    ["luxeedr7", "智界r7"],
+    ["imls6", "智己ls6"]
+  ];
+  const normalized = normalizeSeriesText(value);
+  const match = aliases.find((group) => group.map(normalizeSeriesText).includes(normalized));
+  return match ? normalizeSeriesText(match[0]) : "";
 }
 
 function prioritizeDetailTargets(releases = []) {
