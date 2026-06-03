@@ -4,7 +4,8 @@ import assert from "node:assert/strict";
 import {
   chooseBestQualityEvidenceUrl,
   collectAttachmentPayloadStats,
-  guardQualityResultForProvider
+  guardQualityResultForProvider,
+  sanitizeSparseQualityFacts
 } from "../quality-safety.mjs";
 
 test("DeepSeek fallback strips ungrounded quality facts but keeps verification notes and sources", () => {
@@ -45,13 +46,13 @@ test("DeepSeek fallback strips ungrounded quality facts but keeps verification n
   assert.match(guarded.carPatch.qualityProfile.notes, /待核验/);
 });
 
-test("Grounded Gemini quality result keeps structured facts", () => {
+test("Grounded Gemini quality result keeps structured facts when values are positive evidence", () => {
   const result = {
     carPatch: {
       qualityProfile: {
         complaintSalesRatio: 18,
-        recallCount: 0,
-        recallNotes: "市场监管总局未检索到相关召回。",
+        recallCount: 2,
+        recallNotes: "市场监管总局召回公告显示存在 2 条覆盖目标车系的召回。",
         sources: [{ type: "official", label: "召回公告", url: "https://example.com/recall" }]
       }
     },
@@ -64,8 +65,71 @@ test("Grounded Gemini quality result keeps structured facts", () => {
   });
 
   assert.equal(guarded.carPatch.qualityProfile.complaintSalesRatio, 18);
-  assert.equal(guarded.carPatch.qualityProfile.recallCount, 0);
+  assert.equal(guarded.carPatch.qualityProfile.recallCount, 2);
   assert.equal(guarded.analysis.confidence, "high");
+});
+
+test("Grounded Gemini quality result does not treat zero or missing text as verified data", () => {
+  const result = {
+    carPatch: {
+      qualityProfile: {
+        complaintSalesRatio: 0,
+        complaintRank: "暂无排行",
+        threeElectricComplaintShare: 0,
+        recallCount: 0,
+        recallNotes: "新车刚发布，暂未检索到官方召回记录。",
+        studySummary: "第三方质量研究数据缺失",
+        ownerReputation: "车主口碑数据缺失",
+        sources: [
+          { type: "official", label: "召回检索入口", status: "AI已检索", url: "https://example.com/recall" },
+          { type: "complaint", label: "车质网检索入口", status: "AI已检索", url: "https://example.com/complaint" }
+        ]
+      }
+    },
+    analysis: { confidence: "high" }
+  };
+
+  const sanitized = sanitizeSparseQualityFacts(result);
+  const profile = sanitized.carPatch.qualityProfile;
+
+  assert.equal(profile.complaintSalesRatio, undefined);
+  assert.equal(profile.complaintRank, undefined);
+  assert.equal(profile.threeElectricComplaintShare, undefined);
+  assert.equal(profile.recallCount, undefined);
+  assert.equal(profile.recallNotes, undefined);
+  assert.equal(profile.studySummary, undefined);
+  assert.equal(profile.ownerReputation, undefined);
+  assert.equal(sanitized.sanitizedQualityFacts, true);
+  assert.deepEqual(sanitized.sanitizedFields.sort(), [
+    "complaintRank",
+    "complaintSalesRatio",
+    "ownerReputation",
+    "recallCount",
+    "recallNotes",
+    "studySummary",
+    "threeElectricComplaintShare"
+  ].sort());
+  assert.match(profile.notes, /未把.*0|暂无|缺失.*作为可核验质量数据/);
+});
+
+test("Unknown single-car quality statuses do not keep confidence high after sparse facts are removed", () => {
+  const result = {
+    carPatch: {
+      qualityProfile: {
+        complaintSalesRatio: 0,
+        maintenanceStatus: "unknown",
+        troubleCodeStatus: "missing",
+        warrantyStatus: "pending",
+        sources: [{ type: "complaint", label: "投诉检索入口", url: "https://example.com/complaint" }]
+      }
+    },
+    analysis: { confidence: "high" }
+  };
+
+  const sanitized = sanitizeSparseQualityFacts(result);
+
+  assert.equal(sanitized.carPatch.qualityProfile.complaintSalesRatio, undefined);
+  assert.equal(sanitized.analysis.confidence, "low");
 });
 
 test("Evidence URL uses the first real linked source", () => {

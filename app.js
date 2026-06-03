@@ -1380,16 +1380,33 @@ function hasInfoValue(item) {
   return Boolean(item.title || item.notes || item.url || item.attachments?.length || item.status === "valid");
 }
 
+const QUALITY_MISSING_TEXT_RE = /暂无|暂未|未见|未检索|未查询|未找到|未公开|未取得|未发现|无法|不能确认|缺失|缺少|不可得|没有|刚发布|尚未|不详|待核验|数据不足|无公开/;
+
+function hasPositiveQualityNumber(value) {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0;
+}
+
+function hasMeaningfulQualityText(value) {
+  if (typeof value !== "string") return false;
+  const text = value.trim();
+  return Boolean(text) && !QUALITY_MISSING_TEXT_RE.test(text);
+}
+
+function qualityPositiveNumberText(value, suffix, fallback) {
+  return hasPositiveQualityNumber(value) ? `${value}${suffix}` : fallback;
+}
+
 function assessCarQuality(car) {
   const profile = normalizeQualityProfile(car?.qualityProfile || {});
   const kind = carKind(car);
   const evidenceSignals = collectQualityEvidenceSignals(car);
   const sourceRows = buildQualitySourceRows(car, profile, evidenceSignals);
-  const hasComplaintData = profile.complaintSalesRatio !== "" || Boolean(profile.complaintRank);
-  const hasRecallData = profile.recallCount !== "" || Boolean(profile.recallNotes);
-  const hasStudyData = Boolean(profile.studySummary);
-  const hasReputationData = Boolean(profile.ownerReputation);
-  const hasSoh = profile.batterySoh !== "" || evidenceSignals.soh.length > 0;
+  const hasComplaintData = hasPositiveQualityNumber(profile.complaintSalesRatio) || hasMeaningfulQualityText(profile.complaintRank);
+  const hasRecallData = hasPositiveQualityNumber(profile.recallCount) || hasMeaningfulQualityText(profile.recallNotes);
+  const hasStudyData = hasMeaningfulQualityText(profile.studySummary);
+  const hasReputationData = hasMeaningfulQualityText(profile.ownerReputation);
+  const hasSoh = hasPositiveQualityNumber(profile.batterySoh) || evidenceSignals.soh.length > 0;
   const hasMaintenance = ["complete", "clean", "issue", "partial"].includes(profile.maintenanceStatus) || evidenceSignals.maintenance.length > 0;
   const hasTroubleCode = ["clean", "issue"].includes(profile.troubleCodeStatus) || evidenceSignals.troubleCode.length > 0;
   const hasWarranty = ["active", "expired", "not-transferable"].includes(profile.warrantyStatus) || evidenceSignals.warranty.length > 0;
@@ -1420,19 +1437,19 @@ function assessCarQuality(car) {
   score = Math.min(100, Math.round(score));
 
   const complaintRatio = numberOrBlank(profile.complaintSalesRatio);
-  if (complaintRatio !== "") {
+  if (hasPositiveQualityNumber(complaintRatio)) {
     if (complaintRatio >= 80) warnings.push(`投诉销量比 ${complaintRatio} 偏高，需要看三电关键词和同级排名。`);
     else if (complaintRatio <= 20) strengths.push(`投诉销量比 ${complaintRatio} 较低，可作为车系口碑正向线索。`);
   }
   const threeElectricShare = numberOrBlank(profile.threeElectricComplaintShare);
-  if (threeElectricShare !== "") {
+  if (hasPositiveQualityNumber(threeElectricShare)) {
     if (threeElectricShare >= 35) warnings.push(`三电相关投诉占比 ${threeElectricShare}% 偏高。`);
     else strengths.push(`三电相关投诉占比 ${threeElectricShare}% 未见明显集中。`);
   }
-  if (profile.recallCount !== "" && Number(profile.recallCount) > 0 && !/已处理|完成|覆盖/.test(profile.recallNotes)) {
+  if (hasPositiveQualityNumber(profile.recallCount) && !/已处理|完成|覆盖/.test(profile.recallNotes)) {
     warnings.push(`存在 ${profile.recallCount} 条召回/缺陷线索，需确认是否覆盖目标车并已处理。`);
   }
-  if (profile.batterySoh !== "" && Number(profile.batterySoh) < 92) warnings.push(`SOH ${profile.batterySoh}% 偏低，需复检电池一致性和快充/里程使用记录。`);
+  if (hasPositiveQualityNumber(profile.batterySoh) && Number(profile.batterySoh) < 92) warnings.push(`SOH ${profile.batterySoh}% 偏低，需复检电池一致性和快充/里程使用记录。`);
   if (profile.troubleCodeStatus === "issue") warnings.push("故障码或电池一致性读取存在异常。");
   if (profile.batteryRepairStatus === "repaired") warnings.push("存在电池包/电驱/电控维修记录，必须看维修明细。");
   if (profile.warrantyStatus === "not-transferable" || profile.warrantyStatus === "expired") warnings.push("三电质保不随车或已过期。");
@@ -1510,40 +1527,51 @@ function buildQualitySourceRows(car, profile, signals) {
   const rows = [];
   const sourceForType = (type) => {
     const sources = (profile.sources || []).filter((source) => source.type === type && (source.summary || source.url || source.label));
-    return sources.find((source) => source.url && !/待核验|兜底/.test(source.status || "")) || sources.find((source) => source.url) || sources[0];
+    return sources.find((source) => source.url && isVerifiedQualitySourceStatus(source.status)) || sources.find((source) => source.url) || sources[0];
   };
   const pushRow = (type, status, summary, meta = {}) => {
     const source = sourceForType(type);
-    const sourceIsVerificationOnly = /待核验|兜底/.test(source?.status || "");
+    const sourceCanOverride = source && isVerifiedQualitySourceStatus(source.status) && isPositiveQualityStatus(status);
     rows.push({
       type,
       grade: source?.grade || QUALITY_SOURCE_GRADES[type] || "",
       label: qualitySourceTypeLabel(type),
-      status: source && !sourceIsVerificationOnly ? source.status || status : status,
-      summary: source && !sourceIsVerificationOnly ? source.summary || summary : summary,
+      status: sourceCanOverride ? source.status || status : status,
+      summary: sourceCanOverride ? source.summary || summary : summary,
       updatedAt: source?.updatedAt || meta.updatedAt || "",
       url: source?.url || meta.url || "",
       count: meta.count || 0
     });
   };
+  const hasComplaintData = hasPositiveQualityNumber(profile.complaintSalesRatio) || hasMeaningfulQualityText(profile.complaintRank);
+  const hasRecallData = hasPositiveQualityNumber(profile.recallCount) || hasMeaningfulQualityText(profile.recallNotes);
+  const hasStudyData = hasMeaningfulQualityText(profile.studySummary);
+  const hasReputationData = hasMeaningfulQualityText(profile.ownerReputation);
+  const officialSource = sourceForType("official");
+  const complaintSource = sourceForType("complaint");
+  const studySource = sourceForType("study");
+  const reputationSource = sourceForType("reputation");
   pushRow("official",
-    profile.recallCount !== "" || profile.recallNotes || signals.recall.length ? "有数据" : "待补充",
-    profile.recallNotes || (signals.recall.length ? `${signals.recall.length} 条信息墙线索` : "查询官方召回/缺陷记录，确认是否覆盖目标车。"),
+    hasRecallData ? "有数据" : (officialSource?.url || signals.recall.length ? "入口待核验" : "待补充"),
+    hasRecallData ? profile.recallNotes || `官方召回/缺陷 ${profile.recallCount} 条` : (signals.recall.length ? `${signals.recall.length} 条信息墙线索，需打开来源核验。` : "未取得可核验官方召回/缺陷结论，需打开市场监管总局或品牌公告核验。"),
     { count: signals.recall.length, updatedAt: profile.updatedAt }
   );
   pushRow("complaint",
-    profile.complaintSalesRatio !== "" || profile.complaintRank || signals.complaint.length ? "有数据" : "待补充",
-    profile.complaintSalesRatio !== "" ? `投诉销量比 ${profile.complaintSalesRatio}${profile.complaintRank ? `，${profile.complaintRank}` : ""}` : (signals.complaint.length ? `${signals.complaint.length} 条投诉口碑线索` : "补车质网投诉销量比、三电投诉关键词和趋势。"),
+    hasComplaintData ? "有数据" : (complaintSource?.url || signals.complaint.length ? "入口待核验" : "待补充"),
+    hasComplaintData ? [
+      hasPositiveQualityNumber(profile.complaintSalesRatio) ? `投诉销量比 ${profile.complaintSalesRatio}` : "",
+      hasMeaningfulQualityText(profile.complaintRank) ? profile.complaintRank : ""
+    ].filter(Boolean).join("，") : (signals.complaint.length ? `${signals.complaint.length} 条投诉口碑线索，需补车质网口径。` : "未取得可核验投诉销量比，不能按 0 处理。"),
     { count: signals.complaint.length, updatedAt: profile.updatedAt }
   );
   pushRow("study",
-    profile.studySummary || signals.study.length ? "有线索" : "可选",
-    profile.studySummary || (signals.study.length ? `${signals.study.length} 条质量研究线索` : "J.D. Power 等第三方研究只作为初期质量参考。"),
+    hasStudyData ? "有线索" : (studySource?.url || signals.study.length ? "入口待核验" : "可选"),
+    hasStudyData ? profile.studySummary : (signals.study.length ? `${signals.study.length} 条质量研究线索，需确认是否覆盖目标车型。` : "未取得 J.D. Power/长期测试等第三方质量结论。"),
     { count: signals.study.length, updatedAt: profile.updatedAt }
   );
   pushRow("reputation",
-    profile.ownerReputation || signals.reputation.length ? "有线索" : "可选",
-    profile.ownerReputation || (signals.reputation.length ? `${signals.reputation.length} 条车主口碑线索` : "论坛/口碑只作为问题发现线索，不直接关闭风险。"),
+    hasReputationData ? "有线索" : (reputationSource?.url || signals.reputation.length ? "入口待核验" : "可选"),
+    hasReputationData ? profile.ownerReputation : (signals.reputation.length ? `${signals.reputation.length} 条车主口碑线索，需看高频问题是否集中在三电。` : "未取得可复核车主口碑结论，论坛/口碑只作为问题发现线索。"),
     { count: signals.reputation.length, updatedAt: profile.updatedAt }
   );
   pushRow("single",
@@ -1554,10 +1582,18 @@ function buildQualitySourceRows(car, profile, signals) {
   return rows;
 }
 
+function isVerifiedQualitySourceStatus(status = "") {
+  return /有数据|有证据|有线索|已核验/.test(status) && !/待核验|兜底|入口|缺失|缺少|暂无|未取得/.test(status);
+}
+
+function isPositiveQualityStatus(status = "") {
+  return /有数据|有证据|有线索|已核验/.test(status);
+}
+
 function buildSingleCarQualitySummary(profile, signals, car) {
   if (carKind(car) === "new") return "新车重点看车系质量数据、首批质量和官方召回。";
   const parts = [
-    profile.batterySoh !== "" ? `SOH ${profile.batterySoh}%` : signals.soh.length ? "已有 SOH 线索" : "SOH 缺失",
+    hasPositiveQualityNumber(profile.batterySoh) ? `SOH ${profile.batterySoh}%` : signals.soh.length ? "已有 SOH 线索" : "SOH 缺失",
     ["complete", "clean", "issue", "partial"].includes(profile.maintenanceStatus) ? `维保${qualityStatusLabel(profile.maintenanceStatus)}` : signals.maintenance.length ? "已有维保线索" : "维保缺失",
     ["clean", "issue"].includes(profile.troubleCodeStatus) ? `故障码${qualityStatusLabel(profile.troubleCodeStatus)}` : signals.troubleCode.length ? "已有故障码线索" : "故障码缺失",
     ["active", "expired", "not-transferable"].includes(profile.warrantyStatus) ? `三电质保${qualityStatusLabel(profile.warrantyStatus)}` : signals.warranty.length ? "已有质保线索" : "三电质保缺失"
@@ -1581,7 +1617,7 @@ function buildQualityQuestions(car, missingItems, profile, warnings) {
   if (missingItems.includes("三电质保是否随车")) add("请提供官方系统截图，确认三电质保是否随车、剩余多久、是否受过户影响。");
   if (missingItems.includes("车质网投诉销量比")) add("请补充车质网投诉销量比、同级排名和三电投诉关键词。");
   if (missingItems.includes("官方召回/缺陷记录")) add("请核对官方召回/缺陷记录，确认目标 VIN 是否涉及且是否已处理。");
-  if (profile.recallCount !== "" && Number(profile.recallCount) > 0) add("这台车是否涉及相关召回？如果涉及，请提供已处理证明。");
+  if (hasPositiveQualityNumber(profile.recallCount)) add("这台车是否涉及相关召回？如果涉及，请提供已处理证明。");
   if (warnings.some((item) => /SOH/.test(item))) add("SOH 偏低的原因是什么？是否可用价格、质保或合同条款覆盖？");
   if (!questions.length) add(carKind(car) === "used" ? "付款前仍建议做三电专项复检，并把质保和故障码结果写入合同附件。" : "继续观察首批车质量、官方召回和车主长期口碑。");
   return questions;
@@ -3959,7 +3995,7 @@ function renderQualityAiSources(sources = []) {
 }
 
 function renderQualitySourceCard(row) {
-  const stateClass = /缺失|待补|待核验|兜底/.test(row.status) ? "warn" : /有数据|有证据|有线索|AI已检索/.test(row.status) ? "ok" : "info";
+  const stateClass = /缺失|缺少|待补|待核验|入口|兜底|暂无|未取得/.test(row.status) ? "warn" : /有数据|有证据|有线索|已核验/.test(row.status) ? "ok" : "info";
   return `
     <article class="quality-source-card ${stateClass}">
       <div>
@@ -3985,9 +4021,9 @@ function qualitySummaryText(quality) {
 function qualityIssueDistribution(car, quality) {
   const profile = quality.profile;
   return [
-    ["动力电池", profile.batterySoh !== "" ? `SOH ${profile.batterySoh}%` : quality.evidenceSignals.soh.length ? "有 SOH 线索" : "待补 SOH"],
+    ["动力电池", hasPositiveQualityNumber(profile.batterySoh) ? `SOH ${profile.batterySoh}%` : quality.evidenceSignals.soh.length ? "有 SOH 线索" : "待补 SOH"],
     ["电机/电控", quality.evidenceSignals.repair.length || profile.batteryRepairStatus !== "unknown" ? qualityStatusLabel(profile.batteryRepairStatus) : "待查维修"],
-    ["充电/补能", profile.threeElectricComplaintShare !== "" ? `${profile.threeElectricComplaintShare}% 三电投诉` : "待查投诉"],
+    ["充电/补能", qualityPositiveNumberText(profile.threeElectricComplaintShare, "% 三电投诉", "待查投诉")],
     ["故障码", qualityStatusLabel(profile.troubleCodeStatus)],
     ["维保记录", qualityStatusLabel(profile.maintenanceStatus)],
     ["三电质保", qualityStatusLabel(profile.warrantyStatus)]
@@ -4046,10 +4082,10 @@ function buildDecisionReport(car) {
     `- 质量可信度：${qualityLevelLabel(quality.confidenceLevel)}`,
     `- 三电风险：${qualityRiskLabel(quality.threeElectricRisk)}`,
     `- 证据完整度：${quality.evidenceCompleteness}%`,
-    `- 投诉销量比：${quality.profile.complaintSalesRatio === "" ? "待补" : quality.profile.complaintSalesRatio}`,
-    `- 三电投诉占比：${quality.profile.threeElectricComplaintShare === "" ? "待补" : `${quality.profile.threeElectricComplaintShare}%`}`,
-    `- 召回/缺陷：${quality.profile.recallCount === "" ? "待查" : `${quality.profile.recallCount} 条`} ${quality.profile.recallNotes || ""}`.trim(),
-    `- SOH：${quality.profile.batterySoh === "" ? (quality.hasSoh ? "有线索，需确认数值" : "缺失") : `${quality.profile.batterySoh}%`}`,
+    `- 投诉销量比：${hasPositiveQualityNumber(quality.profile.complaintSalesRatio) ? quality.profile.complaintSalesRatio : "待补"}`,
+    `- 三电投诉占比：${hasPositiveQualityNumber(quality.profile.threeElectricComplaintShare) ? `${quality.profile.threeElectricComplaintShare}%` : "待补"}`,
+    `- 召回/缺陷：${hasPositiveQualityNumber(quality.profile.recallCount) ? `${quality.profile.recallCount} 条` : "待查"} ${hasMeaningfulQualityText(quality.profile.recallNotes) ? quality.profile.recallNotes : ""}`.trim(),
+    `- SOH：${hasPositiveQualityNumber(quality.profile.batterySoh) ? `${quality.profile.batterySoh}%` : (quality.hasSoh ? "有线索，需确认数值" : "缺失")}`,
     `- 维保/故障码/质保：${qualityStatusLabel(quality.profile.maintenanceStatus)} / ${qualityStatusLabel(quality.profile.troubleCodeStatus)} / ${qualityStatusLabel(quality.profile.warrantyStatus)}`,
     ...(quality.missingItems.length ? quality.missingItems.map((item) => `- 待补：${item}`) : ["- 质量证据暂无关键缺口"]),
     ...(quality.warnings.length ? quality.warnings.map((item) => `- 质量警示：${item}`) : ["- 暂无明确质量警示"]),
@@ -4787,7 +4823,7 @@ function renderCompare() {
       const quality = assessCarQuality(car);
       const profile = quality.profile;
       return [
-        profile.batterySoh !== "" ? `SOH ${profile.batterySoh}%` : quality.hasSoh ? "SOH有线索" : "SOH缺失",
+        hasPositiveQualityNumber(profile.batterySoh) ? `SOH ${profile.batterySoh}%` : quality.hasSoh ? "SOH有线索" : "SOH缺失",
         qualityStatusLabel(profile.maintenanceStatus),
         qualityStatusLabel(profile.warrantyStatus)
       ].join(" · ");
@@ -4795,8 +4831,8 @@ function renderCompare() {
     ["投诉/召回", (car) => {
       const profile = assessCarQuality(car).profile;
       return [
-        profile.complaintSalesRatio !== "" ? `投诉销量比 ${profile.complaintSalesRatio}` : "投诉待补",
-        profile.recallCount !== "" ? `召回 ${profile.recallCount}` : "召回待查"
+        hasPositiveQualityNumber(profile.complaintSalesRatio) ? `投诉销量比 ${profile.complaintSalesRatio}` : "投诉待补",
+        qualityPositiveNumberText(profile.recallCount, " 条召回", "召回待查")
       ].join(" · ");
     }],
     ["里程", (car) => formatNumber(car.mileage, "万km")],

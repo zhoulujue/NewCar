@@ -512,11 +512,14 @@ function buildQualityPrompt(payload, options = {}) {
 }
 
 字段要求：
-- 没找到精确数值时，不要编造 number 字段；可以在 summary/notes 中写“未找到公开精确数据”。
+- 没找到精确数值时，不要编造 number 字段；不要用 0 表示未知、暂无、未检索到或新车刚发布。未知就省略该字段，并在 summary/notes 中写“未找到公开精确数据”。
 - 如果找到来源，请把来源写入 qualityProfile.sources，url 必须是实际网页地址。
 - complaintSalesRatio 使用数值；如果来源是“每万辆投诉量/投诉销量比/PP100”，在 notes 说明口径。
 - threeElectricComplaintShare 是三电相关投诉占总投诉百分比，找不到就省略。
-- recallCount 是可核验召回/缺陷数量，不能确认覆盖目标车型时在 recallNotes 说明。
+- recallCount 是可核验召回/缺陷数量；如果只得到“未检索到/暂无召回/新车刚发布”，不要填写 recallCount 或 recallNotes，只在 notes 写成待核验线索。
+- studySummary / ownerReputation 必须写具体发现，例如“J.D. Power 2025 NEV-IQS 中该车系/同平台车型排名或 PP100 信息”。“数据缺失、暂无口碑、未找到资料”不能写入这些字段。
+- sources.status 只有在来源页面给出确切数字、榜单、召回公告或清晰口碑证据时才写“有数据/已核验/有线索”；如果只是搜索入口或没有精确结论，写“入口待核验”。
+- 新上市车型如果精确车型数据不足，可以补充同车系、同平台、上一款、品牌召回/投诉的背景线索，但必须在 summary 写清楚“这是背景线索，不等同于目标车型结论”。
 - 对二手车：batterySoh、maintenanceStatus、troubleCodeStatus、warrantyStatus 不得凭公开车系口碑推断；没有用户上传证据时保持 missing/unknown。
 - notes 要给出“是否影响购买”的判断，不要只罗列来源。
 - questions 要是用户下一步能直接问商家/4S/检测机构的问题。
@@ -812,7 +815,9 @@ function attachGroundingSources(result = {}, groundingMetadata = {}) {
 function ensureQualitySources(result = {}, payload = {}, provider = "") {
   const existingSources = result.carPatch?.qualityProfile?.sources || [];
   const hasLinkedSource = existingSources.some((source) => source.url);
-  if (provider === "gemini" && hasLinkedSource) return result;
+  if (provider === "gemini" && hasLinkedSource) {
+    return guardQualityResultForProvider(result, { provider, sourceFallback: false });
+  }
   const fallbackSources = buildQualitySearchSources(payload, provider);
   result.carPatch = result.carPatch || {};
   result.carPatch.qualityProfile = {
@@ -845,35 +850,35 @@ function buildQualitySearchSources(payload = {}, provider = "") {
   const shortName = payload.car?.name || carName || "目标车型";
   const makeSearchUrl = (query) => `https://www.baidu.com/s?wd=${encodeURIComponent(query)}`;
   const today = new Date().toISOString().slice(0, 10);
-  const status = provider === "gemini" ? "待核验" : "DeepSeek兜底待核验";
+  const status = provider === "gemini" ? "入口待核验" : "DeepSeek兜底待核验";
   return [
     {
       type: "official",
-      label: "官方召回/缺陷检索",
+      label: "市场监管总局/召回中心",
       status,
-      summary: `检索 ${shortName} 是否存在官方召回、缺陷调查或品牌公告。`,
-      url: makeSearchUrl(`site:samr.gov.cn ${carName} 召回 缺陷 三电`),
+      summary: `优先核验 ${shortName} 是否存在市场监管总局召回公告、缺陷调查或品牌官方公告。`,
+      url: makeSearchUrl(`site:samrdprc.org.cn OR site:samr.gov.cn ${carName} 召回 缺陷 调查`),
       updatedAt: today
     },
     {
       type: "complaint",
-      label: "车质网投诉/三电关键词检索",
+      label: "车质网投诉销量比",
       status,
-      summary: `检索 ${shortName} 的投诉销量比、投诉列表和电池/电机/电控/充电相关投诉。`,
-      url: makeSearchUrl(`site:12365auto.com ${carName} 投诉 电池 电机 电控 充电`),
+      summary: `核验 ${shortName} 的投诉销量比、投诉列表和电池/电机/电控/充电相关投诉。`,
+      url: makeSearchUrl(`site:12365auto.com ${carName} 投诉销量比 投诉 电池 电机 电控 充电`),
       updatedAt: today
     },
     {
       type: "study",
-      label: "第三方质量研究检索",
+      label: "J.D. Power/长期质量研究",
       status,
-      summary: `检索 ${shortName} 是否进入 J.D. Power、质量榜单或长期测试。`,
-      url: makeSearchUrl(`${carName} J.D. Power 质量 可靠性 投诉销量比`),
+      summary: `检索 ${shortName}、同车系或同平台是否进入 J.D. Power NEV-IQS、可靠性研究或长期测试。`,
+      url: makeSearchUrl(`${carName} J.D. Power NEV-IQS 质量 可靠性 长期测试`),
       updatedAt: today
     },
     {
       type: "reputation",
-      label: "车主口碑高频问题检索",
+      label: "车主口碑/高频问题",
       status,
       summary: `检索 ${shortName} 车主口碑中的高频质量问题和三电相关反馈。`,
       url: makeSearchUrl(`${carName} 车主口碑 三电 故障 电池 续航衰减`),

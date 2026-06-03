@@ -29,3 +29,11 @@ test("quality source cards use a readable responsive grid", async () => {
   assert.doesNotMatch(match[1], /repeat\(5,\s*minmax\(0,\s*1fr\)\)/);
   assert.match(match[1], /repeat\(auto-fit,/);
 });
+
+test("quality source cards do not mark AI-only searches as verified data", async () => {
+  const app = await readFile(new URL("app.js", root), "utf8");
+
+  assert.match(app, /入口待核验/);
+  assert.doesNotMatch(app, /有数据\|有证据\|有线索\|AI已检索/);
+  assert.match(app, /isVerifiedQualitySourceStatus/);
+});

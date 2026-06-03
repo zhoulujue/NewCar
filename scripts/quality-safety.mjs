@@ -16,7 +16,7 @@ const FACTUAL_QUALITY_FIELDS = [
 ];
 
 export function guardQualityResultForProvider(result = {}, { provider = "", sourceFallback = false } = {}) {
-  const guarded = cloneJson(result);
+  const guarded = sanitizeSparseQualityFacts(result);
   const needsGuard = provider !== "gemini" || sourceFallback || !hasLinkedQualitySource(guarded);
   if (!needsGuard) return guarded;
 
@@ -34,8 +34,46 @@ export function guardQualityResultForProvider(result = {}, { provider = "", sour
   };
   guarded.sourceFallback = true;
   guarded.sanitizedQualityFacts = true;
-  guarded.sanitizedFields = FACTUAL_QUALITY_FIELDS.filter((field) => Object.prototype.hasOwnProperty.call(profile, field));
+  guarded.sanitizedFields = mergeUnique([
+    ...(guarded.sanitizedFields || []),
+    ...FACTUAL_QUALITY_FIELDS.filter((field) => Object.prototype.hasOwnProperty.call(profile, field))
+  ]);
   return guarded;
+}
+
+export function sanitizeSparseQualityFacts(result = {}) {
+  const sanitized = cloneJson(result);
+  const profile = sanitized.carPatch?.qualityProfile;
+  if (!profile || typeof profile !== "object") return sanitized;
+
+  const removed = [];
+  const removeField = (field) => {
+    if (!Object.prototype.hasOwnProperty.call(profile, field)) return;
+    delete profile[field];
+    removed.push(field);
+  };
+
+  if (isNonPositiveNumber(profile.complaintSalesRatio)) removeField("complaintSalesRatio");
+  if (isNonPositiveNumber(profile.threeElectricComplaintShare)) removeField("threeElectricComplaintShare");
+  if (isNonPositiveNumber(profile.recallCount)) removeField("recallCount");
+  if (isNonPositiveNumber(profile.batterySoh)) removeField("batterySoh");
+
+  ["complaintRank", "recallNotes", "studySummary", "ownerReputation"].forEach((field) => {
+    if (isMissingQualityText(profile[field])) removeField(field);
+  });
+
+  if (!removed.length) return sanitized;
+
+  profile.notes = appendSparseDataNote(profile.notes, removed);
+  sanitized.sanitizedQualityFacts = true;
+  sanitized.sanitizedFields = mergeUnique([...(sanitized.sanitizedFields || []), ...removed]);
+  if (!hasFactualQualityData(profile)) {
+    sanitized.analysis = {
+      ...(sanitized.analysis || {}),
+      confidence: "low"
+    };
+  }
+  return sanitized;
 }
 
 export function chooseBestQualityEvidenceUrl(sources = []) {
@@ -68,6 +106,42 @@ function hasLinkedQualitySource(result = {}) {
 function appendVerificationNote(notes = "") {
   const line = "待核验：本次结果未获得可直接引用的联网 grounding，事实字段已暂缓回填。";
   return notes.includes(line) ? notes : [notes, line].filter(Boolean).join("\n");
+}
+
+function appendSparseDataNote(notes = "", removed = []) {
+  const line = `待核验：AI 返回了 ${removed.join("、")} 的 0、暂无或缺失表述，未把这些内容作为可核验质量数据写入。`;
+  return notes.includes(line) ? notes : [notes, line].filter(Boolean).join("\n");
+}
+
+function hasFactualQualityData(profile = {}) {
+  return FACTUAL_QUALITY_FIELDS.some((field) => {
+    if (!Object.prototype.hasOwnProperty.call(profile, field)) return false;
+    const value = profile[field];
+    if (typeof value === "number") return Number.isFinite(value) && value > 0;
+    if (typeof value === "string") return value.trim() && !isMissingQualityText(value) && !isUnknownQualityStatus(value);
+    return Boolean(value);
+  });
+}
+
+function isNonPositiveNumber(value) {
+  if (value === "" || value === null || value === undefined) return false;
+  const number = Number(value);
+  return Number.isFinite(number) && number <= 0;
+}
+
+function isMissingQualityText(value) {
+  if (typeof value !== "string") return false;
+  const text = value.trim();
+  if (!text) return false;
+  return /暂无|暂未|未见|未检索|未查询|未找到|未公开|未取得|未发现|无法|不能确认|缺失|缺少|不可得|没有|刚发布|尚未|不详|待核验|数据不足|无公开/.test(text);
+}
+
+function isUnknownQualityStatus(value = "") {
+  return /^(unknown|missing|pending)$/i.test(String(value).trim());
+}
+
+function mergeUnique(values = []) {
+  return [...new Set(values.filter(Boolean))];
 }
 
 function attachmentSizeBytes(attachment = {}) {
