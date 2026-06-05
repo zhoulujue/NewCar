@@ -270,20 +270,21 @@ let googleAuthReady = false;
 let googleAuthAttempts = 0;
 let state = normalizeState(loadState());
 let activeView = "dashboard";
+let activeDiscoverTab = "newcars";
 let selectedCarId = state.selectedCarId || state.cars[0]?.id || "";
 let selectedCompare = new Set(state.selectedCompare?.length ? state.selectedCompare : state.cars.slice(0, 3).map((car) => car.id));
 const viewScrollPositions = {};
 
 const viewMeta = {
   dashboard: ["总览", "一眼看到当前最值得看的车、关键风险和今天该做什么。"],
+  discover: ["发现", "新车看车型和节奏，二手看具体车源和交易风险。"],
   garage: ["候选尽调", "按阶段、完成度和未关闭风险管理候选，避免新车车型和二手车源混在一起。"],
-  newcars: ["新车观察", "刷新近期发布和热门车型，按你的画像筛出值得继续跟踪的新车。"],
-  usedcars: ["二手车源", "拉取懂车帝官方直营车源，按你的预算、体感偏好和二手风险排序。"],
   detail: ["候选详情", "集中看配置、车况、成本、风险闭环、信息墙和下一步核验。"],
   compare: ["对比", "按真实成本、i6体感、权益明确度和风险做取舍。"],
   drives: ["试驾", "记录前排舒适、静谧、底盘、车机、智驾和相对 i6 结论。"],
   risks: ["待关闭风险", "把每条风险标记为已证实、已排除、写入合同或接受风险。"],
-  sellers: ["商家", "聚合卖家身份、承诺、保障和车源风险。"]
+  sellers: ["商家", "聚合卖家身份、承诺、保障和车源风险。"],
+  report: ["报告", "成交前检查红线、证据完整度、成本和下一步动作。"]
 };
 
 function loadState() {
@@ -1398,6 +1399,16 @@ function hasMeaningfulQualityText(value) {
   return Boolean(text) && !QUALITY_MISSING_TEXT_RE.test(text);
 }
 
+function isMissingQualityText(value) {
+  if (typeof value !== "string") return false;
+  const text = value.trim();
+  return Boolean(text) && QUALITY_MISSING_TEXT_RE.test(text);
+}
+
+function isUnknownQualityStatus(value = "") {
+  return /^(unknown|missing|pending)$/i.test(String(value).trim());
+}
+
 function qualityPositiveNumberText(value, suffix, fallback) {
   return hasPositiveQualityNumber(value) ? `${value}${suffix}` : fallback;
 }
@@ -1543,6 +1554,7 @@ function buildQualitySourceRows(car, profile, signals) {
       label: qualitySourceTypeLabel(type),
       status: sourceCanOverride ? source.status || status : status,
       summary: sourceCanOverride ? source.summary || summary : summary,
+      value: meta.value ?? "",
       updatedAt: source?.updatedAt || meta.updatedAt || "",
       url: source?.url || meta.url || "",
       count: meta.count || 0
@@ -1559,7 +1571,7 @@ function buildQualitySourceRows(car, profile, signals) {
   pushRow("official",
     hasRecallData ? "有数据" : (officialSource?.url || signals.recall.length ? "入口待核验" : "待补充"),
     hasRecallData ? profile.recallNotes || `官方召回/缺陷 ${profile.recallCount} 条` : (signals.recall.length ? `${signals.recall.length} 条信息墙线索，需打开来源核验。` : "未取得可核验官方召回/缺陷结论，需打开市场监管总局或品牌公告核验。"),
-    { count: signals.recall.length, updatedAt: profile.updatedAt }
+    { count: signals.recall.length, updatedAt: profile.updatedAt, value: hasPositiveQualityNumber(profile.recallCount) ? profile.recallCount : profile.recallNotes }
   );
   pushRow("complaint",
     hasComplaintData ? "有数据" : (complaintSource?.url || signals.complaint.length ? "入口待核验" : "待补充"),
@@ -1567,24 +1579,71 @@ function buildQualitySourceRows(car, profile, signals) {
       hasPositiveQualityNumber(profile.complaintSalesRatio) ? `投诉销量比 ${profile.complaintSalesRatio}` : "",
       hasMeaningfulQualityText(profile.complaintRank) ? profile.complaintRank : ""
     ].filter(Boolean).join("，") : (signals.complaint.length ? `${signals.complaint.length} 条投诉口碑线索，需补车质网口径。` : "未取得可核验投诉销量比，不能按 0 处理。"),
-    { count: signals.complaint.length, updatedAt: profile.updatedAt }
+    { count: signals.complaint.length, updatedAt: profile.updatedAt, value: hasPositiveQualityNumber(profile.complaintSalesRatio) ? profile.complaintSalesRatio : profile.complaintRank }
   );
   pushRow("study",
     hasStudyData ? "有线索" : (studySource?.url || signals.study.length ? "入口待核验" : "可选"),
     hasStudyData ? profile.studySummary : (signals.study.length ? `${signals.study.length} 条质量研究线索，需确认是否覆盖目标车型。` : "未取得 J.D. Power/长期测试等第三方质量结论。"),
-    { count: signals.study.length, updatedAt: profile.updatedAt }
+    { count: signals.study.length, updatedAt: profile.updatedAt, value: profile.studySummary }
   );
   pushRow("reputation",
     hasReputationData ? "有线索" : (reputationSource?.url || signals.reputation.length ? "入口待核验" : "可选"),
     hasReputationData ? profile.ownerReputation : (signals.reputation.length ? `${signals.reputation.length} 条车主口碑线索，需看高频问题是否集中在三电。` : "未取得可复核车主口碑结论，论坛/口碑只作为问题发现线索。"),
-    { count: signals.reputation.length, updatedAt: profile.updatedAt }
+    { count: signals.reputation.length, updatedAt: profile.updatedAt, value: profile.ownerReputation }
   );
   pushRow("single",
     signals.soh.length || signals.maintenance.length || signals.troubleCode.length || signals.warranty.length ? "有证据" : (carKind(car) === "used" ? "缺失" : "新车不强制"),
     buildSingleCarQualitySummary(profile, signals, car),
-    { count: signals.soh.length + signals.maintenance.length + signals.troubleCode.length + signals.warranty.length, updatedAt: latestQualityEvidenceDate(signals) }
+    { count: signals.soh.length + signals.maintenance.length + signals.troubleCode.length + signals.warranty.length, updatedAt: latestQualityEvidenceDate(signals), value: hasPositiveQualityNumber(profile.batterySoh) ? profile.batterySoh : (signals.soh.length || signals.maintenance.length || signals.troubleCode.length || signals.warranty.length ? "evidence-lead" : "") }
   );
   return rows;
+}
+
+function classifyQualityEvidenceField(field, value, meta = {}) {
+  const normalizedValue = typeof value === "string" ? value.trim() : value;
+  const sourceStatus = String(meta.sourceStatus || meta.status || "").trim();
+  const sourceUrl = String(meta.sourceUrl || meta.url || "").trim();
+  const expected = meta.expected;
+  const hasSource = Boolean(sourceUrl);
+  const isLead = /入口|待核验|AI|兜底|线索/.test(sourceStatus);
+  const isVerified = /有数据|有证据|有线索|已核验|verified/i.test(sourceStatus) || hasSource;
+
+  if (expected !== undefined && normalizedValue !== "" && normalizedValue !== null && normalizedValue !== undefined && String(normalizedValue) !== String(expected)) {
+    return { state: "conflict", label: "证据冲突", verified: false };
+  }
+
+  if (typeof normalizedValue === "number" || (typeof normalizedValue === "string" && normalizedValue !== "" && !Number.isNaN(Number(normalizedValue)))) {
+    const number = Number(normalizedValue);
+    if (!Number.isFinite(number) || number <= 0) {
+      if (isLead && field !== "batterySoh") return { state: "lead", label: "待核验", verified: false };
+      return { state: "missing", label: "缺失", verified: false };
+    }
+    if (isVerified) return { state: "verified", label: "有证据", verified: true };
+    return { state: "lead", label: "待核验", verified: false };
+  }
+
+  if (!normalizedValue || isUnknownQualityStatus(normalizedValue) || isMissingQualityText(normalizedValue)) {
+    if (isLead) return { state: "lead", label: "待核验", verified: false };
+    return { state: "missing", label: "缺失", verified: false };
+  }
+
+  if (isVerified) return { state: "verified", label: "有证据", verified: true };
+  return { state: "lead", label: "待核验", verified: false };
+}
+
+function qualityEvidenceStateClass(state) {
+  switch (state) {
+    case "verified":
+      return "ok";
+    case "conflict":
+      return "danger";
+    case "lead":
+      return "warn";
+    case "missing":
+      return "missing";
+    default:
+      return "info";
+  }
 }
 
 function isVerifiedQualitySourceStatus(status = "") {
@@ -1715,6 +1774,72 @@ function riskCompletionSummary(car) {
     items,
     percent: items.length ? Math.round((closed.length / items.length) * 100) : 100
   };
+}
+
+function getRedlineItems(car) {
+  if (!car) return [];
+  const redlines = [];
+  const quality = assessCarQuality(car);
+  const isUsed = carKind(car) === "used";
+  const add = (key, title, detail, evidence) => {
+    redlines.push({ key, title, detail, evidence: evidence || "待补证" });
+  };
+
+  if (isUsed && !quality.hasSoh) add("redline-soh", "SOH 缺失", "二手电车没有电池健康度或等效三电专项证据。", "上传 SOH/电池一致性/压差截图");
+  if (isUsed && !quality.hasWarranty) add("redline-warranty", "三电质保不清", "未确认三电质保是否随车、剩余期限和过户影响。", "官方 App/客服截图");
+  if (isUsed && car.report !== "full") add("redline-report", "检测报告不完整", "基础检测不足以判断结构件、底盘和电池包。", "查博士/第三方完整报告");
+  if (isUsed && !quality.hasMaintenance) add("redline-maintenance", "维保/维修记录缺失", "无法确认是否存在三电维修、出险或异常维修。", "4S 维保/维修记录");
+  if (car.nop === "unknown" && /蔚来|NIO|理想|小鹏|极氪|智己|阿维塔|问界|乐道/i.test(`${car.name} ${car.source}`)) add("redline-rights", "智驾/权益转移不清", "辅助驾驶、首任权益、官方认证或平台保障仍未固化。", "品牌官方截图或合同条款");
+  if (car.battery === "unknown") add("redline-battery-owner", "电池产权不清", "买断、租电、欠费、BaaS 转移和后续买断规则未确认。", "电池产权/租赁状态截图");
+  if (car.price && car.newPrice && car.targetPrice && car.price > car.targetPrice * 1.05) add("redline-price", "价格安全垫不足", "当前报价仍高于目标价，二手优势可能不足。", "目标价谈判记录");
+  if (!car.url) add("redline-source-url", "原始车源无法复核", "缺少外部车源链接，不利于追踪状态、价格和平台保障。", "懂车帝/品牌官方车源链接");
+
+  const existing = new Map((car.riskItems || []).map((risk) => [risk.key, risk]));
+  return redlines.map((item) => {
+    const saved = existing.get(item.key);
+    return {
+      ...item,
+      status: saved?.status || "pending",
+      evidenceIds: saved?.evidenceIds || [],
+      updatedAt: saved?.updatedAt || ""
+    };
+  });
+}
+
+function getOpenRedlineItems(car) {
+  return getRedlineItems(car).filter((item) => !isRiskClosed(item));
+}
+
+function renderRedlineGate(car) {
+  const open = getOpenRedlineItems(car);
+  const all = getRedlineItems(car);
+  const quality = assessCarQuality(car);
+  if (!all.length) {
+    return `
+      <div class="redline-gate ok">
+        <div class="eyebrow">成交前红线</div>
+        <h2>暂无阻断项</h2>
+        <p class="muted">仍建议保留检测报告、合同承诺和付款记录作为成交证据。</p>
+      </div>
+    `;
+  }
+  return `
+    <div class="redline-gate ${open.length ? "blocked" : "ok"}">
+      <div class="eyebrow">成交前红线</div>
+      <h2>${open.length ? "暂不建议下订" : "红线已关闭"}</h2>
+      <p class="muted">${open.length ? `仍有 ${open.length} 项红线未关闭，质量可信度 ${qualityLevelLabel(quality.confidenceLevel)}，三电风险 ${qualityRiskLabel(quality.threeElectricRisk)}。` : "红线项均已关闭或接受，可以进入价格和合同复核。"}</p>
+      <div class="redline-list">
+        ${all.slice(0, 5).map((item) => `
+          <article class="redline-item ${isRiskClosed(item) ? "closed" : "open"}">
+            <span class="chip ${isRiskClosed(item) ? "ok" : "high"}">${isRiskClosed(item) ? "已关闭" : "红线"}</span>
+            <strong>${escapeHtml(item.title)}</strong>
+            <p>${escapeHtml(item.detail)}</p>
+            <small>${escapeHtml(item.evidence)}</small>
+          </article>
+        `).join("")}
+      </div>
+    </div>
+  `;
 }
 
 function getInvestigationProgress(car) {
@@ -2370,6 +2495,7 @@ function render() {
   renderAuth();
   renderNav();
   renderDashboard();
+  renderDiscover();
   renderGarage();
   renderNewCars();
   renderUsedCars();
@@ -2378,6 +2504,7 @@ function render() {
   renderDrives();
   renderRisks();
   renderSellers();
+  renderReport();
   renderTimeline();
   return saveState();
 }
@@ -2390,7 +2517,7 @@ function ensureSelectedCar() {
 
 function renderNav() {
   if (!viewMeta[activeView]) activeView = "dashboard";
-  const activeNavView = activeView === "detail" ? "garage" : activeView;
+  const activeNavView = activeView === "detail" || activeView === "risks" ? "garage" : activeView;
   document.querySelectorAll(".nav-button").forEach((button) => {
     const isActive = button.dataset.view === activeNavView;
     button.classList.toggle("active", isActive);
@@ -2405,8 +2532,9 @@ function renderNav() {
 }
 
 function setActiveView(view, { scroll = "restore" } = {}) {
-  if (!viewMeta[view]) return false;
-  if (view === activeView) {
+  const requestedView = resolveViewAlias(view);
+  if (!viewMeta[requestedView]) return false;
+  if (requestedView === activeView) {
     if (scroll === true || scroll === "top") {
       const saved = render();
       scrollPageToTop();
@@ -2415,7 +2543,7 @@ function setActiveView(view, { scroll = "restore" } = {}) {
     return true;
   }
   saveViewScrollPosition(activeView);
-  activeView = view;
+  activeView = requestedView;
   const saved = render();
   if (scroll === true || scroll === "top") {
     scrollPageToTop();
@@ -2423,6 +2551,18 @@ function setActiveView(view, { scroll = "restore" } = {}) {
     restoreViewScrollPosition(view);
   }
   return saved;
+}
+
+function resolveViewAlias(view) {
+  if (view === "newcars") {
+    activeDiscoverTab = "newcars";
+    return "discover";
+  }
+  if (view === "usedcars") {
+    activeDiscoverTab = "usedcars";
+    return "discover";
+  }
+  return view;
 }
 
 function scrollPageToTop() {
@@ -2445,6 +2585,36 @@ function restoreViewScrollPosition(view = activeView) {
   requestAnimationFrame(() => {
     window.scrollTo({ top: position.windowTop || 0, left: 0, behavior: "auto" });
     document.querySelector(".main")?.scrollTo?.({ top: position.mainTop || 0, left: 0, behavior: "auto" });
+  });
+}
+
+function renderDiscover() {
+  const summary = document.querySelector("#discoverProfileSummary");
+  if (summary) {
+    const requirement = state.userRequirement;
+    const chips = [
+      requirement.city || "北京",
+      peopleLabel(requirement.people),
+      energyPreferenceLabel(requirement.energyTypes),
+      `${formatWan(requirement.budgetMinWan)}-${formatWan(requirement.budgetMaxWan)}`,
+      requirement.referenceCar ? "i6 标尺" : "",
+      ...requirement.priorities.slice(0, 3).map((priority) => requirementPriorityLabels[priority] || priority)
+    ].filter(Boolean);
+    summary.innerHTML = `
+      <span class="profile-summary-label">使用画像</span>
+      <div>${chips.map((chip) => `<span>${escapeHtml(chip)}</span>`).join("")}</div>
+    `;
+  }
+
+  document.querySelectorAll("[data-discover-tab]").forEach((button) => {
+    const active = button.dataset.discoverTab === activeDiscoverTab;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-selected", String(active));
+  });
+  document.querySelectorAll("[data-discover-panel]").forEach((panel) => {
+    const active = panel.dataset.discoverPanel === activeDiscoverTab;
+    panel.classList.toggle("active", active);
+    panel.toggleAttribute("hidden", !active);
   });
 }
 
@@ -3620,6 +3790,8 @@ function renderDetail() {
     document.querySelector("#detailHero").innerHTML = `<div class="muted">暂无候选。</div>`;
     document.querySelector("#detailGallery").innerHTML = "";
     document.querySelector("#decisionReportPreview").innerHTML = "";
+    document.querySelector("#redlineGate").innerHTML = "";
+    document.querySelector("#detailDecision").innerHTML = "";
     document.querySelector("#qualityPanel").innerHTML = "";
     setQualityButtonState(false);
     return;
@@ -3671,6 +3843,7 @@ function renderDetail() {
 
   document.querySelector("#detailGallery").innerHTML = renderVehicleGallery(car);
   document.querySelector("#decisionReportPreview").innerHTML = renderDecisionReportPreview(car, workflow);
+  document.querySelector("#redlineGate").innerHTML = renderRedlineGate(car);
   document.querySelector("#detailDecision").innerHTML = `
     <div class="decision-score ${risk.level}">
       <div>
@@ -4007,14 +4180,18 @@ function renderQualityAiSources(sources = []) {
 }
 
 function renderQualitySourceCard(row) {
-  const stateClass = /缺失|缺少|待补|待核验|入口|兜底|暂无|未取得/.test(row.status) ? "warn" : /有数据|有证据|有线索|已核验/.test(row.status) ? "ok" : "info";
+  const evidenceState = classifyQualityEvidenceField(row.type, row.value, {
+    sourceStatus: row.status,
+    sourceUrl: row.url
+  });
+  const stateClass = qualityEvidenceStateClass(evidenceState.state);
   return `
     <article class="quality-source-card ${stateClass}">
       <div>
         <span class="quality-grade">${escapeHtml(row.grade)}</span>
         <h3>${escapeHtml(row.label)}</h3>
       </div>
-      <span class="chip ${stateClass}">${escapeHtml(row.status)}</span>
+      <span class="chip ${stateClass}">${escapeHtml(row.status || evidenceState.label)}</span>
       <p>${escapeHtml(row.summary)}</p>
       ${row.url ? `<a class="quality-source-link" href="${escapeAttr(row.url)}" target="_blank" rel="noopener noreferrer">查看来源</a>` : ""}
       ${row.updatedAt ? `<small>${escapeHtml(formatDateTime(row.updatedAt))}</small>` : ""}
@@ -4296,7 +4473,7 @@ async function fetchQualityDataWithAi() {
     const saved = render();
     showToast(saved ? qualityResultToast(result) : "质量线索已回填，但本机保存失败，请先导出备份。", saved ? "ok" : "danger");
   } catch (error) {
-      showToast(error?.message?.includes("Failed to fetch") ? "AI 质量线索服务未就绪，请检查线上服务或本机服务。" : error?.message || "质量线索检索失败。", "danger");
+      showToast(formatAiFailureMessage(error, { provider: "Gemini / DeepSeek", nextAction: "请检查质量线索服务，或先上传检测报告和车质网截图作为证据。" }), "danger");
   } finally {
     qualityAnalysisRunning = false;
     setQualityButtonState(false);
@@ -4711,22 +4888,49 @@ function renderInfoAnalysisPreview(item) {
   return `
     <div class="info-analysis-preview ${item.analysisStatus === "ready" ? "ready" : ""}">
       ${item.analysisResult?.imageAnalysisDowngraded ? `<p class="analysis-warning">图片未被本次兜底模型直接读取，请补充文字摘要后再分析。</p>` : ""}
-      ${summary ? `<p>${escapeHtml(summary)}</p>` : ""}
-      ${infoCard ? `
-        <div class="patch-preview-list">
-          ${infoCard.title ? `<span><strong>标题</strong>：${escapeHtml(String(infoCard.title).slice(0, 36))}</span>` : ""}
-          ${infoCard.status ? `<span><strong>状态</strong>：${escapeHtml(evidenceStatusLabel(infoCard.status))}</span>` : ""}
-          ${infoCard.notes ? `<span><strong>备注</strong>：${escapeHtml(String(infoCard.notes).slice(0, 36))}</span>` : ""}
-        </div>
-      ` : ""}
-      ${patchFields.length ? `
-        <div class="patch-preview-list">
-          ${patchFields.slice(0, 8).map((field) => `
-            <span><strong>${escapeHtml(carPatchFieldLabel(field))}</strong>${escapeHtml(formatPatchValue(item.analysisResult.carPatch[field]))}</span>
-          `).join("")}
-        </div>
-      ` : ""}
+      ${renderInfoAnalysisSections(item, { summary, patchFields, infoCard })}
       ${item.analysisStatus === "ready" ? `<small>请确认后再应用回填，系统不会自动覆盖候选信息。</small>` : ""}
+    </div>
+  `;
+}
+
+function renderInfoAnalysisSections(item, context = {}) {
+  const result = item.analysisResult || {};
+  const analysis = result.analysis || {};
+  const carPatch = result.carPatch || {};
+  const patchFields = context.patchFields || Object.keys(carPatch).filter((key) => !isBlankValue(carPatch[key]));
+  const infoCard = context.infoCard || result.infoCard || null;
+  const summary = context.summary || analysis.summary || result.summary || "";
+  const factItems = unique([
+    summary,
+    infoCard?.title ? `信息标题：${String(infoCard.title).slice(0, 42)}` : "",
+    infoCard?.notes ? `信息备注：${String(infoCard.notes).slice(0, 60)}` : "",
+    result.provider ? `分析来源：${aiProviderLabel(result)}${result.providerFallbackFrom ? "（备用模型）" : ""}` : ""
+  ]).filter(Boolean);
+  const patchItems = patchFields.slice(0, 8).map((field) => `${carPatchFieldLabel(field)}${formatPatchValue(carPatch[field])}`);
+  const riskItems = unique([
+    analysis.riskLevel ? `风险等级：${riskLabel(analysis.riskLevel)}` : "",
+    analysis.confidence ? `置信度：${analysis.confidence}` : "",
+    infoCard?.status === "conflict" ? "信息卡状态：有冲突" : "",
+    result.imageAnalysisDowngraded ? "截图/照片未被兜底模型直接读取，需要补充文字摘要。" : ""
+  ]).filter(Boolean);
+  const questionItems = normalizeStringArray(analysis.questions).slice(0, 4);
+  const sections = [
+    { title: "识别事实", items: factItems, empty: "暂无可识别事实" },
+    { title: "待确认回填", items: patchItems, empty: "暂无字段回填" },
+    { title: "发现风险", items: riskItems, empty: "暂无新增风险" },
+    { title: "下一步问题", items: questionItems, empty: "暂无新增问题" }
+  ];
+  return `
+    <div class="info-analysis-sections">
+      ${sections.map((section) => `
+        <section class="info-analysis-section ${section.items.length ? "" : "empty"}">
+          <h4>${escapeHtml(section.title)}</h4>
+          <ul>
+            ${(section.items.length ? section.items : [section.empty]).map((text) => `<li>${escapeHtml(text)}</li>`).join("")}
+          </ul>
+        </section>
+      `).join("")}
     </div>
   `;
 }
@@ -5094,6 +5298,63 @@ function renderSellers() {
       </article>
     `;
   }).join("") || `<div class="muted">暂无商家。</div>`;
+}
+
+function renderReport() {
+  const summary = document.querySelector("#reportSummary");
+  const redlines = document.querySelector("#reportRedlines");
+  if (!summary || !redlines) return;
+  const car = state.cars.find((item) => item.id === selectedCarId) || state.cars[0];
+  if (!car) {
+    summary.innerHTML = `<div class="muted">暂无候选，先从发现页或手动新增一台车。</div>`;
+    redlines.innerHTML = "";
+    return;
+  }
+  const workflow = getWorkflowForCar(car);
+  const quality = assessCarQuality(car);
+  const openRedlines = getOpenRedlineItems(car);
+  const conclusion = openRedlines.length
+    ? "可继续谈，但暂不建议下订"
+    : workflow.decision.label;
+  summary.innerHTML = `
+    <div class="report-hero ${openRedlines.length ? "blocked" : "ok"}">
+      <div>
+        <div class="eyebrow">当前报告对象</div>
+        <h2>${escapeHtml(car.name)} ${escapeHtml(car.trim || "")}</h2>
+        <p>${escapeHtml(conclusion)}。${escapeHtml(openRedlines.length ? `仍有 ${openRedlines.length} 项成交前红线未关闭。` : workflow.decision.detail)}</p>
+      </div>
+      <div class="report-hero-metrics">
+        <div><span>质量可信度</span><strong>${escapeHtml(qualityLevelLabel(quality.confidenceLevel))}</strong></div>
+        <div><span>三电风险</span><strong>${escapeHtml(qualityRiskLabel(quality.threeElectricRisk))}</strong></div>
+        <div><span>证据完整度</span><strong>${quality.evidenceCompleteness}%</strong></div>
+      </div>
+    </div>
+    ${renderDecisionReportPreview(car, workflow)}
+  `;
+  redlines.innerHTML = state.cars.map((item) => {
+    const open = getOpenRedlineItems(item);
+    const qualityState = assessCarQuality(item);
+    return `
+      <article class="report-redline-card ${open.length ? "blocked" : "ok"}">
+        <div class="panel-head compact-head">
+          <div>
+            <h3>${escapeHtml(item.name)} ${escapeHtml(item.trim || "")}</h3>
+            <div class="muted">${escapeHtml(carKindLabel(carKind(item)))} · ${escapeHtml(item.city || "未知城市")} · ${escapeHtml(item.seller || item.source || "未知来源")}</div>
+          </div>
+          <span class="chip ${open.length ? "high" : "ok"}">${open.length ? `${open.length} 项红线` : "红线清爽"}</span>
+        </div>
+        <p class="muted">质量 ${escapeHtml(qualityLevelLabel(qualityState.confidenceLevel))}，三电 ${escapeHtml(qualityRiskLabel(qualityState.threeElectricRisk))}，证据完整度 ${qualityState.evidenceCompleteness}%。</p>
+        <div class="redline-list">
+          ${(open.length ? open : getRedlineItems(item).slice(0, 2)).map((risk) => `
+            <div class="redline-item ${open.includes(risk) ? "open" : "closed"}">
+              <strong>${escapeHtml(risk.title)}</strong>
+              <p>${escapeHtml(risk.detail)}</p>
+            </div>
+          `).join("") || `<div class="muted">暂无成交阻断项。</div>`}
+        </div>
+      </article>
+    `;
+  }).join("") || `<div class="muted">暂无候选。</div>`;
 }
 
 function groupSellers() {
@@ -5552,11 +5813,11 @@ async function analyzeCurrentCarWithGemini({ auto = false, focusInfoId = "" } = 
     }
     if (auto) {
       if (!geminiUnavailableNotified) {
-        showToast("信息已保存；AI 分析服务未就绪，可稍后手动重试。", "warn");
+        showToast(`信息已保存；${formatAiFailureMessage(error, { nextAction: "稍后在信息墙点击重新分析。" })}`, "warn");
         geminiUnavailableNotified = true;
       }
     } else {
-      showToast(message.includes("Failed to fetch") ? "AI 分析服务未就绪，请检查线上服务或本机服务。" : message, "danger");
+      showToast(formatAiFailureMessage(message, { nextAction: "请检查线上服务或本机服务，然后点击 AI 分析重试。" }), "danger");
     }
   } finally {
     geminiAnalysisRunning = false;
@@ -5658,7 +5919,7 @@ async function analyzeRequirementAndCollectCars() {
     const fallback = buildLocalRequirementRecommendations(error?.message || "AI 推荐服务未就绪");
     applyRequirementAnalysis(fallback, "本地规则兜底");
     render();
-    showToast("AI 暂不可用，已先用本地规则给出候选。", "warn");
+    showToast(`${formatAiFailureMessage(error, { provider: "Gemini / DeepSeek", nextAction: "已使用本地规则兜底，恢复模型后可重新分析画像。" })} ${aiJobStatusText("local")}.`, "warn");
   } finally {
     requirementAnalysisRunning = false;
     setRequirementAnalyzeState(false);
@@ -5706,6 +5967,45 @@ function aiProviderLabel(result = {}) {
   if (provider === "DeepSeek" && result.providerFallbackFrom) return "DeepSeek";
   if (provider === "Gemini") return "Gemini";
   return provider || "AI";
+}
+
+function aiJobStatusText(status, details = {}) {
+  const provider = details.provider || "AI";
+  const reason = details.reason ? `：${details.reason}` : "";
+  switch (status) {
+    case "queued":
+      return "已加入分析队列";
+    case "running":
+      return `${provider} 正在分析`;
+    case "success":
+      return `${provider} 已生成待确认结果`;
+    case "fallback":
+      return `备用模型 ${provider} 已接管分析`;
+    case "local":
+      return `本地规则兜底已生成候选`;
+    case "failed":
+      return `AI 分析失败${reason}`;
+    default:
+      return "AI 状态待确认";
+  }
+}
+
+function formatAiFailureMessage(error, options = {}) {
+  const reason = normalizeAiFailureReason(error);
+  const provider = options.provider || "Gemini / DeepSeek";
+  const nextAction = options.nextAction || "请检查线上服务或本机服务配置，也可以稍后重试。";
+  return `AI 分析失败：${provider} 未完成请求，原因：${reason}。下一步：${nextAction}`;
+}
+
+function normalizeAiFailureReason(error) {
+  const message = String(error?.message || error || "未知错误").trim();
+  if (!message) return "未知错误";
+  if (/Failed to fetch|NetworkError|Load failed|fetch/i.test(message)) return "网络或服务不可达";
+  if (/API Key|GEMINI_API_KEY|DEEPSEEK_API_KEY|未找到|key_missing/i.test(message)) return "服务端 API Key 未配置";
+  if (/quota|429|rate limit|RESOURCE_EXHAUSTED/i.test(message)) return "模型额度或频率限制";
+  if (/timeout|超时/i.test(message)) return "请求超时";
+  if (/parse|JSON|schema|invalid_response/i.test(message)) return "模型返回格式不可解析";
+  return message.replace(/\s+/g, " ").slice(0, 160);
 }
 
 function buildRequirementGeminiPayload() {
@@ -5844,7 +6144,7 @@ function buildLocalRequirementRecommendations(error = "") {
   return {
     ok: true,
     error,
-    summary: "AI 暂时不可用，已用预算、续航、车身和舒适取向做本地排序；建议恢复 AI 后再细化取舍。",
+    summary: "已先用本地规则按预算、续航、车身和舒适取向排序；AI 接口恢复后可重新分析以细化取舍。",
     searchStrategy: "优先 30 万附近、长续航新能源、北京通勤友好、舒适/智能优先的近期发布或热门车型。",
     candidates: [...releaseCandidates, ...garageCandidates, ...usedCandidates]
       .sort((a, b) => b.fitScore - a.fitScore)
@@ -6630,6 +6930,14 @@ document.querySelectorAll(".nav-button").forEach((button) => {
   });
 });
 
+document.querySelectorAll("[data-discover-tab]").forEach((button) => {
+  button.addEventListener("click", () => {
+    activeDiscoverTab = button.dataset.discoverTab || "newcars";
+    setActiveView("discover", { scroll: "restore" });
+    renderDiscover();
+  });
+});
+
 document.body.addEventListener("click", (event) => {
   const viewLink = event.target.closest("[data-view-link]")?.dataset.viewLink;
   const detailId = event.target.closest("[data-detail]")?.dataset.detail;
@@ -6770,6 +7078,7 @@ document.querySelector("#nextDetailCar")?.addEventListener("click", () => switch
 document.querySelector("#exportChecklist").addEventListener("click", exportChecklist);
 document.querySelector("#copyDecisionReport")?.addEventListener("click", copyDecisionReport);
 document.querySelector("#downloadDecisionReport")?.addEventListener("click", downloadDecisionReport);
+document.querySelector("#copyActiveDecisionReport")?.addEventListener("click", copyDecisionReport);
 document.querySelector("#fetchQualityData")?.addEventListener("click", fetchQualityDataWithAi);
 document.querySelector("#refreshQualityData")?.addEventListener("click", refreshQualityAssessment);
 document.querySelector("#copyQualityQuestions")?.addEventListener("click", copyQualityQuestions);

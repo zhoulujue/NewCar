@@ -25,13 +25,12 @@
         </div>
         <nav class="nav-list" aria-label="主导航">
           <button class="nav-button active" data-view="dashboard" data-mobile-label="总览" type="button">总览</button>
+          <button class="nav-button" data-view="discover" data-mobile-label="发现" type="button">发现</button>
           <button class="nav-button" data-view="garage" data-mobile-label="尽调" type="button">候选尽调</button>
-          <button class="nav-button" data-view="newcars" data-mobile-label="新车" type="button">新车观察</button>
-          <button class="nav-button" data-view="usedcars" data-mobile-label="车源" type="button">二手车源</button>
           <button class="nav-button" data-view="compare" data-mobile-label="对比" type="button">对比</button>
           <button class="nav-button" data-view="drives" data-mobile-label="试驾" type="button">试驾</button>
-          <button class="nav-button" data-view="risks" data-mobile-label="风险" type="button">待关闭风险</button>
           <button class="nav-button" data-view="sellers" data-mobile-label="商家" type="button">商家</button>
+          <button class="nav-button" data-view="report" data-mobile-label="更多" type="button">报告</button>
         </nav>
         <div class="side-footer">
           <button class="ghost-button" id="exportData" type="button">导出 JSON</button>
@@ -185,7 +184,7 @@
             <section class="panel">
               <div class="panel-head">
                 <h2>今日待办</h2>
-                <button class="text-button" data-view-link="risks" type="button">查看风险</button>
+                <button class="text-button" data-view-link="garage" type="button">查看尽调</button>
               </div>
               <div id="actionList" class="action-list"></div>
             </section>
@@ -242,8 +241,22 @@
           <div id="carGrid" class="car-grid"></div>
         </section>
 
-        <section class="view" id="newcarsView">
-          <section class="panel newcar-refresh-panel">
+        <section class="view" id="discoverView">
+          <section class="panel discover-overview">
+            <div class="panel-head">
+              <div>
+                <h2>发现</h2>
+                <span class="muted">新车看车型和节奏，二手看具体车源和交易风险；刷新时统一使用首页画像。</span>
+              </div>
+              <div class="discover-tabs" role="tablist" aria-label="发现类型">
+                <button class="discover-tab active" data-discover-tab="newcars" role="tab" aria-selected="true" type="button">新车观察</button>
+                <button class="discover-tab" data-discover-tab="usedcars" role="tab" aria-selected="false" type="button">二手车源</button>
+              </div>
+            </div>
+            <div id="discoverProfileSummary" class="profile-summary-strip"></div>
+          </section>
+          <div id="discoverNewcarsPanel" class="discover-panel active" data-discover-panel="newcars" role="tabpanel">
+            <section class="panel newcar-refresh-panel">
             <div class="panel-head">
               <div>
                 <h2>新车与热门车型</h2>
@@ -280,10 +293,10 @@
           </section>
           <section id="newcarSpotlight" class="newcar-spotlight"></section>
           <div id="newcarGrid" class="newcar-grid"></div>
-        </section>
+          </div>
 
-        <section class="view" id="usedcarsView">
-          <section class="panel usedcar-refresh-panel">
+          <div id="discoverUsedcarsPanel" class="discover-panel" data-discover-panel="usedcars" role="tabpanel" hidden>
+            <section class="panel usedcar-refresh-panel">
             <div class="panel-head">
               <div>
                 <h2>懂车帝官方二手车源</h2>
@@ -322,6 +335,7 @@
           </section>
           <section id="usedcarSpotlight" class="usedcar-spotlight"></section>
           <div id="usedcarGrid" class="usedcar-grid"></div>
+          </div>
         </section>
 
         <section class="view" id="detailView">
@@ -349,7 +363,7 @@
             </div>
           </div>
           <div class="detail-layout">
-            <div class="detail-stack">
+            <div class="detail-stack" id="candidateDetailMain">
               <section id="detailHero" class="panel"></section>
               <section id="detailGallery" class="panel"></section>
               <section class="panel">
@@ -428,7 +442,8 @@
                 <div id="decisionLog"></div>
               </section>
             </div>
-            <aside class="decision-rail">
+            <aside class="decision-rail" id="candidateDecisionRail">
+              <section id="redlineGate" class="panel"></section>
               <section id="detailDecision" class="panel"></section>
               <section id="workflowPanel" class="panel"></section>
               <section class="panel">
@@ -547,6 +562,25 @@
             </div>
             <div id="sellerGrid" class="seller-grid"></div>
           </div>
+        </section>
+
+        <section class="view" id="reportView">
+          <section class="panel report-panel">
+            <div class="panel-head">
+              <div>
+                <h2>成交前报告</h2>
+                <span class="muted">红线未关闭时，不输出建议购买；先补齐证据、合同和价格安全垫。</span>
+              </div>
+              <button class="primary-button" id="copyActiveDecisionReport" type="button">复制当前报告</button>
+            </div>
+            <div id="reportSummary"></div>
+          </section>
+          <section class="panel">
+            <div class="panel-head">
+              <h2>所有候选红线</h2>
+            </div>
+            <div id="reportRedlines"></div>
+          </section>
         </section>
       </main>
     </div>

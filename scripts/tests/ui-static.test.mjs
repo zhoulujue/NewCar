@@ -75,3 +75,86 @@ test("external links and images are normalized before rendering or opening", asy
   assert.doesNotMatch(app, /window\.open\(car\.url/);
   assert.doesNotMatch(app, /href="\$\{escapeAttr\(source\.url \|\| "#"\)\}"/);
 });
+
+test("V1.3 desktop navigation is consolidated around discovery and reports", async () => {
+  const html = await readFile(new URL("index.html", root), "utf8");
+  const nav = html.match(/<nav class="nav-list"[\s\S]*?<\/nav>/)?.[0] || "";
+
+  for (const label of ["总览", "发现", "候选尽调", "对比", "试驾", "商家", "报告"]) {
+    assert.match(nav, new RegExp(`>${label}<`));
+  }
+
+  assert.doesNotMatch(nav, /data-view="newcars"/);
+  assert.doesNotMatch(nav, /data-view="usedcars"/);
+  assert.doesNotMatch(nav, /data-view="risks"/);
+  assert.match(html, /data-mobile-label="发现"/);
+  assert.match(html, /data-mobile-label="尽调"/);
+  assert.match(html, /data-mobile-label="更多"/);
+});
+
+test("mobile bottom navigation is capped at five primary entries", async () => {
+  const css = await readFile(new URL("styles.css", root), "utf8");
+  const mobileBlock = css.match(/@media \(max-width: 820px\) \{([\s\S]*?)\n\}/)?.[0] || "";
+
+  assert.match(css, /grid-template-columns: repeat\(5, minmax\(0, 1fr\)\)/);
+  assert.match(mobileBlock + css, /\.nav-button\[data-view="compare"\][\s\S]*?display: none/);
+  assert.match(mobileBlock + css, /\.nav-button\[data-view="sellers"\][\s\S]*?display: none/);
+});
+
+test("discovery view contains new-car and used-car segmented panels", async () => {
+  const html = await readFile(new URL("index.html", root), "utf8");
+
+  assert.match(html, /id="discoverView"/);
+  assert.match(html, /class="discover-tabs"/);
+  assert.match(html, /data-discover-tab="newcars"/);
+  assert.match(html, /data-discover-tab="usedcars"/);
+  assert.match(html, /id="discoverNewcarsPanel"/);
+  assert.match(html, /id="discoverUsedcarsPanel"/);
+});
+
+test("candidate detail uses semantic main and decision rail containers", async () => {
+  const html = await readFile(new URL("index.html", root), "utf8");
+  const css = await readFile(new URL("styles.css", root), "utf8");
+
+  assert.match(html, /id="candidateDetailMain"/);
+  assert.match(html, /id="candidateDecisionRail"/);
+  assert.match(html, /id="redlineGate"/);
+  assert.match(css, /#candidateDetailMain/);
+  assert.match(css, /#candidateDecisionRail/);
+  assert.match(css, /@media \(max-width: 1180px\)[\s\S]*?#candidateDecisionRail/);
+});
+
+test("browser quality cards classify missing, lead, verified, and conflict states", async () => {
+  const app = await readFile(new URL("app.js", root), "utf8");
+
+  assert.match(app, /function classifyQualityEvidenceField/);
+  assert.match(app, /function qualityEvidenceStateClass/);
+  assert.match(app, /case "conflict"/);
+  assert.match(app, /case "lead"/);
+  assert.match(app, /case "missing"/);
+  assert.match(app, /classifyQualityEvidenceField\(row\.type, row\.value/);
+});
+
+test("AI status copy exposes provider, failure reason, and fallback state", async () => {
+  const app = await readFile(new URL("app.js", root), "utf8");
+
+  assert.match(app, /function aiJobStatusText/);
+  assert.match(app, /function formatAiFailureMessage/);
+  assert.match(app, /AI 分析失败：/);
+  assert.match(app, /备用模型/);
+  assert.match(app, /本地规则兜底/);
+  assert.doesNotMatch(app, /AI 暂不可用，已先用本地规则给出候选。/);
+});
+
+test("information wall analysis preview is split into auditable sections", async () => {
+  const app = await readFile(new URL("app.js", root), "utf8");
+  const css = await readFile(new URL("styles.css", root), "utf8");
+
+  assert.match(app, /function renderInfoAnalysisSections/);
+  assert.match(app, /识别事实/);
+  assert.match(app, /待确认回填/);
+  assert.match(app, /发现风险/);
+  assert.match(app, /下一步问题/);
+  assert.match(app, /info-analysis-sections/);
+  assert.match(css, /\.info-analysis-sections/);
+});

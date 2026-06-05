@@ -99,6 +99,47 @@ export function collectAttachmentPayloadStats(infoWall = [], { warningBytes = 18
   };
 }
 
+export function classifyQualityEvidenceField(field, value, meta = {}) {
+  const normalizedValue = typeof value === "string" ? value.trim() : value;
+  const sourceStatus = String(meta.sourceStatus || meta.status || "").trim();
+  const sourceUrl = String(meta.sourceUrl || meta.url || "").trim();
+  const expected = meta.expected;
+  const hasSource = Boolean(sourceUrl);
+  const isLead = /入口|待核验|AI|兜底|线索/.test(sourceStatus);
+  const isVerified = /有数据|有证据|有线索|已核验|verified/i.test(sourceStatus) || hasSource;
+
+  if (expected !== undefined && normalizedValue !== "" && normalizedValue !== null && normalizedValue !== undefined && String(normalizedValue) !== String(expected)) {
+    return { state: "conflict", label: "证据冲突", verified: false };
+  }
+
+  if (typeof normalizedValue === "number" || (typeof normalizedValue === "string" && normalizedValue !== "" && !Number.isNaN(Number(normalizedValue)))) {
+    const number = Number(normalizedValue);
+    if (!Number.isFinite(number) || number <= 0) {
+      if (isLead && field !== "batterySoh") return { state: "lead", label: "待核验", verified: false };
+      return { state: "missing", label: "缺失", verified: false };
+    }
+    if (isVerified) return { state: "verified", label: "有证据", verified: true };
+    return { state: "lead", label: "待核验", verified: false };
+  }
+
+  if (!normalizedValue || isUnknownQualityStatus(normalizedValue) || isMissingQualityText(normalizedValue)) {
+    if (isLead) return { state: "lead", label: "待核验", verified: false };
+    return { state: "missing", label: "缺失", verified: false };
+  }
+
+  if (isVerified) return { state: "verified", label: "有证据", verified: true };
+  return { state: "lead", label: "待核验", verified: false };
+}
+
+export function summarizeQualityEvidenceState(items = []) {
+  return items.reduce((summary, item) => {
+    const state = item?.state || "missing";
+    summary[state] = (summary[state] || 0) + 1;
+    summary.total += 1;
+    return summary;
+  }, { verified: 0, lead: 0, missing: 0, conflict: 0, total: 0 });
+}
+
 function hasLinkedQualitySource(result = {}) {
   return Boolean(chooseBestQualityEvidenceUrl(result.carPatch?.qualityProfile?.sources || []));
 }

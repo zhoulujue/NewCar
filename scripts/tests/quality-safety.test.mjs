@@ -3,9 +3,11 @@ import assert from "node:assert/strict";
 
 import {
   chooseBestQualityEvidenceUrl,
+  classifyQualityEvidenceField,
   collectAttachmentPayloadStats,
   guardQualityResultForProvider,
-  sanitizeSparseQualityFacts
+  sanitizeSparseQualityFacts,
+  summarizeQualityEvidenceState
 } from "../quality-safety.mjs";
 
 test("DeepSeek fallback strips ungrounded quality facts but keeps verification notes and sources", () => {
@@ -150,4 +152,41 @@ test("Attachment payload stats warn before oversized AI requests", () => {
   assert.equal(stats.imageCount, 3);
   assert.equal(stats.shouldWarn, true);
   assert.equal(stats.tooLarge, false);
+});
+
+test("Quality evidence classifier treats zero SOH as missing instead of verified evidence", () => {
+  assert.deepEqual(classifyQualityEvidenceField("batterySoh", 0), {
+    state: "missing",
+    label: "缺失",
+    verified: false
+  });
+
+  assert.deepEqual(classifyQualityEvidenceField("batterySoh", 96.4, { sourceUrl: "https://example.com/soh" }), {
+    state: "verified",
+    label: "有证据",
+    verified: true
+  });
+});
+
+test("Quality evidence classifier separates AI leads from verified facts and conflicts", () => {
+  assert.equal(classifyQualityEvidenceField("recallCount", 0, { sourceStatus: "入口待核验" }).state, "lead");
+  assert.equal(classifyQualityEvidenceField("complaintSalesRatio", 12, { sourceUrl: "https://example.com/cq", sourceStatus: "有数据" }).state, "verified");
+  assert.equal(classifyQualityEvidenceField("warrantyStatus", "not-transferable", { expected: "active", sourceUrl: "https://example.com/warranty" }).state, "conflict");
+});
+
+test("Quality evidence summary counts verified, lead, missing, and conflict states", () => {
+  const summary = summarizeQualityEvidenceState([
+    classifyQualityEvidenceField("batterySoh", 0),
+    classifyQualityEvidenceField("recallCount", 0, { sourceStatus: "入口待核验" }),
+    classifyQualityEvidenceField("complaintSalesRatio", 12, { sourceUrl: "https://example.com/cq", sourceStatus: "有数据" }),
+    classifyQualityEvidenceField("warrantyStatus", "not-transferable", { expected: "active", sourceUrl: "https://example.com/warranty" })
+  ]);
+
+  assert.deepEqual(summary, {
+    verified: 1,
+    lead: 1,
+    missing: 1,
+    conflict: 1,
+    total: 4
+  });
 });
