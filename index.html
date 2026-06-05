@@ -9,7 +9,7 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="format-detection" content="telephone=no">
     <title>NewCar 购车工作台</title>
-    <link rel="stylesheet" href="./styles.css?v=20260605-v20-quality-starter">
+    <link rel="stylesheet" href="./styles.css?v=20260605-v21-evidence-action">
     <script src="./auth-config.js"></script>
     <script src="https://accounts.google.com/gsi/client" async defer></script>
   </head>
@@ -399,6 +399,16 @@
               <section class="panel">
                 <div class="panel-head">
                   <div>
+                    <h2>取证行动台</h2>
+                    <span class="muted">把缺失证据转成问商家、问检测机构和合同备注</span>
+                  </div>
+                  <button class="secondary-button" id="copyEvidenceActionPack" type="button">复制取证包</button>
+                </div>
+                <div id="evidenceActionPanel"></div>
+              </section>
+              <section class="panel">
+                <div class="panel-head">
+                  <div>
                     <h2>价格时间线</h2>
                     <span class="muted">记录报价、目标价、落地价和谈价变化</span>
                   </div>
@@ -761,6 +771,6 @@
       </form>
     </dialog>
 
-    <script src="./app.js?v=20260605-v20-quality-starter"></script>
+    <script src="./app.js?v=20260605-v21-evidence-action"></script>
   </body>
 </html>

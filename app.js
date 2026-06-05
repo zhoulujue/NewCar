@@ -3793,6 +3793,7 @@ function renderDetail() {
     document.querySelector("#redlineGate").innerHTML = "";
     document.querySelector("#detailDecision").innerHTML = "";
     document.querySelector("#qualityPanel").innerHTML = "";
+    document.querySelector("#evidenceActionPanel").innerHTML = "";
     setQualityButtonState(false);
     return;
   }
@@ -3876,6 +3877,7 @@ function renderDetail() {
     </div>
   `).join("");
   document.querySelector("#qualityPanel").innerHTML = renderQualityPanel(car);
+  document.querySelector("#evidenceActionPanel").innerHTML = renderEvidenceActionPanel(car);
   setQualityButtonState(qualityAnalysisRunning);
 }
 
@@ -4433,6 +4435,258 @@ function renderDecisionReportPreview(car, workflow) {
       <p>${escapeHtml(workflow.decision.detail)}</p>
     </div>
   `;
+}
+
+function clampEvidenceScore(value) {
+  return Math.max(0, Math.min(100, Math.round(Number(value) || 0)));
+}
+
+function uniqueActionItems(items, limit = 8) {
+  const seen = new Set();
+  return items
+    .map((item) => String(item || "").trim())
+    .filter(Boolean)
+    .filter((item) => {
+      const key = item.replace(/[，。；\s]+/g, "");
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, limit);
+}
+
+function buildEvidenceActionPlan(car) {
+  const kind = carKind(car);
+  const isUsed = kind === "used";
+  const quality = assessCarQuality(car);
+  const redlines = getOpenRedlineItems(car);
+  const riskSummary = riskCompletionSummary(car);
+  const workflow = getWorkflowForCar(car);
+  const evidenceCount = getCarEvidence(car.id).length;
+  const highOpenRisks = riskSummary.items.filter((item) => !isRiskClosed(item) && item.level === "high");
+  const qualityBlockers = quality.missingItems.slice(0, isUsed ? 5 : 3);
+  const blockers = uniqueActionItems([
+    ...redlines.map((item) => item.title),
+    ...highOpenRisks.map((item) => item.title),
+    ...quality.warnings,
+    ...qualityBlockers.map((item) => `缺 ${item}`)
+  ], 6);
+
+  let readiness = (quality.evidenceCompleteness * 0.36) + (workflow.progress.percent * 0.24) + (riskSummary.percent * 0.18);
+  readiness += evidenceCount ? 8 : 0;
+  readiness += (car.report === "full" || kind === "new") ? 8 : 0;
+  readiness += car.url ? 4 : 0;
+  readiness -= redlines.length * 8;
+  readiness -= highOpenRisks.length * 6;
+  readiness = clampEvidenceScore(readiness);
+
+  let gate = {
+    level: "warn",
+    label: "继续取证",
+    detail: "关键证据还不够完整，先把材料拿到，再进入复检或谈价。"
+  };
+  if (redlines.length || quality.threeElectricRisk === "high" || highOpenRisks.length) {
+    gate = {
+      level: "danger",
+      label: "先别付款",
+      detail: "仍有红线或高风险未关闭，只适合继续要材料、约复检或直接排除。"
+    };
+  } else if (readiness >= 74 && riskSummary.open <= 2) {
+    gate = {
+      level: "ok",
+      label: "可谈价",
+      detail: "证据相对完整，可以带着复检条件、风险折价和合同备注谈。"
+    };
+  } else if (readiness >= 56 && evidenceCount) {
+    gate = {
+      level: "info",
+      label: "可约复检",
+      detail: "基础信息已有一定依据，下一步重点看第三方复检是否能解释剩余风险。"
+    };
+  }
+
+  const sellerQuestions = uniqueActionItems([
+    ...workflow.questions,
+    ...quality.questions,
+    !car.url && "请发原始车源/车型链接，方便核对配置、价格、平台保障和下架状态。",
+    !car.seller && "请说明实际售卖主体：个人、平台自营、官方认证还是第三方车商？合同由谁签？",
+    isUsed && car.report !== "full" && "请提供完整检测报告、出险记录和维保记录原件，平台检测是否支持复检复核？",
+    isUsed && !quality.hasSoh && "请提供电池 SOH/健康度截图，最好包含检测日期、里程、电池一致性或压差。",
+    isUsed && !quality.hasMaintenance && "请提供 4S 维保/三电维修记录，确认是否更换过电池包、电机、电控或高压附件。",
+    isUsed && !quality.hasTroubleCode && "看车时能否读取 OBD 故障码、电池一致性和压差，并允许拍照留存？",
+    isUsed && !quality.hasWarranty && "请提供官方 App/客服截图，确认三电质保、整车质保、道路救援和首任权益是否随车。",
+    car.battery === "unknown" && "请提供电池产权、租电/BaaS、欠费和后续买断规则的官方截图。",
+    car.nop === "unknown" && "请提供智驾/NOP/NOA权益是否随车、是否需要重新订阅、二手车主是否同价的官方截图。",
+    car.city && !/北京/.test(car.city) && "请确认能否迁入北京，转籍、运输、临牌、提档、上牌和额外费用分别是多少？",
+    car.price && car.targetPrice && car.price > car.targetPrice && `当前报价比目标价高 ${formatWan(car.price - car.targetPrice)}，若复检或权益有缺口，最低可谈到多少？`
+  ], 8);
+
+  const inspectionQuestions = uniqueActionItems([
+    isUsed && "读取 OBD 故障码、BMS 数据、电池一致性/压差，并在报告里写明检测时间和里程。",
+    isUsed && "检测电池包底部、护板、托盘、冷却管路和高压线束是否有托底、拆装、渗漏或维修痕迹。",
+    isUsed && "复核漆膜、结构件、纵梁、A/B/C 柱、后围板、底盘和悬架连接点，排除追尾/泡水/火烧。",
+    isUsed && "核对 4S 维保、出险和维修记录，重点看三电、高压系统、空悬/CDC、转向和制动。",
+    isUsed && "做慢充/快充、能耗、热管理和空调测试，观察异常提示、充电中断和续航衰减。",
+    /空悬|魔毯|CDC|悬架/i.test(`${car.trim} ${car.notes}`) && "重点检查空悬/CDC 是否漏气、异响、升降异常，并记录维修价格。",
+    kind === "new" && "试驾时重点记录 NVH、底盘滤震、前排座椅、车机流畅度、高速 NOA 和充电体验。",
+    kind === "new" && "核对生产日期、交付批次、官方召回/缺陷公告、上市权益和 7-8 月价格/配置调整窗口。"
+  ], 7);
+
+  const contractClauses = uniqueActionItems([
+    isUsed && "写明若第三方复检发现结构件事故、泡水火烧、电池包/电驱重大维修或里程异常，订金/车款原路退回。",
+    isUsed && "写明 SOH、故障码、电池一致性、三电质保、维保记录以交付前截图/报告为准，并作为合同附件。",
+    car.battery === "unknown" && "写明电池产权或租电/BaaS状态、是否欠费、月租金额、买断规则和过户后的责任主体。",
+    car.nop === "unknown" && "写明智驾/NOP/NOA、车联网、保养、道路救援、官方认证和二手车主权益是否随车。",
+    "写明成交价包含/不包含的服务费、运输费、检测费、上牌费、保险、金融手续费和平台保障。",
+    "写明交付前价格、车况、权益或检测结论发生变化时，买方有权重新议价或取消交易。",
+    "所有口头承诺需要在合同、补充协议、平台聊天记录或盖章报价单中留痕。"
+  ], 7);
+
+  const nextSteps = uniqueActionItems([
+    gate.level === "danger" ? "先不要交大额定金，只要可复核材料和原始截图。" : "",
+    sellerQuestions.length ? "把问商家清单复制给卖方，要求一次性回复并提供截图/原件。" : "",
+    inspectionQuestions.length && (isUsed ? "确认商家是否接受第三方复检和举升检查，复检不过如何退款。" : "预约试驾，按 i6 体感标尺记录舒适、静音、车机和智驾。"),
+    "把商家回复、报告照片和聊天截图上传到信息墙，再刷新质量/风险评估。",
+    contractClauses.length ? "进入谈价前，把不能口头承诺的内容写进合同备注或补充协议。" : ""
+  ], 5);
+
+  return {
+    readiness,
+    gate,
+    blockers,
+    sellerQuestions,
+    inspectionQuestions,
+    contractClauses,
+    nextSteps,
+    quality,
+    redlines,
+    evidenceCount
+  };
+}
+
+function evidenceActionGateClass(level) {
+  return {
+    ok: "ok",
+    info: "info",
+    warn: "warn",
+    medium: "warn",
+    danger: "danger",
+    high: "danger"
+  }[level] || "warn";
+}
+
+function renderEvidenceActionList(items) {
+  if (!items.length) return `<div class="muted">暂无需要生成的动作。</div>`;
+  return `
+    <ol>
+      ${items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
+    </ol>
+  `;
+}
+
+function renderEvidenceScriptCard(title, subtitle, section, items) {
+  return `
+    <article class="evidence-script-card">
+      <div class="evidence-script-head">
+        <div>
+          <h3>${escapeHtml(title)}</h3>
+          <p>${escapeHtml(subtitle)}</p>
+        </div>
+        <button class="mini-button" data-copy-evidence-pack="${escapeAttr(section)}" type="button">复制</button>
+      </div>
+      ${renderEvidenceActionList(items)}
+    </article>
+  `;
+}
+
+function renderEvidenceActionPanel(car) {
+  const plan = buildEvidenceActionPlan(car);
+  const gateClass = evidenceActionGateClass(plan.gate.level);
+  return `
+    <div class="evidence-action-panel">
+      <div class="evidence-action-hero ${gateClass}">
+        <div>
+          <span>取证就绪度</span>
+          <strong>${plan.readiness}</strong>
+        </div>
+        <div>
+          <span class="chip ${gateClass}">${escapeHtml(plan.gate.label)}</span>
+          <p>${escapeHtml(plan.gate.detail)}</p>
+          ${plan.blockers.length ? `
+            <div class="evidence-blocker-row">
+              ${plan.blockers.map((item) => `<span>${escapeHtml(item)}</span>`).join("")}
+            </div>
+          ` : `<small>当前没有明显阻断项，但仍建议保留原始证明。</small>`}
+        </div>
+      </div>
+      <div class="evidence-action-grid">
+        ${renderEvidenceScriptCard("问商家清单", "适合直接发给卖方或销售，让对方一次性补材料。", "seller", plan.sellerQuestions)}
+        ${renderEvidenceScriptCard("检测机构清单", "适合约查博士/第三方复检时逐项确认。", "inspection", plan.inspectionQuestions)}
+        ${renderEvidenceScriptCard("合同备注", "适合进入谈价或锁定车源前，写进合同/补充协议。", "contract", plan.contractClauses)}
+      </div>
+      <div class="evidence-action-sequence">
+        <div class="evidence-sequence-head">
+          <h3>下一步顺序</h3>
+          <span>${plan.evidenceCount} 条信息墙证据 · 质量${qualityLevelLabel(plan.quality.confidenceLevel)} · 三电${qualityRiskLabel(plan.quality.threeElectricRisk)}</span>
+        </div>
+        ${renderEvidenceActionList(plan.nextSteps)}
+      </div>
+    </div>
+  `;
+}
+
+function formatEvidenceActionPack(car, section = "all") {
+  const plan = buildEvidenceActionPlan(car);
+  const groups = [
+    ["seller", "问商家清单", plan.sellerQuestions],
+    ["inspection", "检测机构清单", plan.inspectionQuestions],
+    ["contract", "合同备注", plan.contractClauses],
+    ["next", "下一步顺序", plan.nextSteps]
+  ];
+  const selectedGroups = section === "all" ? groups : groups.filter(([key]) => key === section);
+  const lines = [
+    `# ${car.name} ${car.trim || ""} 取证行动包`.trim(),
+    "",
+    `取证就绪度：${plan.readiness}/100`,
+    `当前门槛：${plan.gate.label}`,
+    `说明：${plan.gate.detail}`,
+    plan.blockers.length ? `阻断项：${plan.blockers.join("；")}` : "阻断项：暂无明显阻断项",
+    ""
+  ];
+  selectedGroups.forEach(([, title, items]) => {
+    lines.push(`## ${title}`);
+    if (items.length) items.forEach((item, index) => lines.push(`${index + 1}. ${item}`));
+    else lines.push("- 暂无");
+    lines.push("");
+  });
+  return lines.join("\n").trim();
+}
+
+async function copyEvidenceActionPack(section = "all") {
+  const car = getSelectedCar();
+  if (!car) return;
+  const text = formatEvidenceActionPack(car, section);
+  const title = {
+    all: "完整取证包",
+    seller: "问商家清单",
+    inspection: "检测机构清单",
+    contract: "合同备注",
+    next: "下一步顺序"
+  }[section] || "取证行动包";
+  if (await copyTextToClipboard(text)) {
+    addDecisionLog(car, {
+      type: "evidence-action",
+      title: `复制${title}`,
+      detail: "已生成可发给商家、检测机构或写入合同的核验文本。",
+      level: "info",
+      relatedIds: [car.id]
+    });
+    render();
+    showToast(`${title}已复制。`, "ok");
+  } else {
+    showCopyFallback(title, text);
+    showToast("复制失败，可以手动复制弹窗内容。", "warn");
+  }
 }
 
 function getSelectedCar() {
@@ -7066,6 +7320,7 @@ document.body.addEventListener("click", (event) => {
   const copyWorkflowQuestionsId = event.target.closest("[data-copy-workflow-questions]")?.dataset.copyWorkflowQuestions;
   const workflowTaskToggle = event.target.closest("[data-workflow-task-toggle]");
   const workflowTaskEvidence = event.target.closest("[data-workflow-task-evidence]");
+  const copyEvidencePackSection = event.target.closest("[data-copy-evidence-pack]")?.dataset.copyEvidencePack;
   const riskStatusButton = event.target.closest("[data-risk-status]");
   const shouldAddEvidence = Boolean(event.target.closest("[data-add-evidence]"));
 
@@ -7104,6 +7359,7 @@ document.body.addEventListener("click", (event) => {
   if (investigationStepButton) toggleInvestigationStep(investigationStepButton.dataset.investigationCar, investigationStepButton.dataset.investigationStep);
   if (workflowStageButton) advanceWorkflowStage(workflowStageButton.dataset.workflowCar, workflowStageButton.dataset.workflowStage);
   if (copyWorkflowQuestionsId) copyWorkflowQuestions(copyWorkflowQuestionsId);
+  if (copyEvidencePackSection) copyEvidenceActionPack(copyEvidencePackSection);
   if (workflowTaskToggle) toggleWorkflowTask(workflowTaskToggle.dataset.workflowCar, workflowTaskToggle.dataset.workflowTaskToggle);
   if (workflowTaskEvidence) toggleWorkflowTaskEvidence(workflowTaskEvidence.dataset.workflowCar, workflowTaskEvidence.dataset.workflowTaskEvidence, workflowTaskEvidence.dataset.evidenceId);
   if (deleteEvidenceId) {
@@ -7191,6 +7447,7 @@ document.querySelector("#copyActiveDecisionReport")?.addEventListener("click", c
 document.querySelector("#fetchQualityData")?.addEventListener("click", fetchQualityDataWithAi);
 document.querySelector("#refreshQualityData")?.addEventListener("click", refreshQualityAssessment);
 document.querySelector("#copyQualityQuestions")?.addEventListener("click", copyQualityQuestions);
+document.querySelector("#copyEvidenceActionPack")?.addEventListener("click", () => copyEvidenceActionPack("all"));
 document.querySelector("#addPriceEvent")?.addEventListener("click", () => addCurrentPriceEvent(selectedCarId));
 document.querySelector("#analyzeInfoWall").addEventListener("click", () => analyzeCurrentCarWithGemini({ auto: false }));
 document.querySelector("#analyzeRiskCar").addEventListener("click", analyzeRiskCarWithGemini);

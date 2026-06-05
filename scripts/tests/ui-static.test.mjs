@@ -121,6 +121,8 @@ test("candidate detail uses semantic main and decision rail containers", async (
   assert.match(html, /id="redlineGate"/);
   assert.match(css, /#candidateDetailMain/);
   assert.match(css, /#candidateDecisionRail/);
+  assert.match(css, /\.panel\s*\{[\s\S]*?min-width: 0;/);
+  assert.match(css, /\.panel-head > div\s*\{[\s\S]*?min-width: 0;/);
   assert.match(css, /@media \(max-width: 1180px\)[\s\S]*?#candidateDecisionRail/);
 });
 
@@ -172,4 +174,25 @@ test("information wall analysis preview is split into auditable sections", async
   assert.match(app, /下一步问题/);
   assert.match(app, /info-analysis-sections/);
   assert.match(css, /\.info-analysis-sections/);
+});
+
+test("V1.4 evidence action cockpit turns gaps into copyable due-diligence scripts", async () => {
+  const html = await readFile(new URL("index.html", root), "utf8");
+  const app = await readFile(new URL("app.js", root), "utf8");
+  const css = await readFile(new URL("styles.css", root), "utf8");
+
+  assert.match(html, /取证行动台/);
+  assert.match(html, /id="evidenceActionPanel"/);
+  assert.match(html, /id="copyEvidenceActionPack"/);
+  assert.match(app, /function buildEvidenceActionPlan/);
+  assert.match(app, /function renderEvidenceActionPanel/);
+  assert.match(app, /function formatEvidenceActionPack/);
+  assert.match(app, /async function copyEvidenceActionPack/);
+  assert.match(app, /问商家清单/);
+  assert.match(app, /检测机构清单/);
+  assert.match(app, /合同备注/);
+  assert.match(app, /data-copy-evidence-pack/);
+  assert.match(css, /\.evidence-action-panel/);
+  assert.match(css, /\.evidence-action-grid/);
+  assert.match(css, /\.evidence-script-card/);
 });
