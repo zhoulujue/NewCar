@@ -9,7 +9,7 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="format-detection" content="telephone=no">
     <title>NewCar 购车工作台</title>
-    <link rel="stylesheet" href="./styles.css?v=20260603-v18-quality-sources">
+    <link rel="stylesheet" href="./styles.css?v=20260605-v19-project-qa">
     <script src="./auth-config.js"></script>
     <script src="https://accounts.google.com/gsi/client" async defer></script>
   </head>
@@ -24,17 +24,17 @@
           </div>
         </div>
         <nav class="nav-list" aria-label="主导航">
-          <button class="nav-button active" data-view="dashboard" data-mobile-label="总览">总览</button>
-          <button class="nav-button" data-view="garage" data-mobile-label="尽调">候选尽调</button>
-          <button class="nav-button" data-view="newcars" data-mobile-label="新车">新车观察</button>
-          <button class="nav-button" data-view="usedcars" data-mobile-label="车源">二手车源</button>
-          <button class="nav-button" data-view="compare" data-mobile-label="对比">对比</button>
-          <button class="nav-button" data-view="drives" data-mobile-label="试驾">试驾</button>
-          <button class="nav-button" data-view="risks" data-mobile-label="风险">待关闭风险</button>
-          <button class="nav-button" data-view="sellers" data-mobile-label="商家">商家</button>
+          <button class="nav-button active" data-view="dashboard" data-mobile-label="总览" type="button">总览</button>
+          <button class="nav-button" data-view="garage" data-mobile-label="尽调" type="button">候选尽调</button>
+          <button class="nav-button" data-view="newcars" data-mobile-label="新车" type="button">新车观察</button>
+          <button class="nav-button" data-view="usedcars" data-mobile-label="车源" type="button">二手车源</button>
+          <button class="nav-button" data-view="compare" data-mobile-label="对比" type="button">对比</button>
+          <button class="nav-button" data-view="drives" data-mobile-label="试驾" type="button">试驾</button>
+          <button class="nav-button" data-view="risks" data-mobile-label="风险" type="button">待关闭风险</button>
+          <button class="nav-button" data-view="sellers" data-mobile-label="商家" type="button">商家</button>
         </nav>
         <div class="side-footer">
-          <button class="ghost-button" id="exportData">导出 JSON</button>
+          <button class="ghost-button" id="exportData" type="button">导出 JSON</button>
           <label class="ghost-button file-button">
             导入 JSON
             <input id="importData" type="file" accept="application/json">
@@ -69,8 +69,8 @@
               </div>
             </section>
             <div class="topbar-actions">
-              <button class="secondary-button" id="resetSeed">恢复样例</button>
-              <button class="primary-button" id="addCar">新增候选</button>
+              <button class="secondary-button" id="resetSeed" type="button">恢复样例</button>
+              <button class="primary-button" id="addCar" type="button">新增候选</button>
             </div>
           </div>
         </header>
@@ -185,14 +185,14 @@
             <section class="panel">
               <div class="panel-head">
                 <h2>今日待办</h2>
-                <button class="text-button" data-view-link="risks">查看风险</button>
+                <button class="text-button" data-view-link="risks" type="button">查看风险</button>
               </div>
               <div id="actionList" class="action-list"></div>
             </section>
             <section class="panel">
               <div class="panel-head">
                 <h2>价格观察</h2>
-                <button class="text-button" data-view-link="usedcars">找车源</button>
+                <button class="text-button" data-view-link="usedcars" type="button">找车源</button>
               </div>
               <div id="timelinePreview" class="timeline-list"></div>
             </section>
@@ -337,11 +337,11 @@
             <div class="detail-actions">
               <button class="secondary-button" id="prevDetailCar" type="button">上一台</button>
               <button class="secondary-button" id="nextDetailCar" type="button">下一台</button>
-              <button class="secondary-button" id="editCurrentCar">编辑候选</button>
+              <button class="secondary-button" id="editCurrentCar" type="button">编辑候选</button>
               <details class="detail-more-actions">
                 <summary>更多操作</summary>
                 <div class="detail-more-menu">
-                  <button class="secondary-button" id="exportChecklist">导出核验清单</button>
+                  <button class="secondary-button" id="exportChecklist" type="button">导出核验清单</button>
                   <button class="secondary-button" id="copyDecisionReport" type="button">复制决策报告</button>
                   <button class="secondary-button" id="downloadDecisionReport" type="button">下载报告</button>
                 </div>
@@ -722,11 +722,11 @@
         <div class="dialog-actions">
           <button type="button" class="danger-button" id="deleteCar">删除</button>
           <button type="button" class="secondary-button" id="cancelCar">取消</button>
-          <button class="primary-button" value="default">保存</button>
+          <button class="primary-button" value="default" type="submit">保存</button>
         </div>
       </form>
     </dialog>
 
-    <script src="./app.js?v=20260603-v18-quality-sources"></script>
+    <script src="./app.js?v=20260605-v19-project-qa"></script>
   </body>
 </html>

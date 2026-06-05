@@ -2473,7 +2473,7 @@ textarea.input {
   gap: 8px;
 }
 
-.quality-ai-source-list a {
+.quality-ai-source-item {
   min-width: 0;
   padding: 10px;
   border: 1px solid #dce8e6;
@@ -2483,7 +2483,7 @@ textarea.input {
   text-decoration: none;
 }
 
-.quality-ai-source-list a:hover,
+.quality-ai-source-list a.quality-ai-source-item:hover,
 .quality-source-link:hover {
   color: var(--primary-dark);
   text-decoration: underline;

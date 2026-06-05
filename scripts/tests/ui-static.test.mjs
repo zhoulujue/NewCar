@@ -37,3 +37,41 @@ test("quality source cards do not mark AI-only searches as verified data", async
   assert.doesNotMatch(app, /有数据\|有证据\|有线索\|AI已检索/);
   assert.match(app, /isVerifiedQualitySourceStatus/);
 });
+
+test("user requirement text fields can be intentionally cleared", async () => {
+  const app = await readFile(new URL("app.js", root), "utf8");
+
+  assert.doesNotMatch(app, /purchaseTiming:\s*merged\.purchaseTiming\s*\|\|\s*seedRequirement\.purchaseTiming/);
+  assert.doesNotMatch(app, /mustHaves:\s*merged\.mustHaves\s*\|\|\s*seedRequirement\.mustHaves/);
+  assert.doesNotMatch(app, /dealBreakers:\s*merged\.dealBreakers\s*\|\|\s*seedRequirement\.dealBreakers/);
+  assert.doesNotMatch(app, /notes:\s*merged\.notes\s*\|\|\s*seedRequirement\.notes/);
+});
+
+test("static buttons declare their button type", async () => {
+  const html = await readFile(new URL("index.html", root), "utf8");
+  const app = await readFile(new URL("app.js", root), "utf8");
+  const buttonsWithoutType = [...html.matchAll(/<button\b(?![^>]*\btype=)[^>]*>/g)].map((match) => match[0]);
+  const dynamicButtonsWithoutType = [...app.matchAll(/<button\b(?![^>]*\btype=)[^>]*>/g)].map((match) => match[0]);
+
+  assert.deepEqual(buttonsWithoutType, []);
+  assert.deepEqual(dynamicButtonsWithoutType, []);
+});
+
+test("AI numeric patches do not coerce blank values to zero", async () => {
+  const app = await readFile(new URL("app.js", root), "utf8");
+
+  assert.doesNotMatch(app, /Number\.isFinite\(Number\(patch\[field\]\)\)/);
+  assert.doesNotMatch(app, /Number\(patch\.experience\[key\]\)/);
+  assert.match(app, /const value = numberOrBlank\(patch\[field\]\)/);
+});
+
+test("external links and images are normalized before rendering or opening", async () => {
+  const app = await readFile(new URL("app.js", root), "utf8");
+
+  assert.match(app, /function normalizeWebUrl/);
+  assert.match(app, /url:\s*normalizeWebUrl\(car\.url\)/);
+  assert.match(app, /image:\s*normalizeImageUrl\(car\.image\)/);
+  assert.doesNotMatch(app, /return source\.url\s*(?:;|\|\|)/);
+  assert.doesNotMatch(app, /window\.open\(car\.url/);
+  assert.doesNotMatch(app, /href="\$\{escapeAttr\(source\.url \|\| "#"\)\}"/);
+});

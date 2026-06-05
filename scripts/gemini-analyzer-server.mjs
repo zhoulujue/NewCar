@@ -247,22 +247,15 @@ async function qualityWithFallback(payload, startedAt = Date.now()) {
 
 async function firstSuccessfulProvider(tasks = []) {
   const outcomes = [];
-  return new Promise((resolve) => {
-    let pending = tasks.length;
-    if (!pending) {
-      resolve({ ok: false, errors: [] });
-      return;
+  for (const task of tasks) {
+    try {
+      const value = await task.run();
+      return { ok: true, provider: task.provider, value, errors: outcomes };
+    } catch (error) {
+      outcomes.push({ provider: task.provider, message: normalizeError(error) });
     }
-    tasks.forEach((task) => {
-      task.run()
-        .then((value) => resolve({ ok: true, provider: task.provider, value, errors: outcomes }))
-        .catch((error) => {
-          outcomes.push({ provider: task.provider, message: normalizeError(error) });
-          pending -= 1;
-          if (pending === 0) resolve({ ok: false, errors: outcomes });
-        });
-    });
-  });
+  }
+  return { ok: false, errors: outcomes };
 }
 
 function formatProviderErrors(errors = []) {

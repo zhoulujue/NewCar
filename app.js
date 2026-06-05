@@ -319,25 +319,29 @@ function normalizeState(rawState) {
 }
 
 function normalizeUserRequirement(requirement = {}) {
-  const merged = { ...seedRequirement, ...(requirement || {}) };
+  const source = requirement || {};
+  const hasField = (field) => Object.prototype.hasOwnProperty.call(source, field);
+  const fieldValue = (field, fallback) => (hasField(field) ? source[field] : fallback);
+  const arrayValue = (field) => (hasField(field) ? normalizeStringArray(source[field]) : [...seedRequirement[field]]);
+  const textValue = (field, fallback = "") => String(fieldValue(field, fallback) ?? "");
   return {
-    city: merged.city || "北京",
-    people: String(merged.people || "2"),
-    scenes: normalizeStringArray(merged.scenes).length ? normalizeStringArray(merged.scenes) : [...seedRequirement.scenes],
-    budgetMinWan: numberOrDefault(merged.budgetMinWan, seedRequirement.budgetMinWan),
-    budgetMaxWan: numberOrDefault(merged.budgetMaxWan, seedRequirement.budgetMaxWan),
-    energyTypes: normalizeStringArray(merged.energyTypes).length ? normalizeStringArray(merged.energyTypes) : [...seedRequirement.energyTypes],
-    minRangeKm: numberOrDefault(merged.minRangeKm, seedRequirement.minRangeKm),
-    minPhevRangeKm: numberOrDefault(merged.minPhevRangeKm, seedRequirement.minPhevRangeKm),
-    priorities: normalizeStringArray(merged.priorities).length ? normalizeStringArray(merged.priorities) : [...seedRequirement.priorities],
-    seatFocus: merged.seatFocus || "front",
-    bodyPreference: merged.bodyPreference || "suv_sedan",
-    purchaseTiming: merged.purchaseTiming || seedRequirement.purchaseTiming,
-    mustHaves: merged.mustHaves || seedRequirement.mustHaves,
-    dealBreakers: merged.dealBreakers || seedRequirement.dealBreakers,
-    referenceCar: merged.referenceCar || seedRequirement.referenceCar,
-    notes: merged.notes || seedRequirement.notes,
-    updatedAt: merged.updatedAt || ""
+    city: textValue("city", "北京") || "北京",
+    people: textValue("people", "2") || "2",
+    scenes: arrayValue("scenes"),
+    budgetMinWan: numberOrDefault(fieldValue("budgetMinWan", seedRequirement.budgetMinWan), seedRequirement.budgetMinWan),
+    budgetMaxWan: numberOrDefault(fieldValue("budgetMaxWan", seedRequirement.budgetMaxWan), seedRequirement.budgetMaxWan),
+    energyTypes: arrayValue("energyTypes"),
+    minRangeKm: numberOrDefault(fieldValue("minRangeKm", seedRequirement.minRangeKm), seedRequirement.minRangeKm),
+    minPhevRangeKm: numberOrDefault(fieldValue("minPhevRangeKm", seedRequirement.minPhevRangeKm), seedRequirement.minPhevRangeKm),
+    priorities: arrayValue("priorities"),
+    seatFocus: textValue("seatFocus", "front") || "front",
+    bodyPreference: textValue("bodyPreference", "suv_sedan") || "suv_sedan",
+    purchaseTiming: textValue("purchaseTiming", seedRequirement.purchaseTiming),
+    mustHaves: textValue("mustHaves", seedRequirement.mustHaves),
+    dealBreakers: textValue("dealBreakers", seedRequirement.dealBreakers),
+    referenceCar: textValue("referenceCar", seedRequirement.referenceCar),
+    notes: textValue("notes", seedRequirement.notes),
+    updatedAt: textValue("updatedAt", "")
   };
 }
 
@@ -380,7 +384,7 @@ function normalizeRequirementCandidate(candidate) {
     nextAction: candidate.nextAction || "",
     tags: normalizeStringArray(candidate.tags),
     tradeoffs: normalizeStringArray(candidate.tradeoffs),
-    sourceUrl: candidate.sourceUrl || ""
+    sourceUrl: normalizeWebUrl(candidate.sourceUrl)
   };
 }
 
@@ -433,7 +437,7 @@ function normalizeCar(car) {
     trim: car.trim || "",
     stage: car.stage || "watching",
     recommendation: car.recommendation || "auto",
-    url: car.url || "",
+    url: normalizeWebUrl(car.url),
     sourceSkuId: car.sourceSkuId || car.skuId || "",
     price: numberOrBlank(car.price),
     newPrice: numberOrBlank(car.newPrice),
@@ -454,7 +458,7 @@ function normalizeCar(car) {
     nop: car.nop || "unknown",
     report: car.report || "basic",
     certified: car.certified || "unknown",
-    image: car.image || "",
+    image: normalizeImageUrl(car.image),
     costs: {
       insurance: numberOrBlank(costs.insurance),
       transport: numberOrBlank(costs.transport),
@@ -497,7 +501,7 @@ function normalizeEvidence(item) {
     title: item.title || "未命名信息",
     type: item.type || "other",
     status: item.status || "pending",
-    url: item.url || "",
+    url: normalizeWebUrl(item.url),
     notes: item.notes || "",
     attachments: Array.isArray(item.attachments) ? item.attachments.map(normalizeAttachment).filter(Boolean) : [],
     createdAt: item.createdAt || new Date().toISOString().slice(0, 10),
@@ -562,7 +566,7 @@ function normalizeQualitySource(source = {}) {
     status: source.status || "待补充",
     updatedAt: source.updatedAt || "",
     summary: source.summary || "",
-    url: source.url || ""
+    url: normalizeWebUrl(source.url)
   };
 }
 
@@ -630,13 +634,14 @@ function normalizeInfoAnalysisStatus(status) {
 }
 
 function normalizeAttachment(attachment) {
-  if (!attachment?.dataUrl) return null;
+  const dataUrl = normalizeImageUrl(attachment?.dataUrl);
+  if (!dataUrl) return null;
   return {
     id: attachment.id || makeId("att"),
     name: attachment.name || "图片",
     type: attachment.type || "image/jpeg",
     size: numberOrBlank(attachment.size),
-    dataUrl: attachment.dataUrl
+    dataUrl
   };
 }
 
@@ -800,8 +805,8 @@ function normalizeUsedListing(item) {
     shopId: item.shopId || "",
     authentication: item.authentication || "",
     officialHint: item.officialHint || "",
-    image: item.image || "",
-    url: item.url || buildDongchediUsedCarDetailUrl(item.skuId, item.city),
+    image: normalizeImageUrl(item.image),
+    url: normalizeWebUrl(item.url) || buildDongchediUsedCarDetailUrl(item.skuId, item.city),
     tags: Array.isArray(item.tags) ? item.tags.filter(Boolean).map(String) : [],
     transferCount: numberOrBlank(item.transferCount),
     range: numberOrBlank(item.range),
@@ -833,9 +838,9 @@ function normalizeRelease(item) {
     releaseDate: item.releaseDate || "",
     releaseTimestamp: numberOrBlank(item.releaseTimestamp),
     tags: Array.isArray(item.tags) ? item.tags.filter(Boolean).map(String) : [],
-    coverUrl: item.coverUrl || "",
-    dcdUrl: item.dcdUrl || "",
-    articleUrl: item.articleUrl || "",
+    coverUrl: normalizeImageUrl(item.coverUrl),
+    dcdUrl: normalizeWebUrl(item.dcdUrl),
+    articleUrl: normalizeWebUrl(item.articleUrl),
     articleTitle: item.articleTitle || "",
     communityText: item.communityText || "",
     score: normalizeReleaseScore(item.score),
@@ -884,7 +889,7 @@ function normalizeReleaseModel(model) {
     range: model.range || "",
     power: model.power || "",
     drive: model.drive || "",
-    link: model.link || ""
+    link: normalizeWebUrl(model.link)
   };
 }
 
@@ -892,7 +897,7 @@ function normalizeReleaseNews(news) {
   if (!news?.title) return null;
   return {
     title: news.title || "",
-    url: news.url || "",
+    url: normalizeWebUrl(news.url),
     source: news.source || "懂车帝",
     publishTime: news.publishTime || ""
   };
@@ -2782,7 +2787,7 @@ function renderDashboard() {
     const rec = deriveRecommendation(car);
     const score = mode === "risk" ? risk.score : mode === "i6" ? i6Score(car) : mode === "cost" ? formatWan(costProfile(car).year3) : fitScore(car);
     return `
-      <button class="rank-item" data-detail="${car.id}">
+      <button class="rank-item" data-detail="${car.id}" type="button">
         <div class="rank-index">${index + 1}</div>
         <div>
           <div class="car-name">${escapeHtml(car.name)}</div>
@@ -2800,7 +2805,7 @@ function renderDashboard() {
 
   const actions = getDashboardWorkflowActions();
   document.querySelector("#actionList").innerHTML = actions.slice(0, 8).map(({ car, task, workflow }) => `
-    <button class="action-item ${task.level}" data-detail="${car.id}">
+    <button class="action-item ${task.level}" data-detail="${car.id}" type="button">
       <strong>${escapeHtml(car.name)}</strong>
       <div>${escapeHtml(task.title)}</div>
       <div class="muted">${escapeHtml(workflow.decision.label)} · ${escapeHtml(task.detail)}</div>
@@ -3012,11 +3017,11 @@ function renderGarageCard(car) {
           ${renderInvestigationProgress(progress, riskSummary)}
           <p class="card-note">${escapeHtml(workflow.tasks[0]?.detail || car.nextAction || "补齐车源信息后再判断。")}</p>
           <div class="card-actions">
-            <button class="primary-card-action" data-detail="${car.id}">查看详情</button>
-            <button data-edit="${car.id}">编辑</button>
-            <button data-risk="${car.id}">风险</button>
-            <button class="${selectedCompare.has(car.id) ? "selected-card-action" : ""}" data-compare="${car.id}">${selectedCompare.has(car.id) ? "取消对比" : "加入对比"}</button>
-            <button class="danger-action" data-remove-car="${car.id}">移出候选</button>
+            <button class="primary-card-action" data-detail="${car.id}" type="button">查看详情</button>
+            <button data-edit="${car.id}" type="button">编辑</button>
+            <button data-risk="${car.id}" type="button">风险</button>
+            <button class="${selectedCompare.has(car.id) ? "selected-card-action" : ""}" data-compare="${car.id}" type="button">${selectedCompare.has(car.id) ? "取消对比" : "加入对比"}</button>
+            <button class="danger-action" data-remove-car="${car.id}" type="button">移出候选</button>
             ${car.url ? `<a href="${escapeAttr(getExternalSourceUrl(car))}" target="_blank" rel="noopener noreferrer">外部链接</a>` : ""}
           </div>
         </div>
@@ -3755,10 +3760,11 @@ function getVehicleImages(car) {
   const images = [];
   const seen = new Set();
   const pushImage = (src, name, source) => {
-    if (!src || seen.has(src)) return;
-    seen.add(src);
+    const safeSrc = normalizeImageUrl(src);
+    if (!safeSrc || seen.has(safeSrc)) return;
+    seen.add(safeSrc);
     images.push({
-      src,
+      src: safeSrc,
       name: name || car.name || "车辆图片",
       source: source || "车辆图片"
     });
@@ -3780,7 +3786,8 @@ function getVehicleImages(car) {
 function renderExternalSourceActions(car) {
   if (!car.url) return "";
   const webUrl = getExternalSourceUrl(car);
-  const isDongchedi = isDongchediSourceUrl(car.url);
+  if (!webUrl) return "";
+  const isDongchedi = isDongchediSourceUrl(webUrl);
   return `
     <div class="detail-source-actions">
       <a class="secondary-button" href="${escapeAttr(webUrl)}" target="_blank" rel="noopener noreferrer">外部车源详情</a>
@@ -3795,9 +3802,11 @@ function isDongchediSourceUrl(url = "") {
 
 function getExternalSourceUrl(source) {
   if (!source?.url) return "";
-  if (!isDongchediSourceUrl(source.url)) return source.url;
+  const safeUrl = normalizeWebUrl(source.url);
+  if (!safeUrl) return "";
+  if (!isDongchediSourceUrl(safeUrl)) return safeUrl;
   const skuId = getDongchediUsedCarSkuId(source);
-  return skuId ? buildDongchediUsedCarDetailUrl(skuId, source.city) : source.url;
+  return skuId ? buildDongchediUsedCarDetailUrl(skuId, source.city) : safeUrl;
 }
 
 function getDongchediUsedCarSkuId(source) {
@@ -3843,15 +3852,15 @@ function isMobileBrowser() {
 
 function openSourceInApp(carId) {
   const car = state.cars.find((item) => item.id === carId);
-  if (!car?.url) {
+  const webUrl = getExternalSourceUrl(car);
+  if (!webUrl) {
     showToast("这台车还没有外部车源链接。", "warn");
     return;
   }
-  if (!isDongchediSourceUrl(car.url)) {
-    window.open(car.url, "_blank", "noopener");
+  if (!isDongchediSourceUrl(webUrl)) {
+    window.open(webUrl, "_blank", "noopener");
     return;
   }
-  const webUrl = getExternalSourceUrl(car);
   if (!isMobileBrowser()) {
     window.open(webUrl, "_blank", "noopener");
     showToast("当前浏览器不支持唤起 App，已打开懂车帝详情页。", "ok");
@@ -3983,12 +3992,15 @@ function renderQualityAiSources(sources = []) {
         <span>${usable.length} 条</span>
       </div>
       <div class="quality-ai-source-list">
-        ${usable.map((source) => `
-          <a href="${escapeAttr(source.url || "#")}" target="_blank" rel="noopener noreferrer">
+        ${usable.map((source) => {
+          const body = `
             <strong>${escapeHtml(source.label || qualitySourceTypeLabel(source.type))}</strong>
             <span>${escapeHtml(source.summary || source.url || "公开来源")}</span>
-          </a>
-        `).join("")}
+          `;
+          return source.url
+            ? `<a class="quality-ai-source-item" href="${escapeAttr(source.url)}" target="_blank" rel="noopener noreferrer">${body}</a>`
+            : `<div class="quality-ai-source-item">${body}</div>`;
+        }).join("")}
       </div>
     </div>
   `;
@@ -4673,7 +4685,8 @@ function renderEvidenceRiskLinks(item, car) {
 
 function renderInfoAttachments(item) {
   const attachments = item.attachments || [];
-  const linkedImage = isImageUrl(item.url) ? [{ id: "url", name: "链接图片", dataUrl: item.url }] : [];
+  const safeLinkedImage = isImageUrl(item.url) ? normalizeImageUrl(item.url) : "";
+  const linkedImage = safeLinkedImage ? [{ id: "url", name: "链接图片", dataUrl: safeLinkedImage }] : [];
   const images = [...attachments, ...linkedImage];
   if (!images.length) return "";
   return `
@@ -4754,7 +4767,14 @@ function formatPatchValue(value) {
 }
 
 function isImageUrl(url) {
-  return /^data:image\//.test(url || "") || /\.(png|jpe?g|webp|gif|heic|heif)(\?.*)?$/i.test(url || "");
+  const safeUrl = normalizeImageUrl(url);
+  if (!safeUrl) return false;
+  if (/^data:image\//i.test(safeUrl)) return true;
+  try {
+    return /\.(png|jpe?g|webp|gif|heic|heif)$/i.test(new URL(safeUrl).pathname);
+  } catch {
+    return false;
+  }
 }
 
 function renderRiskCard(risk) {
@@ -5064,7 +5084,7 @@ function renderSellers() {
         </div>
         <div class="seller-cars">
           ${seller.cars.map((car) => `
-            <button data-detail="${car.id}">
+            <button data-detail="${car.id}" type="button">
               <strong>${escapeHtml(car.name)}</strong>
               <span>${formatWan(car.price)} · ${recommendationLabel(deriveRecommendation(car))}</span>
             </button>
@@ -5105,7 +5125,7 @@ function renderTimeline() {
         <strong>${escapeHtml(item.title)}</strong>
         <p class="muted">${escapeHtml(item.detail)}</p>
       </div>
-      ${item.carId ? `<button class="mini-button" data-detail="${item.carId}">详情</button>` : ""}
+      ${item.carId ? `<button class="mini-button" data-detail="${item.carId}" type="button">详情</button>` : ""}
     </div>
   `).join("");
 }
@@ -6101,7 +6121,8 @@ function applyCarPatch(car, patch) {
   });
   const numberFields = ["price", "newPrice", "targetPrice", "landing", "batteryMonthly", "batterySize", "range", "mileage", "transfers"];
   numberFields.forEach((field) => {
-    if (Number.isFinite(Number(patch[field]))) car[field] = Number(patch[field]);
+    const value = numberOrBlank(patch[field]);
+    if (value !== "") car[field] = value;
   });
   applyEnumPatch(car, patch, "stage", ["watching", "contacted", "waiting-docs", "test-drive", "negotiating", "recheck", "rejected", "purchased"]);
   applyEnumPatch(car, patch, "recommendation", ["auto", "worthViewing", "watch", "waitDrop", "bargainOnly", "reject"]);
@@ -6111,8 +6132,8 @@ function applyCarPatch(car, patch) {
   applyEnumPatch(car, patch, "certified", ["official", "platform", "dealer", "unknown"]);
   if (patch.experience && typeof patch.experience === "object") {
     Object.keys(car.experience).forEach((key) => {
-      const value = Number(patch.experience[key]);
-      if (Number.isFinite(value)) car.experience[key] = Math.max(1, Math.min(10, Math.round(value)));
+      const value = numberOrBlank(patch.experience[key]);
+      if (value !== "") car.experience[key] = Math.max(1, Math.min(10, Math.round(value)));
     });
   }
   if (patch.qualityProfile && typeof patch.qualityProfile === "object") {
@@ -6578,6 +6599,29 @@ function escapeHtml(value) {
 
 function escapeAttr(value) {
   return escapeHtml(value);
+}
+
+function normalizeWebUrl(value) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+  const candidate = raw.startsWith("//")
+    ? `https:${raw}`
+    : /^[a-z0-9.-]+\.[a-z]{2,}(?:[/:?#]|$)/i.test(raw)
+      ? `https://${raw}`
+      : raw;
+  try {
+    const parsed = new URL(candidate);
+    return ["http:", "https:"].includes(parsed.protocol) ? parsed.href : "";
+  } catch {
+    return "";
+  }
+}
+
+function normalizeImageUrl(value) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+  if (/^data:image\/(?:png|jpe?g|webp|gif|heic|heif);base64,[a-z0-9+/=]+$/i.test(raw)) return raw;
+  return normalizeWebUrl(raw);
 }
 
 document.querySelectorAll(".nav-button").forEach((button) => {
