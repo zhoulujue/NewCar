@@ -2653,6 +2653,105 @@ textarea.input {
   overflow-wrap: anywhere;
 }
 
+.quality-starter-panel {
+  display: grid;
+  grid-template-columns: minmax(240px, 0.72fr) minmax(0, 1.28fr);
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid #cde5e1;
+  border-radius: var(--radius);
+  background: linear-gradient(135deg, #f6fcfb, #fff);
+}
+
+.quality-starter-copy {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  min-width: 0;
+}
+
+.quality-starter-copy > span {
+  width: fit-content;
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: #e8f5f2;
+  color: var(--primary-dark);
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.quality-starter-copy h3 {
+  font-size: 17px;
+  line-height: 1.35;
+}
+
+.quality-starter-copy p {
+  color: #52616f;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.quality-starter-copy .primary-button {
+  width: fit-content;
+}
+
+.quality-task-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  min-width: 0;
+}
+
+.quality-task-column {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.quality-task-list {
+  display: grid;
+  gap: 8px;
+}
+
+.quality-task-item {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid #dce8e6;
+  border-radius: var(--radius);
+  background: #fff;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.quality-task-item.done {
+  border-color: #bee2cd;
+  background: #f5fbf7;
+}
+
+.quality-task-item strong,
+.quality-task-item span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.quality-task-item span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.quality-task-item:hover {
+  border-color: #b9d7d2;
+  box-shadow: 0 8px 22px rgba(21, 32, 43, 0.06);
+}
+
 .quality-source-link {
   width: fit-content;
   color: var(--primary);
@@ -3881,6 +3980,10 @@ button:disabled {
     grid-template-columns: minmax(0, 1fr) repeat(2, minmax(120px, 0.4fr));
   }
 
+  .quality-starter-panel {
+    grid-template-columns: 1fr;
+  }
+
   .three-column,
   .detail-layout {
     grid-template-columns: 1fr;
@@ -4034,6 +4137,10 @@ button:disabled {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .quality-task-grid {
+    grid-template-columns: 1fr;
+  }
+
   .quality-summary-card,
   .quality-split {
     grid-template-columns: 1fr;
@@ -4067,7 +4174,8 @@ button:disabled {
   .hero-facts,
   .quality-source-grid,
   .quality-issue-grid,
-  .quality-ai-source-list {
+  .quality-ai-source-list,
+  .quality-task-grid {
     grid-template-columns: 1fr;
   }
 

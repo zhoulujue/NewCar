@@ -4107,10 +4107,7 @@ function renderQualityPanel(car) {
           <strong>${qualityRiskLabel(quality.threeElectricRisk)}</strong>
         </div>
       </div>
-      <div class="quality-source-grid">
-        ${sourceRows.map(renderQualitySourceCard).join("")}
-      </div>
-      ${renderQualityAiSources(quality.profile.sources)}
+      ${renderQualityEvidenceOverview(car, quality, sourceRows)}
       <div class="quality-split">
         <div class="quality-block">
           <div class="quality-block-head">
@@ -4146,6 +4143,116 @@ function renderQualityPanel(car) {
       ` : ""}
     </div>
   `;
+}
+
+function renderQualityEvidenceOverview(car, quality, sourceRows = quality.sourceRows) {
+  if (!hasUsefulQualityEvidence(quality, sourceRows)) {
+    return renderQualityStarterPanel(car, quality);
+  }
+  return `
+    <div class="quality-source-grid">
+      ${sourceRows.map(renderQualitySourceCard).join("")}
+    </div>
+    ${renderQualityAiSources(quality.profile.sources)}
+  `;
+}
+
+function hasUsefulQualityEvidence(quality, sourceRows = quality.sourceRows) {
+  const sources = quality.profile.sources || [];
+  if (sources.some((source) => source.url || source.summary)) return true;
+  return (sourceRows || []).some((row) => {
+    if (row.url || row.count > 0) return true;
+    return /有数据|有证据|有线索|已核验|入口待核验|证据冲突/.test(row.status || "");
+  });
+}
+
+function renderQualityStarterPanel(car, quality) {
+  const searchTasks = buildQualityPublicSearchTasks(car);
+  const singleTasks = buildQualitySingleCarTasks(car, quality);
+  return `
+    <div class="quality-starter-panel">
+      <div class="quality-starter-copy">
+        <span>质量取证起点</span>
+        <h3>先获取公开质量线索，再补这台车的单车证明</h3>
+        <p>当前没有可复核来源，所以不再展示一排“缺失卡”。先让 AI 联网找召回、投诉销量比和车主口碑；二手车的 SOH、维保、故障码和三电质保仍然必须向商家要原始证明。</p>
+        <button class="primary-button" data-quality-fetch-shortcut type="button">AI 检索公开质量线索</button>
+      </div>
+      <div class="quality-task-grid">
+        <section class="quality-task-column">
+          <div class="quality-block-head">
+            <h3>公开质量线索</h3>
+            <span>${searchTasks.length} 个入口</span>
+          </div>
+          <div class="quality-task-list">
+            ${searchTasks.map((task) => `
+              <a class="quality-task-item" href="${escapeAttr(task.url)}" target="_blank" rel="noopener noreferrer">
+                <strong>${escapeHtml(task.title)}</strong>
+                <span>${escapeHtml(task.detail)}</span>
+              </a>
+            `).join("")}
+          </div>
+        </section>
+        <section class="quality-task-column">
+          <div class="quality-block-head">
+            <h3>单车必补证据</h3>
+            <span>${singleTasks.filter((task) => !task.done).length} 项待补</span>
+          </div>
+          <div class="quality-task-list">
+            ${singleTasks.map((task) => `
+              <div class="quality-task-item ${task.done ? "done" : ""}">
+                <strong>${escapeHtml(task.title)}</strong>
+                <span>${escapeHtml(task.detail)}</span>
+              </div>
+            `).join("")}
+          </div>
+        </section>
+      </div>
+    </div>
+  `;
+}
+
+function buildQualityPublicSearchTasks(car) {
+  const fullName = [car.name, car.trim].filter(Boolean).join(" ");
+  const shortName = car.name || fullName || "目标车型";
+  const search = (query) => `https://www.baidu.com/s?wd=${encodeURIComponent(query)}`;
+  return [
+    {
+      title: "官方召回/缺陷",
+      detail: `查 ${shortName} 是否有市场监管总局召回、缺陷调查或品牌公告。`,
+      url: search(`site:samrdprc.org.cn OR site:samr.gov.cn ${fullName} 召回 缺陷 调查`)
+    },
+    {
+      title: "车质网投诉销量比",
+      detail: "看投诉销量比、投诉列表，以及电池/电机/电控/充电关键词。",
+      url: search(`site:12365auto.com ${fullName} 投诉销量比 投诉 电池 电机 电控 充电`)
+    },
+    {
+      title: "三电高频投诉",
+      detail: "确认是否有续航衰减、无法充电、动力电池报警、故障码集中反馈。",
+      url: search(`${fullName} 三电 投诉 电池 故障码 续航衰减 充电故障`)
+    },
+    {
+      title: "长期质量/车主口碑",
+      detail: "只作为问题发现线索，用来准备试驾和问商家的问题。",
+      url: search(`${fullName} 车主口碑 长期测试 质量 问题`)
+    }
+  ];
+}
+
+function buildQualitySingleCarTasks(car, quality) {
+  if (carKind(car) !== "used") {
+    return [
+      { title: "首批质量观察", detail: "新车先看首批交付质量、OTA 稳定性和官方召回，不强制 SOH。", done: true },
+      { title: "官方召回订阅", detail: "上市后定期刷新官方召回/缺陷公告。", done: quality.hasRecallData },
+      { title: "车主口碑跟踪", detail: "重点看三电、车机和底盘异响是否形成高频问题。", done: quality.hasReputationData }
+    ];
+  }
+  return [
+    { title: "SOH / 电池健康度", detail: "要检测报告截图，包含检测日期、里程、电池一致性或压差更好。", done: quality.hasSoh },
+    { title: "4S 维保 / 三电维修记录", detail: "确认是否更换过电池包、电机、电控，维修原因和质保影响。", done: quality.hasMaintenance },
+    { title: "故障码 / 电池一致性", detail: "复检时读取 OBD/故障码、压差和电池一致性，结果写入复检报告。", done: quality.hasTroubleCode },
+    { title: "三电质保是否随车", detail: "要官方 App/客服截图，确认剩余期限、过户影响和首任权益。", done: quality.hasWarranty }
+  ];
 }
 
 function renderQualityAiSources(sources = []) {
@@ -6952,6 +7059,7 @@ document.body.addEventListener("click", (event) => {
   const deleteEvidenceId = event.target.closest("[data-delete-evidence]")?.dataset.deleteEvidence;
   const analyzeEvidenceId = event.target.closest("[data-analyze-evidence]")?.dataset.analyzeEvidence;
   const applyEvidenceAnalysisId = event.target.closest("[data-apply-evidence-analysis]")?.dataset.applyEvidenceAnalysis;
+  const qualityFetchShortcut = event.target.closest("[data-quality-fetch-shortcut]");
   const evidenceRiskButton = event.target.closest("[data-evidence-risk]");
   const investigationStepButton = event.target.closest("[data-investigation-step]");
   const workflowStageButton = event.target.closest("[data-workflow-stage]");
@@ -6986,6 +7094,7 @@ document.body.addEventListener("click", (event) => {
   if (requirementCandidateId) addRequirementCandidateToGarage(requirementCandidateId);
   if (openSourceAppId) openSourceInApp(openSourceAppId);
   if (event.target.closest("[data-dashboard-ai]")) analyzeDashboardBestWithGemini();
+  if (qualityFetchShortcut) fetchQualityDataWithAi();
   if (riskStatusButton) {
     updateRiskStatus(riskStatusButton.dataset.riskCar, riskStatusButton.dataset.riskKey, riskStatusButton.dataset.riskStatus);
   }

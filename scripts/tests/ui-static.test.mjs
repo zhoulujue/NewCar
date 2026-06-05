@@ -135,6 +135,21 @@ test("browser quality cards classify missing, lead, verified, and conflict state
   assert.match(app, /classifyQualityEvidenceField\(row\.type, row\.value/);
 });
 
+test("empty quality evidence renders an actionable acquisition panel instead of missing-only cards", async () => {
+  const app = await readFile(new URL("app.js", root), "utf8");
+  const css = await readFile(new URL("styles.css", root), "utf8");
+
+  assert.match(app, /function renderQualityEvidenceOverview/);
+  assert.match(app, /function renderQualityStarterPanel/);
+  assert.match(app, /function hasUsefulQualityEvidence/);
+  assert.match(app, /质量取证起点/);
+  assert.match(app, /公开质量线索/);
+  assert.match(app, /单车必补证据/);
+  assert.match(app, /data-quality-fetch-shortcut/);
+  assert.match(css, /\.quality-starter-panel/);
+  assert.match(css, /\.quality-task-grid/);
+});
+
 test("AI status copy exposes provider, failure reason, and fallback state", async () => {
   const app = await readFile(new URL("app.js", root), "utf8");
 
