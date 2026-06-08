@@ -218,3 +218,12 @@ test("single candidate detail exposes a market feedback fast-scan module", async
   assert.match(css, /\.market-feedback-grid/);
   assert.match(css, /\.market-feedback-source-list/);
 });
+
+test("market feedback local fallback note does not accumulate after repeated AI failures", async () => {
+  const app = await readFile(new URL("app.js", root), "utf8");
+
+  assert.match(app, /function stripMarketFeedbackFallbackNote/);
+  assert.match(app, /stripMarketFeedbackFallbackNote\(stored\.summary\)/);
+  assert.match(app, /summary:\s*`\$\{stripMarketFeedbackFallbackNote\(local\.summary\)\}（AI 暂时失败，当前为本地速览。）`/);
+  assert.doesNotMatch(app, /summary:\s*`\$\{local\.summary\}（AI 暂时失败，当前为本地速览。）`/);
+});

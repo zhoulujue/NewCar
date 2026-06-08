@@ -4569,8 +4569,13 @@ function marketFeedbackSourceFromQuality(source = {}) {
   });
 }
 
+function stripMarketFeedbackFallbackNote(text = "") {
+  return String(text || "").replace(/（AI 暂时失败，当前为本地速览。）/g, "").trim();
+}
+
 function buildLocalMarketFeedback(car) {
   const stored = normalizeMarketFeedback(car.marketFeedback);
+  const storedSummary = stripMarketFeedbackFallbackNote(stored.summary);
   const quality = assessCarQuality(car);
   const sourceCandidates = [
     ...(stored.sources || []),
@@ -4632,7 +4637,7 @@ function buildLocalMarketFeedback(car) {
   const sentiment = stored.sentiment !== "unknown" ? stored.sentiment : negatives.length >= positives.length + 2 ? "negative" : positives.length && negatives.length ? "mixed" : positives.length ? "positive" : "unknown";
   const heat = stored.heat !== "unknown" ? stored.heat : sourceCandidates.length >= 3 ? "normal" : "unknown";
   const confidence = stored.confidence !== "unknown" ? stored.confidence : sourceCandidates.some((source) => source.url) ? "medium" : "low";
-  const summary = stored.summary || [
+  const summary = storedSummary || [
     `${car.name} ${car.trim || ""}`.trim(),
     positives[0] ? `正向集中在${positives[0].replace(/[。.]$/, "")}` : "公开正向反馈还需要补充",
     negatives[0] ? `主要槽点是${negatives[0].replace(/[。.]$/, "")}` : "暂未沉淀明确集中槽点",
@@ -5323,7 +5328,7 @@ async function fetchMarketFeedbackWithAi() {
     const local = buildLocalMarketFeedback(car);
     car.marketFeedback = normalizeMarketFeedback({
       ...local,
-      summary: `${local.summary}（AI 暂时失败，当前为本地速览。）`,
+      summary: `${stripMarketFeedbackFallbackNote(local.summary)}（AI 暂时失败，当前为本地速览。）`,
       updatedAt: new Date().toISOString(),
       confidence: local.confidence === "unknown" ? "low" : local.confidence
     });
