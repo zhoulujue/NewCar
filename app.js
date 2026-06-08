@@ -13,6 +13,8 @@ const GEMINI_RECOMMENDER_URL = window.NEWCAR_AI_CONFIG?.geminiRecommenderUrl || 
 const LOCAL_GEMINI_RECOMMENDER_URL = window.NEWCAR_AI_CONFIG?.localGeminiRecommenderUrl || "http://127.0.0.1:8787/recommend";
 const GEMINI_QUALITY_URL = window.NEWCAR_AI_CONFIG?.geminiQualityUrl || "/api/quality";
 const LOCAL_GEMINI_QUALITY_URL = window.NEWCAR_AI_CONFIG?.localGeminiQualityUrl || "http://127.0.0.1:8787/quality";
+const GEMINI_FEEDBACK_URL = window.NEWCAR_AI_CONFIG?.geminiFeedbackUrl || "/api/feedback";
+const LOCAL_GEMINI_FEEDBACK_URL = window.NEWCAR_AI_CONFIG?.localGeminiFeedbackUrl || "http://127.0.0.1:8787/feedback";
 const DONGCHEDI_NEWCAR_URL = window.NEWCAR_DATA_CONFIG?.dongchediNewcarUrl || "/api/dongchedi/recent-models";
 const LOCAL_DONGCHEDI_NEWCAR_URL = window.NEWCAR_DATA_CONFIG?.localDongchediNewcarUrl || "http://127.0.0.1:8788/dongchedi/recent-models";
 const DONGCHEDI_USEDCAR_URL = window.NEWCAR_DATA_CONFIG?.dongchediUsedcarUrl || "/api/dongchedi/official-usedcars";
@@ -44,6 +46,7 @@ const QUALITY_SOURCE_GRADES = {
 
 let geminiAnalysisRunning = false;
 let qualityAnalysisRunning = false;
+let feedbackAnalysisRunning = false;
 let geminiUnavailableNotified = false;
 let requirementAnalysisRunning = false;
 let requirementEditMode = false;
@@ -485,6 +488,7 @@ function normalizeCar(car) {
     nextAction: car.nextAction || "",
     notes: car.notes || "",
     qualityProfile: normalizeQualityProfile(car.qualityProfile),
+    marketFeedback: normalizeMarketFeedback(car.marketFeedback),
     riskItems: Array.isArray(car.riskItems) ? car.riskItems.map(normalizeRiskItem).filter(Boolean) : [],
     priceEvents: Array.isArray(car.priceEvents) ? car.priceEvents.map(normalizePriceEvent).filter(Boolean) : [],
     workflowTasks: Array.isArray(car.workflowTasks) ? car.workflowTasks.map(normalizeWorkflowTaskState).filter(Boolean) : [],
@@ -573,6 +577,42 @@ function normalizeQualitySource(source = {}) {
 
 function normalizeQualityStatus(value) {
   return QUALITY_STATUS_OPTIONS.includes(value) ? value : "unknown";
+}
+
+function normalizeMarketFeedback(feedback = {}) {
+  const sentiment = ["positive", "mixed", "negative", "unknown"].includes(feedback.sentiment) ? feedback.sentiment : "unknown";
+  const heat = ["hot", "normal", "cold", "unknown"].includes(feedback.heat) ? feedback.heat : "unknown";
+  const confidence = ["high", "medium", "low", "unknown"].includes(feedback.confidence) ? feedback.confidence : "unknown";
+  return {
+    updatedAt: feedback.updatedAt || "",
+    summary: feedback.summary || "",
+    sentiment,
+    heat,
+    confidence,
+    positives: normalizeStringArray(feedback.positives).slice(0, 8),
+    negatives: normalizeStringArray(feedback.negatives).slice(0, 8),
+    controversies: normalizeStringArray(feedback.controversies).slice(0, 8),
+    priceFeedback: normalizeStringArray(feedback.priceFeedback).slice(0, 6),
+    qualityFeedback: normalizeStringArray(feedback.qualityFeedback).slice(0, 6),
+    cockpitAdasFeedback: normalizeStringArray(feedback.cockpitAdasFeedback).slice(0, 6),
+    comfortFeedback: normalizeStringArray(feedback.comfortFeedback).slice(0, 6),
+    nextChecks: normalizeStringArray(feedback.nextChecks).slice(0, 8),
+    sources: Array.isArray(feedback.sources) ? feedback.sources.map(normalizeMarketFeedbackSource).filter(Boolean).slice(0, 12) : []
+  };
+}
+
+function normalizeMarketFeedbackSource(source = {}) {
+  if (!source) return null;
+  const type = ["official", "complaint", "media", "owner", "forum", "video", "search", "quality"].includes(source.type) ? source.type : "search";
+  return {
+    id: source.id || makeId("mf"),
+    type,
+    label: source.label || source.title || marketFeedbackSourceTypeLabel(type),
+    status: source.status || "线索",
+    summary: source.summary || "",
+    url: normalizeWebUrl(source.url),
+    updatedAt: source.updatedAt || ""
+  };
 }
 
 function normalizePriceEvent(item) {
@@ -1334,6 +1374,46 @@ function qualitySourceTypeLabel(type) {
     reputation: "车主口碑",
     single: "单车证据"
   }[type] || "质量线索";
+}
+
+function marketSentimentLabel(value) {
+  return {
+    positive: "口碑偏正",
+    mixed: "评价分化",
+    negative: "口碑偏负",
+    unknown: "待观察"
+  }[value] || "待观察";
+}
+
+function marketHeatLabel(value) {
+  return {
+    hot: "讨论热",
+    normal: "讨论正常",
+    cold: "讨论少",
+    unknown: "热度待查"
+  }[value] || "热度待查";
+}
+
+function marketConfidenceLabel(value) {
+  return {
+    high: "高可信",
+    medium: "中可信",
+    low: "低可信",
+    unknown: "待核验"
+  }[value] || "待核验";
+}
+
+function marketFeedbackSourceTypeLabel(type) {
+  return {
+    official: "官方/召回",
+    complaint: "投诉数据",
+    media: "媒体评测",
+    owner: "车主口碑",
+    forum: "论坛社区",
+    video: "视频/长测",
+    quality: "质量线索",
+    search: "检索入口"
+  }[type] || "市场线索";
 }
 
 function evidenceStatusLabel(status) {
@@ -3792,9 +3872,11 @@ function renderDetail() {
     document.querySelector("#decisionReportPreview").innerHTML = "";
     document.querySelector("#redlineGate").innerHTML = "";
     document.querySelector("#detailDecision").innerHTML = "";
+    document.querySelector("#marketFeedbackPanel").innerHTML = "";
     document.querySelector("#qualityPanel").innerHTML = "";
     document.querySelector("#evidenceActionPanel").innerHTML = "";
     setQualityButtonState(false);
+    setMarketFeedbackButtonState(false);
     return;
   }
   const risk = analyzeCar(car);
@@ -3842,6 +3924,7 @@ function renderDetail() {
     </div>
   `;
 
+  document.querySelector("#marketFeedbackPanel").innerHTML = renderMarketFeedbackPanel(car);
   document.querySelector("#detailGallery").innerHTML = renderVehicleGallery(car);
   document.querySelector("#decisionReportPreview").innerHTML = renderDecisionReportPreview(car, workflow);
   document.querySelector("#redlineGate").innerHTML = renderRedlineGate(car);
@@ -3879,6 +3962,7 @@ function renderDetail() {
   document.querySelector("#qualityPanel").innerHTML = renderQualityPanel(car);
   document.querySelector("#evidenceActionPanel").innerHTML = renderEvidenceActionPanel(car);
   setQualityButtonState(qualityAnalysisRunning);
+  setMarketFeedbackButtonState(feedbackAnalysisRunning);
 }
 
 function getSelectedCarIndex() {
@@ -4437,6 +4521,215 @@ function renderDecisionReportPreview(car, workflow) {
   `;
 }
 
+function splitFeedbackText(text = "") {
+  return String(text || "")
+    .split(/[；;\n。]+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function marketSentimentClass(value) {
+  return {
+    positive: "ok",
+    mixed: "warn",
+    negative: "danger",
+    unknown: "info"
+  }[value] || "info";
+}
+
+function marketHeatClass(value) {
+  return {
+    hot: "warn",
+    normal: "ok",
+    cold: "info",
+    unknown: "info"
+  }[value] || "info";
+}
+
+function hasUsefulMarketFeedback(feedback = {}) {
+  return Boolean(
+    feedback.summary ||
+    feedback.updatedAt ||
+    feedback.positives?.length ||
+    feedback.negatives?.length ||
+    feedback.controversies?.length ||
+    feedback.sources?.some((source) => source.url || source.summary)
+  );
+}
+
+function marketFeedbackSourceFromQuality(source = {}) {
+  const type = source.type === "official" ? "official" : source.type === "complaint" ? "complaint" : source.type === "study" ? "media" : source.type === "single" ? "quality" : "owner";
+  return normalizeMarketFeedbackSource({
+    type,
+    label: source.label || qualitySourceTypeLabel(source.type),
+    status: source.status || "质量线索",
+    summary: source.summary || "",
+    url: source.url || "",
+    updatedAt: source.updatedAt || ""
+  });
+}
+
+function buildLocalMarketFeedback(car) {
+  const stored = normalizeMarketFeedback(car.marketFeedback);
+  const quality = assessCarQuality(car);
+  const sourceCandidates = [
+    ...(stored.sources || []),
+    ...(quality.profile.sources || []).map(marketFeedbackSourceFromQuality)
+  ].filter(Boolean);
+  const discount = getDiscountPct(car);
+  const positives = uniqueActionItems([
+    ...stored.positives,
+    car.experience?.seat >= 8 ? "前排座椅/乘坐舒适是当前记录里的正向点" : "",
+    car.experience?.nvh >= 8 ? "静谧性记录较好，适合北京通勤和高速" : "",
+    car.experience?.chassis >= 8 ? "底盘滤震记录较好，接近你喜欢的 i6 体感方向" : "",
+    car.experience?.cockpit >= 8 ? "车机/座舱体验记录较好" : "",
+    car.experience?.adas >= 8 ? "智驾能力在当前记录里偏强" : "",
+    ...quality.strengths
+  ], 6);
+  const negatives = uniqueActionItems([
+    ...stored.negatives,
+    ...splitFeedbackText(car.issues),
+    ...quality.warnings,
+    car.report !== "full" && carKind(car) === "used" ? "平台基础检测不足以代表完整车况和三电状态" : ""
+  ], 6);
+  const controversies = uniqueActionItems([
+    ...stored.controversies,
+    car.nop === "unknown" ? "智驾/NOA/NOP 权益是否随车仍需确认" : "",
+    car.battery === "unknown" ? "电池产权或租电状态仍需确认" : "",
+    car.certified === "unknown" ? "官方认证/平台认证口径还不清楚" : "",
+    carKind(car) === "new" ? "新车首批交付质量、真实能耗和 OTA 稳定性需要继续观察" : "",
+    quality.hasReputationData ? "" : "公开车主口碑仍未形成可复核结论"
+  ], 5);
+  const priceFeedback = uniqueActionItems([
+    ...stored.priceFeedback,
+    car.price && car.targetPrice && car.price > car.targetPrice ? `当前报价比目标价高 ${formatWan(car.price - car.targetPrice)}，市场反馈再好也不宜急着买。` : "",
+    car.price && car.newPrice ? `相对新车参考折价约 ${formatPct(discount)}，需要和新车权益/改款节奏一起看。` : "",
+    carKind(car) === "used" ? "二手车价格优势必须覆盖复检、异地、权益和质保不确定性。" : "新车重点观察上市权益、交付节奏和 7-8 月价格变化。"
+  ], 4);
+  const qualityFeedback = uniqueActionItems([
+    ...stored.qualityFeedback,
+    quality.confidenceLevel === "unknown" ? "市场质量数据不足，先按未知风险处理。" : `质量可信度${qualityLevelLabel(quality.confidenceLevel)}，三电${qualityRiskLabel(quality.threeElectricRisk)}。`,
+    ...quality.missingItems.slice(0, 3).map((item) => `待补 ${item}`)
+  ], 5);
+  const cockpitAdasFeedback = uniqueActionItems([
+    ...stored.cockpitAdasFeedback,
+    car.experience?.cockpit >= 8 ? "车机体验记录偏正向。" : "车机体验需要试驾或口碑补证。",
+    car.experience?.adas >= 8 ? "智驾体验记录偏强，但仍需看高速 NOA 实测。" : "智驾体验还不是强证据，需要看实测反馈。",
+    car.nop === "subscription" ? "智驾可能涉及订阅成本。" : ""
+  ], 4);
+  const comfortFeedback = uniqueActionItems([
+    ...stored.comfortFeedback,
+    car.experience?.seat >= 8 ? "座椅舒适度记录偏好。" : "座椅舒适度需要继续试驾确认。",
+    car.experience?.nvh >= 8 ? "静谧性记录偏好。" : "NVH 需要高速试驾确认。",
+    car.experience?.chassis >= 8 ? "底盘滤震记录偏好。" : "底盘舒适性需要和 i6 继续对照。"
+  ], 4);
+  const nextChecks = uniqueActionItems([
+    ...stored.nextChecks,
+    "点击 AI 刷新市场反馈，补懂车帝口碑/资讯、车质网、召回和论坛高频槽点。",
+    ...quality.questions.slice(0, 3),
+    carKind(car) === "used" ? "二手具体车源仍要看 SOH、维保、故障码和三电质保截图。" : "新车继续观察首批车主反馈和官方 OTA/召回。"
+  ], 6);
+  const sentiment = stored.sentiment !== "unknown" ? stored.sentiment : negatives.length >= positives.length + 2 ? "negative" : positives.length && negatives.length ? "mixed" : positives.length ? "positive" : "unknown";
+  const heat = stored.heat !== "unknown" ? stored.heat : sourceCandidates.length >= 3 ? "normal" : "unknown";
+  const confidence = stored.confidence !== "unknown" ? stored.confidence : sourceCandidates.some((source) => source.url) ? "medium" : "low";
+  const summary = stored.summary || [
+    `${car.name} ${car.trim || ""}`.trim(),
+    positives[0] ? `正向集中在${positives[0].replace(/[。.]$/, "")}` : "公开正向反馈还需要补充",
+    negatives[0] ? `主要槽点是${negatives[0].replace(/[。.]$/, "")}` : "暂未沉淀明确集中槽点",
+    controversies[0] ? `争议/待核验点：${controversies[0].replace(/[。.]$/, "")}` : ""
+  ].filter(Boolean).join("；") + "。";
+
+  return normalizeMarketFeedback({
+    ...stored,
+    summary,
+    sentiment,
+    heat,
+    confidence,
+    positives,
+    negatives,
+    controversies,
+    priceFeedback,
+    qualityFeedback,
+    cockpitAdasFeedback,
+    comfortFeedback,
+    nextChecks,
+    sources: sourceCandidates
+  });
+}
+
+function renderMarketFeedbackList(title, items, tone = "") {
+  const safeItems = uniqueActionItems(items || [], 5);
+  return `
+    <article class="market-feedback-card ${tone}">
+      <h3>${escapeHtml(title)}</h3>
+      ${safeItems.length ? `
+        <ul>
+          ${safeItems.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
+        </ul>
+      ` : `<p class="muted">暂无明确反馈，建议先刷新市场反馈。</p>`}
+    </article>
+  `;
+}
+
+function renderMarketFeedbackSources(sources = []) {
+  const usefulSources = (sources || []).filter((source) => source.url || source.summary).slice(0, 6);
+  if (!usefulSources.length) {
+    return `<div class="market-feedback-source-empty">暂无可复核来源。刷新后会优先补懂车帝口碑/资讯、车质网、召回和论坛线索。</div>`;
+  }
+  return `
+    <div class="market-feedback-source-list">
+      ${usefulSources.map((source) => {
+        const body = `
+          <span>${escapeHtml(marketFeedbackSourceTypeLabel(source.type))}</span>
+          <strong>${escapeHtml(source.label || marketFeedbackSourceTypeLabel(source.type))}</strong>
+          <small>${escapeHtml(source.status || "线索")}${source.updatedAt ? ` · ${formatDateTime(source.updatedAt)}` : ""}</small>
+        `;
+        return source.url
+          ? `<a href="${escapeAttr(source.url)}" target="_blank" rel="noreferrer" class="market-feedback-source">${body}</a>`
+          : `<div class="market-feedback-source">${body}<small>${escapeHtml(source.summary || "没有可点击来源，建议刷新或手动补证。")}</small></div>`;
+      }).join("")}
+    </div>
+  `;
+}
+
+function renderMarketFeedbackPanel(car) {
+  const feedback = buildLocalMarketFeedback(car);
+  const isAiReady = hasUsefulMarketFeedback(car.marketFeedback);
+  return `
+    <div class="market-feedback-panel">
+      <div class="market-feedback-hero ${marketSentimentClass(feedback.sentiment)}">
+        <div>
+          <span class="market-feedback-kicker">${isAiReady ? "AI / 公开线索" : "本地速览"}</span>
+          <h3>市场反馈速览</h3>
+          <p>${escapeHtml(feedback.summary)}</p>
+        </div>
+        <div class="market-feedback-metrics">
+          <div><span>口碑</span><strong>${escapeHtml(marketSentimentLabel(feedback.sentiment))}</strong></div>
+          <div><span>热度</span><strong>${escapeHtml(marketHeatLabel(feedback.heat))}</strong></div>
+          <div><span>可信度</span><strong>${escapeHtml(marketConfidenceLabel(feedback.confidence))}</strong></div>
+        </div>
+      </div>
+      <div class="market-feedback-grid">
+        ${renderMarketFeedbackList("好评集中", feedback.positives, "ok")}
+        ${renderMarketFeedbackList("槽点集中", feedback.negatives, "warn")}
+        ${renderMarketFeedbackList("争议/待核验", feedback.controversies, "info")}
+        ${renderMarketFeedbackList("价格反馈", feedback.priceFeedback)}
+        ${renderMarketFeedbackList("质量/三电反馈", feedback.qualityFeedback, feedback.qualityFeedback.some((item) => /高风险|待补|不足|未知/.test(item)) ? "warn" : "")}
+        ${renderMarketFeedbackList("车机/智驾反馈", feedback.cockpitAdasFeedback)}
+        ${renderMarketFeedbackList("舒适/乘坐反馈", feedback.comfortFeedback)}
+        ${renderMarketFeedbackList("下一步查什么", feedback.nextChecks, "info")}
+      </div>
+      <div class="market-feedback-sources">
+        <div class="market-feedback-source-head">
+          <strong>来源与线索</strong>
+          <span>${feedback.updatedAt ? `更新 ${formatDateTime(feedback.updatedAt)}` : "未联网刷新"}</span>
+        </div>
+        ${renderMarketFeedbackSources(feedback.sources)}
+      </div>
+    </div>
+  `;
+}
+
 function clampEvidenceScore(value) {
   return Math.max(0, Math.min(100, Math.round(Number(value) || 0)));
 }
@@ -4952,6 +5245,157 @@ function setQualityButtonState(isRunning) {
   if (!button) return;
   button.disabled = isRunning || !selectedCarId;
   button.textContent = isRunning ? "AI 检索中..." : "AI 检索质量线索";
+}
+
+function setMarketFeedbackButtonState(isRunning) {
+  const button = document.querySelector("#refreshMarketFeedback");
+  if (!button) return;
+  button.disabled = isRunning || !selectedCarId;
+  button.textContent = isRunning ? "AI 刷新中..." : "AI 刷新市场反馈";
+}
+
+function getGeminiFeedbackUrls() {
+  const urls = [];
+  if (location.protocol === "http:" || location.protocol === "https:") {
+    urls.push(GEMINI_FEEDBACK_URL);
+  }
+  urls.push(LOCAL_GEMINI_FEEDBACK_URL);
+  return [...new Set(urls)];
+}
+
+function buildMarketFeedbackPayload(car) {
+  return {
+    profile: state.userRequirement,
+    car: cloneCarForGemini(car),
+    localFeedback: buildLocalMarketFeedback(car),
+    qualityAssessment: assessCarQuality(car),
+    infoWall: getCarEvidence(car.id).slice(0, 16).map((item) => ({
+      id: item.id,
+      title: item.title,
+      type: item.type,
+      status: item.status,
+      url: item.url,
+      notes: item.notes,
+      createdAt: item.createdAt
+    })),
+    outputRules: {
+      fastScan: true,
+      sourceTypes: ["owner", "media", "complaint", "official", "forum", "video"],
+      keepClaimsShort: true
+    }
+  };
+}
+
+async function fetchMarketFeedbackWithAi() {
+  if (feedbackAnalysisRunning) {
+    showToast("正在刷新市场反馈。", "warn");
+    return;
+  }
+  const car = getSelectedCar();
+  if (!car) return;
+  feedbackAnalysisRunning = true;
+  setMarketFeedbackButtonState(true);
+  showToast("正在联网检索市场反馈。", "ok");
+  try {
+    const payload = buildMarketFeedbackPayload(car);
+    let result = null;
+    let lastError = "";
+    for (const url of getGeminiFeedbackUrls()) {
+      try {
+        const response = await fetchWithTimeout(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        }, AI_ANALYZE_TIMEOUT_MS);
+        result = await response.json().catch(() => ({}));
+        if (!response.ok || result.ok === false) throw new Error(result.error || `市场反馈刷新失败：${response.status}`);
+        break;
+      } catch (error) {
+        lastError = error?.message || "市场反馈刷新失败。";
+        result = null;
+      }
+    }
+    if (!result) throw new Error(lastError || "AI 市场反馈服务未就绪。");
+    applyMarketFeedbackResult(car, result);
+    const saved = render();
+    showToast(saved ? marketFeedbackResultToast(result) : "市场反馈已回填，但本机保存失败，请先导出备份。", saved ? "ok" : "danger");
+  } catch (error) {
+    const local = buildLocalMarketFeedback(car);
+    car.marketFeedback = normalizeMarketFeedback({
+      ...local,
+      summary: `${local.summary}（AI 暂时失败，当前为本地速览。）`,
+      updatedAt: new Date().toISOString(),
+      confidence: local.confidence === "unknown" ? "low" : local.confidence
+    });
+    render();
+    showToast(formatAiFailureMessage(error, { provider: "Gemini / DeepSeek", nextAction: "已先用本地信息生成速览；可稍后重试联网刷新。" }), "warn");
+  } finally {
+    feedbackAnalysisRunning = false;
+    setMarketFeedbackButtonState(false);
+  }
+}
+
+function applyMarketFeedbackResult(car, result) {
+  const feedback = normalizeMarketFeedback(result.marketFeedback || result.carPatch?.marketFeedback || {});
+  const fallback = buildLocalMarketFeedback(car);
+  car.marketFeedback = normalizeMarketFeedback({
+    ...fallback,
+    ...feedback,
+    updatedAt: feedback.updatedAt || new Date().toISOString()
+  });
+  const notes = formatMarketFeedbackNotes(result, car.marketFeedback);
+  state.evidence.unshift({
+    id: makeId("ev"),
+    carId: car.id,
+    title: "AI 刷新市场反馈速览",
+    type: "analysis",
+    status: car.marketFeedback.sources.some((source) => source.url) ? "valid" : "pending",
+    url: car.marketFeedback.sources.find((source) => source.url)?.url || "",
+    notes,
+    attachments: [],
+    createdAt: new Date().toISOString().slice(0, 10),
+    analysisStatus: "applied",
+    analysisError: "",
+    analysisResult: {
+      marketFeedback: car.marketFeedback,
+      analysis: result.analysis || null,
+      analyzedAt: new Date().toISOString(),
+      provider: result.provider || ""
+    },
+    linkedRiskIds: [],
+    appliedAt: new Date().toISOString()
+  });
+  addDecisionLog(car, {
+    type: "feedback",
+    title: "刷新市场反馈速览",
+    detail: `${marketSentimentLabel(car.marketFeedback.sentiment)} / ${marketConfidenceLabel(car.marketFeedback.confidence)}；来源 ${car.marketFeedback.sources.length} 条`,
+    level: car.marketFeedback.sentiment === "negative" ? "warn" : "info",
+    relatedIds: [car.id]
+  });
+  car.updatedAt = new Date().toISOString();
+}
+
+function formatMarketFeedbackNotes(result, feedback) {
+  const lines = [];
+  lines.push(`来源：${aiProviderLabel(result)}${result.providerFallbackFrom ? "（Gemini 失败后兜底）" : ""}`);
+  if (result.grounding?.sourceCount) lines.push(`联网来源：${result.grounding.sourceCount} 条`);
+  lines.push(`摘要：${feedback.summary || "暂无摘要"}`);
+  if (feedback.positives.length) lines.push(`好评：${feedback.positives.join("；")}`);
+  if (feedback.negatives.length) lines.push(`槽点：${feedback.negatives.join("；")}`);
+  if (feedback.controversies.length) lines.push(`争议：${feedback.controversies.join("；")}`);
+  if (feedback.nextChecks.length) lines.push(`下一步：${feedback.nextChecks.join("；")}`);
+  if (feedback.sources.length) {
+    lines.push("来源线索：");
+    feedback.sources.slice(0, 8).forEach((source, index) => {
+      lines.push(`${index + 1}. ${source.label || marketFeedbackSourceTypeLabel(source.type)} - ${source.url || source.summary || "无链接"}`);
+    });
+  }
+  return lines.join("\n");
+}
+
+function marketFeedbackResultToast(result = {}) {
+  if (result.sourceFallback) return `${aiProviderLabel(result)} 已生成待核验市场反馈线索。`;
+  return `${aiProviderLabel(result)} 已刷新市场反馈。`;
 }
 
 async function copyQualityQuestions() {
@@ -6805,6 +7249,14 @@ function applyCarPatch(car, patch) {
       updatedAt: new Date().toISOString()
     });
   }
+  if (patch.marketFeedback && typeof patch.marketFeedback === "object") {
+    const current = normalizeMarketFeedback(car.marketFeedback);
+    car.marketFeedback = normalizeMarketFeedback({
+      ...current,
+      ...patch.marketFeedback,
+      updatedAt: new Date().toISOString()
+    });
+  }
 }
 
 function applyEnumPatch(car, patch, field, allowed) {
@@ -7447,6 +7899,7 @@ document.querySelector("#copyActiveDecisionReport")?.addEventListener("click", c
 document.querySelector("#fetchQualityData")?.addEventListener("click", fetchQualityDataWithAi);
 document.querySelector("#refreshQualityData")?.addEventListener("click", refreshQualityAssessment);
 document.querySelector("#copyQualityQuestions")?.addEventListener("click", copyQualityQuestions);
+document.querySelector("#refreshMarketFeedback")?.addEventListener("click", fetchMarketFeedbackWithAi);
 document.querySelector("#copyEvidenceActionPack")?.addEventListener("click", () => copyEvidenceActionPack("all"));
 document.querySelector("#addPriceEvent")?.addEventListener("click", () => addCurrentPriceEvent(selectedCarId));
 document.querySelector("#analyzeInfoWall").addEventListener("click", () => analyzeCurrentCarWithGemini({ auto: false }));

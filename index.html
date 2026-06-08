@@ -9,7 +9,7 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="format-detection" content="telephone=no">
     <title>NewCar 购车工作台</title>
-    <link rel="stylesheet" href="./styles.css?v=20260605-v21-evidence-action">
+    <link rel="stylesheet" href="./styles.css?v=20260608-v22-market-feedback">
     <script src="./auth-config.js"></script>
     <script src="https://accounts.google.com/gsi/client" async defer></script>
   </head>
@@ -365,6 +365,16 @@
           <div class="detail-layout">
             <div class="detail-stack" id="candidateDetailMain">
               <section id="detailHero" class="panel"></section>
+              <section class="panel">
+                <div class="panel-head">
+                  <div>
+                    <h2>市场反馈速览</h2>
+                    <span class="muted">快速看公开口碑、主要好评、集中槽点和待核验线索</span>
+                  </div>
+                  <button class="primary-button" id="refreshMarketFeedback" type="button">AI 刷新市场反馈</button>
+                </div>
+                <div id="marketFeedbackPanel"></div>
+              </section>
               <section id="detailGallery" class="panel"></section>
               <section class="panel">
                 <div class="panel-head">
@@ -771,6 +781,6 @@
       </form>
     </dialog>
 
-    <script src="./app.js?v=20260605-v21-evidence-action"></script>
+    <script src="./app.js?v=20260608-v22-market-feedback"></script>
   </body>
 </html>

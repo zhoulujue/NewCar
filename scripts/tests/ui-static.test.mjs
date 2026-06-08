@@ -196,3 +196,25 @@ test("V1.4 evidence action cockpit turns gaps into copyable due-diligence script
   assert.match(css, /\.evidence-action-grid/);
   assert.match(css, /\.evidence-script-card/);
 });
+
+test("single candidate detail exposes a market feedback fast-scan module", async () => {
+  const html = await readFile(new URL("index.html", root), "utf8");
+  const app = await readFile(new URL("app.js", root), "utf8");
+  const css = await readFile(new URL("styles.css", root), "utf8");
+
+  assert.match(html, /市场反馈速览/);
+  assert.match(html, /id="marketFeedbackPanel"/);
+  assert.match(html, /id="refreshMarketFeedback"/);
+  assert.match(app, /GEMINI_FEEDBACK_URL/);
+  assert.match(app, /function normalizeMarketFeedback/);
+  assert.match(app, /function buildLocalMarketFeedback/);
+  assert.match(app, /function renderMarketFeedbackPanel/);
+  assert.match(app, /async function fetchMarketFeedbackWithAi/);
+  assert.match(app, /function applyMarketFeedbackResult/);
+  assert.match(app, /市场反馈速览/);
+  assert.match(app, /好评集中/);
+  assert.match(app, /槽点集中/);
+  assert.match(css, /\.market-feedback-panel/);
+  assert.match(css, /\.market-feedback-grid/);
+  assert.match(css, /\.market-feedback-source-list/);
+});

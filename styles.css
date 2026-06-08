@@ -2706,6 +2706,201 @@ textarea.input {
   min-width: 0;
 }
 
+.market-feedback-panel {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.market-feedback-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 0.46fr);
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid #d9e5ec;
+  border-radius: var(--radius);
+  background: #f8fbfc;
+}
+
+.market-feedback-hero.ok {
+  border-color: #b8dcc8;
+  background: #fbfffd;
+}
+
+.market-feedback-hero.warn {
+  border-color: #f1d3a8;
+  background: #fffaf4;
+}
+
+.market-feedback-hero.danger {
+  border-color: #efb7ad;
+  background: #fff7f5;
+}
+
+.market-feedback-hero.info {
+  border-color: #bfd7ec;
+  background: #f7fbff;
+}
+
+.market-feedback-kicker {
+  display: inline-flex;
+  width: fit-content;
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.82);
+  color: var(--primary-dark);
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.market-feedback-hero h3 {
+  margin-top: 10px;
+  font-size: 20px;
+  line-height: 1.28;
+}
+
+.market-feedback-hero p {
+  margin-top: 8px;
+  color: #52616f;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.market-feedback-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.market-feedback-metrics div {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid rgba(214, 225, 234, 0.9);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.market-feedback-metrics span,
+.market-feedback-source-head span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.market-feedback-metrics strong {
+  display: block;
+  margin-top: 5px;
+  color: var(--text);
+  line-height: 1.25;
+}
+
+.market-feedback-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: 10px;
+}
+
+.market-feedback-card {
+  display: grid;
+  align-content: start;
+  gap: 9px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #fff;
+}
+
+.market-feedback-card.ok {
+  border-color: #b8dcc8;
+  background: #fbfffd;
+}
+
+.market-feedback-card.warn {
+  border-color: #f1d3a8;
+  background: #fffaf4;
+}
+
+.market-feedback-card.info {
+  border-color: #bfd7ec;
+  background: #f7fbff;
+}
+
+.market-feedback-card h3 {
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.market-feedback-card ul {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+  padding-left: 18px;
+  color: #52616f;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.market-feedback-card li {
+  overflow-wrap: anywhere;
+}
+
+.market-feedback-sources {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid #cde5e1;
+  border-radius: var(--radius);
+  background: #f8fffd;
+}
+
+.market-feedback-source-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.market-feedback-source-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: 8px;
+}
+
+.market-feedback-source {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.market-feedback-source span {
+  width: fit-content;
+  padding: 3px 6px;
+  border-radius: 999px;
+  background: #e8f5f2;
+  color: var(--primary-dark);
+  font-size: 11px;
+  font-weight: 760;
+}
+
+.market-feedback-source strong,
+.market-feedback-source small {
+  overflow-wrap: anywhere;
+}
+
+.market-feedback-source small,
+.market-feedback-source-empty {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .evidence-action-hero {
   display: grid;
   grid-template-columns: minmax(150px, 0.28fr) minmax(0, 1fr);
@@ -5334,6 +5529,12 @@ button:disabled {
 }
 
 @media (max-width: 640px) {
+  .market-feedback-hero,
+  .market-feedback-grid,
+  .market-feedback-metrics {
+    grid-template-columns: 1fr;
+  }
+
   .evidence-action-hero,
   .evidence-action-grid,
   .evidence-script-head {

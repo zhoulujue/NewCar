@@ -11,6 +11,7 @@ const MAX_INLINE_IMAGES = Number(process.env.GEMINI_ANALYZER_MAX_IMAGES || 10);
 const GEMINI_API_TIMEOUT_MS = Number(process.env.GEMINI_API_TIMEOUT_MS || 90000);
 const GEMINI_RECOMMEND_TIMEOUT_MS = Number(process.env.GEMINI_RECOMMEND_TIMEOUT_MS || 45000);
 const GEMINI_QUALITY_TIMEOUT_MS = Number(process.env.GEMINI_QUALITY_TIMEOUT_MS || 90000);
+const GEMINI_FEEDBACK_TIMEOUT_MS = Number(process.env.GEMINI_FEEDBACK_TIMEOUT_MS || 90000);
 const DEEPSEEK_MODEL = process.env.DEEPSEEK_MODEL || "deepseek-v4-flash";
 const DEEPSEEK_BASE_URL = (process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com").replace(/\/$/, "");
 const DEEPSEEK_API_TIMEOUT_MS = Number(process.env.DEEPSEEK_API_TIMEOUT_MS || 45000);
@@ -53,6 +54,13 @@ const server = createServer(async (req, res) => {
       const payload = await readJson(req);
       const startedAt = Date.now();
       const result = await qualityWithFallback(payload, startedAt);
+      sendJson(res, 200, { ok: true, ...result });
+      return;
+    }
+    if (req.method === "POST" && ["/feedback", "/api/feedback"].includes(req.url)) {
+      const payload = await readJson(req);
+      const startedAt = Date.now();
+      const result = await feedbackWithFallback(payload, startedAt);
       sendJson(res, 200, { ok: true, ...result });
       return;
     }
@@ -190,8 +198,38 @@ async function qualityWithGeminiApi(payload) {
   return attachGroundingSources(parseModelJson(text), candidate.groundingMetadata || candidate.grounding_metadata);
 }
 
+async function feedbackWithGeminiApi(payload) {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) throw new Error("未找到 GEMINI_API_KEY，请先配置本机 Gemini API Key，或设置 GEMINI_ANALYZER_MODE=cli。");
+  const prompt = buildMarketFeedbackPrompt(payload, { grounded: true });
+  const response = await fetchWithTimeout(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      tools: [{ google_search: {} }],
+      generationConfig: {
+        temperature: 0.16
+      }
+    })
+  }, GEMINI_FEEDBACK_TIMEOUT_MS);
+  const json = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(json.error?.message || `Gemini API 返回 ${response.status}`);
+  }
+  const candidate = json.candidates?.[0] || {};
+  const text = candidate.content?.parts?.map((part) => part.text || "").join("\n");
+  return attachMarketFeedbackGroundingSources(parseModelJson(text), candidate.groundingMetadata || candidate.grounding_metadata);
+}
+
 async function qualityWithGeminiCli(payload) {
   const prompt = buildQualityPrompt(stripImageData(payload), { grounded: false });
+  const text = await runGeminiCli(prompt);
+  return parseModelJson(text);
+}
+
+async function feedbackWithGeminiCli(payload) {
+  const prompt = buildMarketFeedbackPrompt(stripImageData(payload), { grounded: false });
   const text = await runGeminiCli(prompt);
   return parseModelJson(text);
 }
@@ -245,6 +283,23 @@ async function qualityWithFallback(payload, startedAt = Date.now()) {
   throw new Error(`AI 质量线索检索失败（Gemini / DeepSeek）。${formatProviderErrors(result.errors)}`);
 }
 
+async function feedbackWithFallback(payload, startedAt = Date.now()) {
+  const result = await firstSuccessfulProvider([
+    { provider: "gemini", run: () => (MODE === "api" ? feedbackWithGeminiApi(payload) : feedbackWithGeminiCli(payload)) },
+    { provider: "deepseek", run: () => feedbackWithDeepSeekApi(payload) }
+  ]);
+  if (result.ok) {
+    console.log(`[feedback] ${result.provider} ok ${Date.now() - startedAt}ms car=${payload.car?.name || ""}`);
+    return {
+      provider: result.provider,
+      providerFallbackFrom: result.provider === "gemini" ? "" : "gemini",
+      ...ensureMarketFeedbackSources(result.value, payload, result.provider)
+    };
+  }
+  console.warn(`[feedback] providers failed ${Date.now() - startedAt}ms car=${payload.car?.name || ""}: ${formatProviderErrors(result.errors)}`);
+  throw new Error(`AI 市场反馈刷新失败（Gemini / DeepSeek）。${formatProviderErrors(result.errors)}`);
+}
+
 async function firstSuccessfulProvider(tasks = []) {
   const outcomes = [];
   for (const task of tasks) {
@@ -275,6 +330,11 @@ async function recommendWithDeepSeekApi(payload) {
 async function qualityWithDeepSeekApi(payload) {
   const prompt = buildQualityPrompt(stripImageData(payload), { grounded: false, provider: "deepseek" });
   return requestDeepSeekJson(prompt, 0.12);
+}
+
+async function feedbackWithDeepSeekApi(payload) {
+  const prompt = buildMarketFeedbackPrompt(stripImageData(payload), { grounded: false, provider: "deepseek" });
+  return requestDeepSeekJson(prompt, 0.16);
 }
 
 async function requestDeepSeekJson(prompt, temperature) {
@@ -521,6 +581,75 @@ function buildQualityPrompt(payload, options = {}) {
 - "${payload.car?.name || ""} ${payload.car?.trim || ""} 召回 三电 电池 电机 电控"
 - "${payload.car?.name || ""} 车质网 投诉销量比 三电 投诉"
 - "${payload.car?.name || ""} 电池 故障码 续航衰减 车主 口碑"
+
+输入数据：
+${JSON.stringify(stripImageData(payload), null, 2)}
+`;
+}
+
+function buildMarketFeedbackPrompt(payload, options = {}) {
+  const grounded = Boolean(options.grounded);
+  const provider = options.provider || (grounded ? "gemini-search" : "model");
+  const carName = [payload.car?.name, payload.car?.trim].filter(Boolean).join(" ") || "目标车型";
+  return `
+你是 NewCar 购车工作台的“单车型市场反馈速览”研究助手。
+任务：围绕 ${carName}，快速汇总市场反馈，让用户在候选详情页能一眼看到公开口碑、集中好评、集中槽点、争议点、质量/三电反馈和下一步核验动作。
+
+当前能力：
+- ${grounded ? "你已启用 Google Search grounding，请主动联网检索并只引用可验证来源。" : provider === "deepseek" ? "你当前由 DeepSeek 兜底，没有可靠联网 grounding；请基于输入和常识给低置信结构化结论，并要求打开来源核验。" : "你没有联网 grounding；请只给低置信结构化结论。"}
+- 输出必须是严格 JSON，不要 Markdown，不要解释。
+
+研究优先级：
+1. 车主口碑：懂车帝、汽车之家、易车、官方社区里的高频好评/槽点。
+2. 投诉与质量：车质网投诉、投诉销量比、三电/充电/续航衰减/故障码关键词。
+3. 官方信息：国家市场监督管理总局召回、品牌公告、OTA/交付质量说明。
+4. 媒体/长测：主流媒体评测、长测、首批车主真实能耗和高速体验。
+5. 论坛/视频：社区和视频平台的高频反馈，只作为线索，不当成定论。
+
+返回 JSON 结构：
+{
+  "marketFeedback": {
+    "updatedAt": "YYYY-MM-DD",
+    "summary": string,
+    "sentiment": "positive|mixed|negative|unknown",
+    "heat": "hot|normal|cold|unknown",
+    "confidence": "high|medium|low|unknown",
+    "positives": [string],
+    "negatives": [string],
+    "controversies": [string],
+    "priceFeedback": [string],
+    "qualityFeedback": [string],
+    "cockpitAdasFeedback": [string],
+    "comfortFeedback": [string],
+    "nextChecks": [string],
+    "sources": [
+      { "type": "official|complaint|media|owner|forum|video|search|quality", "label": string, "status": string, "summary": string, "url": string, "updatedAt": "YYYY-MM-DD" }
+    ]
+  },
+  "analysis": {
+    "summary": string,
+    "riskLevel": "low|medium|high",
+    "confidence": "low|medium|high",
+    "questions": [string]
+  },
+  "marketFeedbackSources": [
+    { "type": "official|complaint|media|owner|forum|video|search|quality", "label": string, "status": string, "summary": string, "url": string, "updatedAt": "YYYY-MM-DD" }
+  ]
+}
+
+字段要求：
+- 不要编造精确数据。没有精确投诉销量比、召回数量、真实能耗时，不要写成确定数值，写“未找到公开精确数据/需打开来源核验”。
+- positives/negatives/controversies 每条控制在 35 个中文字符以内，优先写用户决策相关内容，不写营销话术。
+- summary 必须是一段可以直接展示在页面上的结论，明确“市场反馈偏正/分化/偏负”和主要原因。
+- sources.status 只有在来源页面明确支撑结论时才写“已核验/有数据”；搜索入口、论坛线索或 DeepSeek 兜底写“入口待核验”。
+- 如果是新上市或未大规模交付车型，必须降低 confidence，并把“首批交付质量、真实能耗、OTA 稳定性需观察”写入 controversies 或 nextChecks。
+- 如果是二手具体车源，公开口碑只代表车系；SOH、维保、故障码、三电质保必须看单车证据。
+
+搜索建议：
+- "${carName} 懂车帝 口碑 车主评价 槽点"
+- "${carName} 车质网 投诉 电池 电机 电控 充电"
+- "${carName} 召回 缺陷 调查 OTA"
+- "${carName} 长测 高速 能耗 静谧 底盘 智驾"
 
 输入数据：
 ${JSON.stringify(stripImageData(payload), null, 2)}
@@ -805,6 +934,35 @@ function attachGroundingSources(result = {}, groundingMetadata = {}) {
   return result;
 }
 
+function attachMarketFeedbackGroundingSources(result = {}, groundingMetadata = {}) {
+  const chunks = groundingMetadata?.groundingChunks || groundingMetadata?.grounding_chunks || [];
+  const groundedSources = chunks
+    .map((chunk) => chunk.web || chunk.retrievedContext || chunk.retrieved_context || null)
+    .filter(Boolean)
+    .map((source) => ({
+      type: inferMarketFeedbackSourceType(`${source.title || ""} ${source.uri || ""}`),
+      label: source.title || "联网来源",
+      status: "AI已检索",
+      summary: source.title || source.uri || "Gemini Search grounding 来源",
+      url: source.uri || "",
+      updatedAt: new Date().toISOString().slice(0, 10)
+    }))
+    .filter((source) => source.url);
+  if (!groundedSources.length) return result;
+  const feedback = result.marketFeedback || result.carPatch?.marketFeedback || {};
+  const existingSources = feedback.sources || result.marketFeedbackSources || [];
+  result.marketFeedback = {
+    ...feedback,
+    sources: mergeMarketFeedbackSources(existingSources, groundedSources)
+  };
+  result.marketFeedbackSources = result.marketFeedback.sources;
+  result.grounding = {
+    webSearchQueries: groundingMetadata?.webSearchQueries || groundingMetadata?.web_search_queries || [],
+    sourceCount: groundedSources.length
+  };
+  return result;
+}
+
 function ensureQualitySources(result = {}, payload = {}, provider = "") {
   const existingSources = result.carPatch?.qualityProfile?.sources || [];
   const hasLinkedSource = existingSources.some((source) => source.url);
@@ -836,6 +994,45 @@ function ensureQualitySources(result = {}, payload = {}, provider = "") {
   };
   result.sourceFallback = true;
   return guardQualityResultForProvider(result, { provider, sourceFallback: true });
+}
+
+function ensureMarketFeedbackSources(result = {}, payload = {}, provider = "") {
+  const feedback = result.marketFeedback || result.carPatch?.marketFeedback || {};
+  const existingSources = feedback.sources || result.marketFeedbackSources || [];
+  const hasLinkedSource = existingSources.some((source) => source.url);
+  if (provider === "gemini" && hasLinkedSource) {
+    result.marketFeedback = {
+      ...feedback,
+      updatedAt: feedback.updatedAt || new Date().toISOString().slice(0, 10),
+      sources: mergeMarketFeedbackSources(existingSources, [])
+    };
+    result.marketFeedbackSources = result.marketFeedback.sources;
+    return result;
+  }
+  const fallbackSources = buildMarketFeedbackSearchSources(payload, provider);
+  const localFeedback = payload.localFeedback || {};
+  result.marketFeedback = {
+    ...localFeedback,
+    ...feedback,
+    updatedAt: feedback.updatedAt || new Date().toISOString().slice(0, 10),
+    confidence: feedback.confidence === "high" ? "medium" : feedback.confidence || localFeedback.confidence || "low",
+    summary: feedback.summary || localFeedback.summary || "已生成市场反馈线索，具体结论需打开来源核验。",
+    sources: mergeMarketFeedbackSources(existingSources, fallbackSources)
+  };
+  result.marketFeedbackSources = result.marketFeedback.sources;
+  result.analysis = {
+    ...(result.analysis || {}),
+    confidence: result.analysis?.confidence === "high" ? "medium" : result.analysis?.confidence || "low",
+    summary: result.analysis?.summary || "AI 未返回可直接核验的网页来源，已附关键检索入口；请优先打开口碑、投诉、召回和长测来源确认。",
+    questions: [
+      ...(result.analysis?.questions || []),
+      "请打开懂车帝/汽车之家/易车口碑入口，确认高频好评和槽点是否集中且近期是否变化。",
+      "请打开车质网入口，确认投诉销量比、三电相关投诉和近期趋势。",
+      "请打开召回/官方公告入口，确认是否涉及召回、缺陷调查或 OTA 质量公告。"
+    ].filter(Boolean).slice(0, 10)
+  };
+  result.sourceFallback = true;
+  return result;
 }
 
 function buildQualitySearchSources(payload = {}, provider = "") {
@@ -880,7 +1077,68 @@ function buildQualitySearchSources(payload = {}, provider = "") {
   ];
 }
 
+function buildMarketFeedbackSearchSources(payload = {}, provider = "") {
+  const carName = [payload.car?.name, payload.car?.trim].filter(Boolean).join(" ");
+  const shortName = payload.car?.name || carName || "目标车型";
+  const makeSearchUrl = (query) => `https://www.baidu.com/s?wd=${encodeURIComponent(query)}`;
+  const today = new Date().toISOString().slice(0, 10);
+  const status = provider === "gemini" ? "入口待核验" : "DeepSeek兜底待核验";
+  const marketFeedbackSources = [
+    {
+      type: "owner",
+      label: "懂车帝/车主口碑",
+      status,
+      summary: `核验 ${shortName} 的车主高频好评、槽点、真实能耗、舒适性和车机/智驾反馈。`,
+      url: makeSearchUrl(`site:dongchedi.com ${carName} 口碑 车主评价 槽点 能耗 智驾`),
+      updatedAt: today
+    },
+    {
+      type: "complaint",
+      label: "车质网投诉",
+      status,
+      summary: `核验 ${shortName} 的投诉销量比、投诉列表和三电/充电/续航衰减相关投诉。`,
+      url: makeSearchUrl(`site:12365auto.com ${carName} 投诉销量比 投诉 电池 电机 电控 充电 续航衰减`),
+      updatedAt: today
+    },
+    {
+      type: "official",
+      label: "官方召回/缺陷公告",
+      status,
+      summary: `核验 ${shortName} 是否存在召回、缺陷调查、官方质量公告或重要 OTA 说明。`,
+      url: makeSearchUrl(`site:samrdprc.org.cn OR site:samr.gov.cn ${carName} 召回 缺陷 调查 OR ${carName} 官方 公告 OTA`),
+      updatedAt: today
+    },
+    {
+      type: "media",
+      label: "媒体评测/长测",
+      status,
+      summary: `核验 ${shortName} 的高速能耗、NVH、底盘舒适、座椅和辅助驾驶长测反馈。`,
+      url: makeSearchUrl(`${carName} 长测 高速 能耗 NVH 底盘 舒适 智驾 评测`),
+      updatedAt: today
+    },
+    {
+      type: "forum",
+      label: "论坛/社区高频反馈",
+      status,
+      summary: `核验 ${shortName} 论坛和社区里的高频问题，区分个例、批量问题和软件可修复问题。`,
+      url: makeSearchUrl(`${carName} 论坛 社区 车主 高频问题 槽点 避坑`),
+      updatedAt: today
+    }
+  ];
+  return marketFeedbackSources;
+}
+
 function mergeQualitySources(primary = [], secondary = []) {
+  const seen = new Set();
+  return [...primary, ...secondary].filter((source) => {
+    const key = source.url || `${source.type}:${source.label}:${source.summary}`;
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).slice(0, 12);
+}
+
+function mergeMarketFeedbackSources(primary = [], secondary = []) {
   const seen = new Set();
   return [...primary, ...secondary].filter((source) => {
     const key = source.url || `${source.type}:${source.label}:${source.summary}`;
@@ -896,6 +1154,16 @@ function inferQualitySourceType(text = "") {
   if (/j\\.d\\.? power|jd power|质量研究|iqs|pp100/i.test(text)) return "study";
   if (/论坛|社区|口碑|车主|懂车帝|汽车之家|易车/i.test(text)) return "reputation";
   return "reputation";
+}
+
+function inferMarketFeedbackSourceType(text = "") {
+  if (/召回|缺陷|市场监督|samr|官方|公告|ota/i.test(text)) return "official";
+  if (/车质网|投诉|12365|投诉销量/i.test(text)) return "complaint";
+  if (/评测|长测|媒体|懂车帝原创|汽车之家原创|易车原创/i.test(text)) return "media";
+  if (/论坛|社区|帖子|小红书|微博/i.test(text)) return "forum";
+  if (/视频|bilibili|抖音|youtube|西瓜/i.test(text)) return "video";
+  if (/口碑|车主|懂车帝|汽车之家|易车/i.test(text)) return "owner";
+  return "search";
 }
 
 function parseModelJson(text = "") {
