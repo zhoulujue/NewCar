@@ -1743,6 +1743,34 @@ textarea.input {
   margin-top: 0;
 }
 
+.field-source-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin-top: 10px;
+}
+
+.field-source-badges strong,
+.field-source-badges span {
+  display: inline-flex;
+  min-height: 26px;
+  align-items: center;
+  border-radius: 999px;
+  font-size: 12px;
+}
+
+.field-source-badges strong {
+  color: var(--muted);
+}
+
+.field-source-badges span {
+  padding: 4px 8px;
+  border: 1px solid #d7e3ec;
+  background: #f8fafc;
+  color: #334155;
+}
+
 .chip {
   border-radius: 999px;
   padding: 5px 9px;
@@ -3043,6 +3071,34 @@ textarea.input {
   overflow-wrap: anywhere;
 }
 
+.evidence-action-task-list li {
+  display: grid;
+  gap: 8px;
+}
+
+.evidence-action-task-list li > span {
+  min-width: 0;
+}
+
+.evidence-action-status-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.evidence-action-status {
+  min-height: 30px;
+  padding-inline: 8px;
+  font-size: 12px;
+  white-space: normal;
+}
+
+.evidence-action-status.done {
+  border-color: #9fcfb7;
+  background: #edf8f2;
+  color: #1f6d42;
+}
+
 .evidence-action-sequence {
   display: grid;
   gap: 12px;
@@ -3300,6 +3356,69 @@ textarea.input {
 
 .compact-table .matrix-table {
   min-width: 680px;
+}
+
+.i6-card-list {
+  display: none;
+  gap: 10px;
+}
+
+.i6-benchmark-card {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-left-width: 4px;
+  border-radius: var(--radius);
+  background: #fff;
+}
+
+.i6-benchmark-card.ok {
+  border-left-color: var(--ok);
+}
+
+.i6-benchmark-card.warn {
+  border-left-color: var(--warn);
+}
+
+.i6-benchmark-card.danger {
+  border-left-color: var(--danger);
+}
+
+.i6-benchmark-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.i6-benchmark-card-head span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 760;
+  overflow-wrap: anywhere;
+}
+
+.i6-benchmark-card-head strong {
+  color: var(--text);
+  font-size: 20px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.i6-benchmark-card p {
+  color: var(--text);
+  font-weight: 760;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.i6-benchmark-card small {
+  color: var(--muted);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
 }
 
 table {
@@ -5543,6 +5662,14 @@ button:disabled {
 
   .evidence-action-hero strong {
     font-size: 36px;
+  }
+
+  .i6-matrix-table-wrap {
+    display: none;
+  }
+
+  .i6-card-list {
+    display: grid;
   }
 
   .evidence-script-head .mini-button,

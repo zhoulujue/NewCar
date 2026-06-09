@@ -34,6 +34,7 @@ const INVESTIGATION_STEP_DEFINITIONS = [
 ];
 const INVESTIGATION_STEP_IDS = INVESTIGATION_STEP_DEFINITIONS.map(([id]) => id);
 const RISK_STATUS_OPTIONS = ["pending", "confirmed", "cleared", "contracted", "accepted"];
+const EVIDENCE_ACTION_STATUS_KEYS = ["sent", "replied", "evidence", "closed"];
 const INFO_ANALYSIS_STATUS_OPTIONS = ["idle", "queued", "running", "ready", "applied", "failed"];
 const QUALITY_STATUS_OPTIONS = ["unknown", "missing", "pending", "partial", "complete", "clean", "issue", "active", "expired", "not-transferable", "none", "repaired", "processed"];
 const QUALITY_SOURCE_GRADES = {
@@ -42,6 +43,20 @@ const QUALITY_SOURCE_GRADES = {
   complaint: "B 级",
   study: "C 级",
   reputation: "D 级"
+};
+const requirementSceneLabels = {
+  city: "市区通勤",
+  highway: "高速长途",
+  holiday: "假期出行",
+  parking: "北京停车"
+};
+const requirementPriorityLabels = {
+  comfort: "舒适/NVH",
+  range: "续航补能",
+  cockpit: "车机生态",
+  adas: "高速智驾",
+  interior: "内饰质感",
+  appearance: "外观耐看"
 };
 
 let geminiAnalysisRunning = false;
@@ -309,11 +324,26 @@ function normalizeState(rawState) {
     ? rawState.evidence.filter((item) => carIds.has(item.carId)).map(normalizeEvidence)
     : seedEvidence.filter((item) => carIds.has(item.carId)).map(normalizeEvidence);
   const drives = Array.isArray(rawState.drives) ? rawState.drives.map(normalizeDrive) : [];
+  const userRequirement = normalizeUserRequirement(rawState.userRequirement);
+  const profileSnapshots = Array.isArray(rawState.profileSnapshots)
+    ? rawState.profileSnapshots.map(normalizeProfileSnapshot).filter(Boolean)
+    : [];
+  if (!profileSnapshots.length) {
+    profileSnapshots.push(buildProfileSnapshot(userRequirement, 1, "初始化画像"));
+  }
+  const latestSnapshot = profileSnapshots[profileSnapshots.length - 1];
+  userRequirement.profileVersion = latestSnapshot.version;
+  userRequirement.profileSnapshotId = latestSnapshot.id;
+  cars.forEach((car) => {
+    if (!car.profileSnapshotId) car.profileSnapshotId = latestSnapshot.id;
+    if (!car.profileVersion) car.profileVersion = latestSnapshot.version;
+  });
   return {
     cars,
     evidence,
     drives,
-    userRequirement: normalizeUserRequirement(rawState.userRequirement),
+    userRequirement,
+    profileSnapshots,
     requirementAnalysis: normalizeRequirementAnalysis(rawState.requirementAnalysis),
     market: normalizeMarket(rawState.market),
     usedMarket: normalizeUsedMarket(rawState.usedMarket),
@@ -345,8 +375,92 @@ function normalizeUserRequirement(requirement = {}) {
     dealBreakers: textValue("dealBreakers", seedRequirement.dealBreakers),
     referenceCar: textValue("referenceCar", seedRequirement.referenceCar),
     notes: textValue("notes", seedRequirement.notes),
-    updatedAt: textValue("updatedAt", "")
+    updatedAt: textValue("updatedAt", ""),
+    profileVersion: numberOrDefault(fieldValue("profileVersion", 0), 0),
+    profileSnapshotId: textValue("profileSnapshotId", "")
   };
+}
+
+function normalizeProfileSnapshot(snapshot = {}) {
+  if (!snapshot) return null;
+  const requirement = normalizeUserRequirement(snapshot.requirement || {});
+  const version = Math.max(1, Math.round(numberOrDefault(snapshot.version, 1)));
+  return {
+    id: snapshot.id || makeProfileSnapshotId(version),
+    version,
+    signature: snapshot.signature || profileSnapshotSignature(requirement),
+    summary: snapshot.summary || buildRefreshProfileSummary(requirement),
+    reason: snapshot.reason || "画像变更",
+    requirement,
+    createdAt: snapshot.createdAt || new Date().toISOString()
+  };
+}
+
+function makeProfileSnapshotId(version) {
+  return `profile-v${String(version).padStart(3, "0")}`;
+}
+
+function profileSnapshotSignature(requirement = state?.userRequirement || seedRequirement) {
+  const req = normalizeUserRequirement(requirement);
+  return JSON.stringify({
+    city: req.city,
+    people: req.people,
+    scenes: [...req.scenes].sort(),
+    budgetMinWan: req.budgetMinWan,
+    budgetMaxWan: req.budgetMaxWan,
+    energyTypes: [...req.energyTypes].sort(),
+    minRangeKm: req.minRangeKm,
+    minPhevRangeKm: req.minPhevRangeKm,
+    priorities: [...req.priorities].sort(),
+    seatFocus: req.seatFocus,
+    bodyPreference: req.bodyPreference,
+    purchaseTiming: req.purchaseTiming,
+    mustHaves: req.mustHaves,
+    dealBreakers: req.dealBreakers,
+    referenceCar: req.referenceCar,
+    notes: req.notes
+  });
+}
+
+function buildProfileSnapshot(requirement, version, reason = "画像变更") {
+  const req = normalizeUserRequirement(requirement);
+  return {
+    id: makeProfileSnapshotId(version),
+    version,
+    signature: profileSnapshotSignature(req),
+    summary: buildRefreshProfileSummary(req),
+    reason,
+    requirement: req,
+    createdAt: new Date().toISOString()
+  };
+}
+
+function createProfileSnapshot(reason = "保存画像") {
+  const latestVersion = Math.max(0, ...(state.profileSnapshots || []).map((snapshot) => Number(snapshot.version) || 0));
+  const snapshot = buildProfileSnapshot(state.userRequirement, latestVersion + 1, reason);
+  state.profileSnapshots = [...(state.profileSnapshots || []), snapshot].slice(-8);
+  state.userRequirement.profileVersion = snapshot.version;
+  state.userRequirement.profileSnapshotId = snapshot.id;
+  return snapshot;
+}
+
+function ensureCurrentProfileSnapshot(reason = "当前画像") {
+  const signature = profileSnapshotSignature(state.userRequirement);
+  const existing = [...(state.profileSnapshots || [])].reverse().find((snapshot) => snapshot.signature === signature);
+  if (existing) {
+    state.userRequirement.profileVersion = existing.version;
+    state.userRequirement.profileSnapshotId = existing.id;
+    return existing;
+  }
+  return createProfileSnapshot(reason);
+}
+
+function recordCandidateProfileSnapshot(car, reason = "加入候选") {
+  if (!car) return car;
+  const snapshot = ensureCurrentProfileSnapshot(reason);
+  car.profileSnapshotId = snapshot.id;
+  car.profileVersion = snapshot.version;
+  return car;
 }
 
 function normalizeRequirementAnalysis(analysis = {}) {
@@ -388,7 +502,9 @@ function normalizeRequirementCandidate(candidate) {
     nextAction: candidate.nextAction || "",
     tags: normalizeStringArray(candidate.tags),
     tradeoffs: normalizeStringArray(candidate.tradeoffs),
-    sourceUrl: normalizeWebUrl(candidate.sourceUrl)
+    sourceUrl: normalizeWebUrl(candidate.sourceUrl),
+    profileSnapshotId: candidate.profileSnapshotId || "",
+    profileVersion: numberOrDefault(candidate.profileVersion, 0)
   };
 }
 
@@ -490,13 +606,82 @@ function normalizeCar(car) {
     qualityProfile: normalizeQualityProfile(car.qualityProfile),
     marketFeedback: normalizeMarketFeedback(car.marketFeedback),
     riskItems: Array.isArray(car.riskItems) ? car.riskItems.map(normalizeRiskItem).filter(Boolean) : [],
+    fieldSources: normalizeFieldSources(car.fieldSources),
+    evidenceActionTasks: Array.isArray(car.evidenceActionTasks) ? car.evidenceActionTasks.map(normalizeEvidenceActionTask).filter(Boolean) : [],
     priceEvents: Array.isArray(car.priceEvents) ? car.priceEvents.map(normalizePriceEvent).filter(Boolean) : [],
     workflowTasks: Array.isArray(car.workflowTasks) ? car.workflowTasks.map(normalizeWorkflowTaskState).filter(Boolean) : [],
     decisionLog: Array.isArray(car.decisionLog) ? car.decisionLog.map(normalizeDecisionLogItem).filter(Boolean).slice(0, 80) : [],
+    profileSnapshotId: car.profileSnapshotId || "",
+    profileVersion: numberOrDefault(car.profileVersion, 0),
     updatedAt: car.updatedAt || ""
   };
   normalized.investigation = normalizeInvestigation(car.investigation, normalized);
   return normalized;
+}
+
+function normalizeFieldSources(rawSources = {}) {
+  const entries = Array.isArray(rawSources)
+    ? rawSources.map((source) => [source.field, source])
+    : Object.entries(rawSources || {});
+  return Object.fromEntries(entries
+    .map(([field, source]) => [field, normalizeFieldSource({ ...source, field })])
+    .filter(([, source]) => source));
+}
+
+function normalizeFieldSource(source = {}) {
+  if (!source?.field) return null;
+  return {
+    field: source.field,
+    label: source.label || carPatchFieldLabel(source.field),
+    sourceType: source.sourceType || "manual",
+    evidenceId: source.evidenceId || "",
+    evidenceTitle: source.evidenceTitle || "",
+    provider: source.provider || "",
+    summary: source.summary || "",
+    appliedAt: source.appliedAt || new Date().toISOString()
+  };
+}
+
+function recordFieldSource(car, field, meta = {}) {
+  if (!car || !field) return;
+  car.fieldSources = normalizeFieldSources(car.fieldSources);
+  car.fieldSources[field] = normalizeFieldSource({
+    field,
+    label: carPatchFieldLabel(field),
+    ...meta,
+    appliedAt: meta.appliedAt || new Date().toISOString()
+  });
+}
+
+function getFieldSources(car, fields = []) {
+  const sources = normalizeFieldSources(car?.fieldSources);
+  const selected = fields.length ? fields : Object.keys(sources);
+  return selected.map((field) => sources[field]).filter(Boolean);
+}
+
+function renderFieldSourceBadges(car, fields = []) {
+  const sources = getFieldSources(car, fields).slice(0, 8);
+  if (!sources.length) return "";
+  return `
+    <div class="field-source-badges" aria-label="字段来源">
+      <strong>字段来源</strong>
+      ${sources.map((source) => `
+        <span title="${escapeAttr(source.summary || source.evidenceTitle || "来源证据")}">
+          ${escapeHtml(source.label)} · ${escapeHtml(source.evidenceTitle || source.provider || "来源证据")}
+        </span>
+      `).join("")}
+    </div>
+  `;
+}
+
+function formatFieldSourceLines(car) {
+  const sources = getFieldSources(car);
+  if (!sources.length) return ["- 暂无字段来源记录"];
+  return sources.slice(0, 16).map((source) => {
+    const evidence = source.evidenceTitle || source.provider || source.sourceType || "来源证据";
+    const when = source.appliedAt ? `，应用于 ${formatDateTime(source.appliedAt)}` : "";
+    return `- ${source.label}：来源证据 ${evidence}${when}`;
+  });
 }
 
 function normalizeEvidence(item) {
@@ -2746,6 +2931,8 @@ function renderRequirementPreview(requirement, analysis) {
   ].filter(Boolean).join(" · ");
   const updatedText = requirement.updatedAt ? `保存于 ${formatDateTime(requirement.updatedAt)}` : "样例画像，尚未手动保存";
   const analyzedText = analysis.lastAnalyzedAt ? `上次分析 ${formatDateTime(analysis.lastAnalyzedAt)}` : "尚未分析";
+  const snapshot = ensureCurrentProfileSnapshot();
+  const versionText = `画像版本 v${snapshot.version}`;
   const blocks = [
     ["购车时间", requirement.purchaseTiming],
     ["必须满足", requirement.mustHaves],
@@ -2760,6 +2947,7 @@ function renderRequirementPreview(requirement, analysis) {
         <p>${escapeHtml(analysis.summary || "保存画像后，后续新车推荐、二手车排序和风险提示都会以这份偏好为中心。")}</p>
       </div>
       <div class="profile-status">
+        <span>${escapeHtml(versionText)}</span>
         <span>${escapeHtml(updatedText)}</span>
         <strong>${escapeHtml(analyzedText)}</strong>
       </div>
@@ -2881,22 +3069,6 @@ function renderRequirementCandidateCard(candidate) {
   `;
 }
 
-const requirementSceneLabels = {
-  city: "市区通勤",
-  highway: "高速长途",
-  holiday: "假期出行",
-  parking: "北京停车"
-};
-
-const requirementPriorityLabels = {
-  comfort: "舒适/NVH",
-  range: "续航补能",
-  cockpit: "车机生态",
-  adas: "高速智驾",
-  interior: "内饰质感",
-  appearance: "外观耐看"
-};
-
 function peopleLabel(value) {
   return { "1": "1人", "2": "2人", "3-4": "3-4人", "5+": "5人以上" }[value] || `${value}人`;
 }
@@ -2944,8 +3116,11 @@ function buildRefreshProfileSummary(requirement = state.userRequirement, options
 
 function buildRefreshProfileParams(extra = {}) {
   const req = getSavedRefreshRequirement();
+  const snapshot = ensureCurrentProfileSnapshot("刷新画像快照");
   const params = new URLSearchParams();
   params.set("profile", "1");
+  params.set("profileSnapshotId", snapshot.id);
+  params.set("profileVersion", String(snapshot.version));
   params.set("profileCity", req.city || "北京");
   params.set("people", req.people || "2");
   params.set("scenes", req.scenes.join(","));
@@ -3918,6 +4093,7 @@ function renderDetail() {
         <div class="hero-facts">
           ${heroFacts.map(([label, value]) => `<div><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`).join("")}
         </div>
+        ${renderFieldSourceBadges(car, ["price", "targetPrice", "battery", "nop", "report", "certified", "qualityProfile.batterySoh", "qualityProfile.warrantyStatus"])}
         <p class="detail-note">${escapeHtml(car.notes || "暂无备注。")}</p>
         ${renderExternalSourceActions(car)}
       </div>
@@ -4423,6 +4599,10 @@ function buildDecisionReport(car) {
   const evidence = getCarEvidence(car.id);
   const openRisks = riskSummary.items.filter((item) => !isRiskClosed(item));
   const closedRisks = riskSummary.items.filter(isRiskClosed);
+  const openRedlines = getOpenRedlineItems(car);
+  const redlineGate = openRedlines.length
+    ? "只适合取证/复检/排除，红线未闭环前不要付款或锁单。"
+    : "红线已闭环，可以进入价格、合同和交付复核。";
   const doneTasks = workflow.tasks.filter((task) => task.status === "done");
   const openTasks = workflow.tasks.filter((task) => task.status !== "done");
   const lines = [
@@ -4432,6 +4612,7 @@ function buildDecisionReport(car) {
     `车源类型：${carKindLabel(carKind(car))}`,
     `当前阶段：${stageLabel(car.stage)}`,
     `推进判断：${workflow.decision.label} - ${workflow.decision.detail}`,
+    `红线门槛：${redlineGate}`,
     "",
     "## 1. 核心结论",
     `- 推荐结论：${recommendationLabel(deriveRecommendation(car))}`,
@@ -4493,7 +4674,10 @@ function buildDecisionReport(car) {
     "## 11. 决策记录",
     ...((car.decisionLog || []).length ? (car.decisionLog || []).slice(0, 18).map((log) => `- ${formatDateTime(log.at)}｜${log.title}${log.detail ? `：${log.detail}` : ""}`) : ["- 暂无决策记录"]),
     "",
-    "## 12. 核验清单",
+    "## 12. 字段来源",
+    ...formatFieldSourceLines(car),
+    "",
+    "## 13. 核验清单",
     ...getChecklist(car).map((item) => `- [ ] ${item}`)
   ];
   return lines.join("\n");
@@ -4873,16 +5057,135 @@ function evidenceActionGateClass(level) {
   }[level] || "warn";
 }
 
-function renderEvidenceActionList(items) {
+function evidenceActionStatusLabel(statusKey) {
+  return {
+    sent: "已发送",
+    replied: "已回复",
+    evidence: "已上传证据",
+    closed: "已关闭风险"
+  }[statusKey] || "待处理";
+}
+
+function evidenceActionTaskId(section, text) {
+  const source = `${section || "next"}|${text || ""}`;
+  let hash = 0;
+  for (let index = 0; index < source.length; index += 1) {
+    hash = ((hash << 5) - hash) + source.charCodeAt(index);
+    hash |= 0;
+  }
+  const safeSection = String(section || "next").replace(/[^a-z0-9-]/gi, "-").slice(0, 18) || "next";
+  return `eat-${safeSection}-${Math.abs(hash).toString(36)}`;
+}
+
+function normalizeEvidenceActionTask(task = {}) {
+  const text = String(task.text || task.title || "").trim();
+  if (!text) return null;
+  const section = String(task.section || "next").trim() || "next";
+  const rawStatuses = task.statuses || {};
+  const statuses = Object.fromEntries(EVIDENCE_ACTION_STATUS_KEYS.map((key) => [key, Boolean(rawStatuses[key] || task[key])]));
+  return {
+    id: task.id || evidenceActionTaskId(section, text),
+    section,
+    title: task.title || text.slice(0, 40),
+    text,
+    statuses,
+    sentAt: task.sentAt || "",
+    repliedAt: task.repliedAt || "",
+    evidenceAt: task.evidenceAt || "",
+    closedAt: task.closedAt || "",
+    updatedAt: task.updatedAt || ""
+  };
+}
+
+function ensureEvidenceActionTasks(car) {
+  if (!car) return [];
+  car.evidenceActionTasks = Array.isArray(car.evidenceActionTasks)
+    ? car.evidenceActionTasks.map(normalizeEvidenceActionTask).filter(Boolean)
+    : [];
+  return car.evidenceActionTasks;
+}
+
+function getEvidenceActionTask(car, section, text) {
+  const draft = normalizeEvidenceActionTask({ section, text });
+  if (!draft) return null;
+  const tasks = ensureEvidenceActionTasks(car);
+  return tasks.find((task) => task.id === draft.id) || draft;
+}
+
+function persistEvidenceActionTask(car, task) {
+  const normalized = normalizeEvidenceActionTask(task);
+  if (!car || !normalized) return null;
+  const tasks = ensureEvidenceActionTasks(car);
+  const index = tasks.findIndex((item) => item.id === normalized.id);
+  if (index >= 0) tasks[index] = normalized;
+  else tasks.push(normalized);
+  car.evidenceActionTasks = tasks.slice(0, 80);
+  return normalized;
+}
+
+function updateEvidenceActionTaskStatus(carId, taskId, statusKey, section = "next", text = "") {
+  if (!EVIDENCE_ACTION_STATUS_KEYS.includes(statusKey)) return;
+  const car = state.cars.find((item) => item.id === carId);
+  if (!car) return;
+  const tasks = ensureEvidenceActionTasks(car);
+  const fallbackTask = normalizeEvidenceActionTask({ id: taskId, section, text: text || taskId });
+  const task = tasks.find((item) => item.id === taskId) || fallbackTask;
+  if (!task) return;
+  const nextValue = !task.statuses[statusKey];
+  const now = new Date().toISOString();
+  task.statuses[statusKey] = nextValue;
+  task[`${statusKey}At`] = nextValue ? now : "";
+  task.updatedAt = now;
+  persistEvidenceActionTask(car, task);
+  car.updatedAt = now;
+  addDecisionLog(car, {
+    type: "evidence-action",
+    title: `${nextValue ? "完成" : "取消"}取证动作：${evidenceActionStatusLabel(statusKey)}`,
+    detail: task.text,
+    level: nextValue ? "ok" : "info",
+    relatedIds: [task.id]
+  });
+  render();
+  showToast(`${evidenceActionStatusLabel(statusKey)}${nextValue ? "已记录" : "已取消"}。`, nextValue ? "ok" : "info");
+}
+
+function renderEvidenceActionTaskControls(car, section, text) {
+  const task = getEvidenceActionTask(car, section, text);
+  if (!car || !task) return "";
+  return `
+    <div class="evidence-action-status-row" aria-label="动作状态">
+      ${EVIDENCE_ACTION_STATUS_KEYS.map((key) => `
+        <button
+          class="mini-button evidence-action-status ${task.statuses[key] ? "done" : ""}"
+          data-evidence-action-status
+          data-evidence-action-car="${escapeAttr(car.id)}"
+          data-evidence-action-task="${escapeAttr(task.id)}"
+          data-evidence-action-key="${escapeAttr(key)}"
+          data-evidence-action-section="${escapeAttr(section)}"
+          data-evidence-action-text="${escapeAttr(text)}"
+          aria-pressed="${task.statuses[key] ? "true" : "false"}"
+          type="button"
+        >${escapeHtml(evidenceActionStatusLabel(key))}</button>
+      `).join("")}
+    </div>
+  `;
+}
+
+function renderEvidenceActionList(items, car = null, section = "next") {
   if (!items.length) return `<div class="muted">暂无需要生成的动作。</div>`;
   return `
-    <ol>
-      ${items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
+    <ol class="${car ? "evidence-action-task-list" : ""}">
+      ${items.map((item) => `
+        <li>
+          <span>${escapeHtml(item)}</span>
+          ${renderEvidenceActionTaskControls(car, section, item)}
+        </li>
+      `).join("")}
     </ol>
   `;
 }
 
-function renderEvidenceScriptCard(title, subtitle, section, items) {
+function renderEvidenceScriptCard(title, subtitle, section, items, car) {
   return `
     <article class="evidence-script-card">
       <div class="evidence-script-head">
@@ -4892,7 +5195,7 @@ function renderEvidenceScriptCard(title, subtitle, section, items) {
         </div>
         <button class="mini-button" data-copy-evidence-pack="${escapeAttr(section)}" type="button">复制</button>
       </div>
-      ${renderEvidenceActionList(items)}
+      ${renderEvidenceActionList(items, car, section)}
     </article>
   `;
 }
@@ -4918,16 +5221,16 @@ function renderEvidenceActionPanel(car) {
         </div>
       </div>
       <div class="evidence-action-grid">
-        ${renderEvidenceScriptCard("问商家清单", "适合直接发给卖方或销售，让对方一次性补材料。", "seller", plan.sellerQuestions)}
-        ${renderEvidenceScriptCard("检测机构清单", "适合约查博士/第三方复检时逐项确认。", "inspection", plan.inspectionQuestions)}
-        ${renderEvidenceScriptCard("合同备注", "适合进入谈价或锁定车源前，写进合同/补充协议。", "contract", plan.contractClauses)}
+        ${renderEvidenceScriptCard("问商家清单", "适合直接发给卖方或销售，让对方一次性补材料。", "seller", plan.sellerQuestions, car)}
+        ${renderEvidenceScriptCard("检测机构清单", "适合约查博士/第三方复检时逐项确认。", "inspection", plan.inspectionQuestions, car)}
+        ${renderEvidenceScriptCard("合同备注", "适合进入谈价或锁定车源前，写进合同/补充协议。", "contract", plan.contractClauses, car)}
       </div>
       <div class="evidence-action-sequence">
         <div class="evidence-sequence-head">
           <h3>下一步顺序</h3>
           <span>${plan.evidenceCount} 条信息墙证据 · 质量${qualityLevelLabel(plan.quality.confidenceLevel)} · 三电${qualityRiskLabel(plan.quality.threeElectricRisk)}</span>
         </div>
-        ${renderEvidenceActionList(plan.nextSteps)}
+        ${renderEvidenceActionList(plan.nextSteps, car, "next")}
       </div>
     </div>
   `;
@@ -5585,6 +5888,35 @@ function renderInvestigationStepList(car, progress) {
   `;
 }
 
+function i6RelativeText(score) {
+  if (score >= 9) return "优于/接近 i6";
+  if (score >= 7) return "接近但需试驾确认";
+  return "弱于 i6";
+}
+
+function i6BenchmarkTone(score) {
+  if (score >= 9) return "ok";
+  if (score >= 7) return "warn";
+  return "danger";
+}
+
+function renderI6BenchmarkCards(rows) {
+  return `
+    <div class="i6-card-list" aria-label="i6 体感标尺卡片">
+      ${rows.map(([label, score, hint]) => `
+        <article class="i6-benchmark-card ${i6BenchmarkTone(score)}">
+          <div class="i6-benchmark-card-head">
+            <span>${escapeHtml(label)}</span>
+            <strong>${score}/10</strong>
+          </div>
+          <p>${escapeHtml(i6RelativeText(score))}</p>
+          <small>${escapeHtml(hint)}</small>
+        </article>
+      `).join("")}
+    </div>
+  `;
+}
+
 function renderI6Matrix(car) {
   const rows = [
     ["前排座椅", car.experience.seat, "座椅支撑、通风、按摩、腿托"],
@@ -5597,7 +5929,7 @@ function renderI6Matrix(car) {
     ["内饰高级感", car.experience.interior, "用料、设计、耐看程度"]
   ];
   return `
-    <div class="table-wrap compact-table">
+    <div class="table-wrap compact-table i6-matrix-table-wrap">
       <table class="matrix-table">
         <thead>
           <tr><th>维度</th><th>评分</th><th>相对 i6</th><th>核验提示</th></tr>
@@ -5605,15 +5937,16 @@ function renderI6Matrix(car) {
         <tbody>
           ${rows.map(([label, score, hint]) => `
             <tr>
-              <td>${label}</td>
+              <td>${escapeHtml(label)}</td>
               <td><strong>${score}/10</strong></td>
-              <td>${score >= 9 ? "优于/接近 i6" : score >= 7 ? "接近但需试驾确认" : "弱于 i6"}</td>
-              <td class="muted">${hint}</td>
+              <td>${escapeHtml(i6RelativeText(score))}</td>
+              <td class="muted">${escapeHtml(hint)}</td>
             </tr>
           `).join("")}
         </tbody>
       </table>
     </div>
+    ${renderI6BenchmarkCards(rows)}
   `;
 }
 
@@ -5771,6 +6104,24 @@ function carPatchFieldLabel(field) {
     range: "续航",
     mileage: "里程",
     transfers: "过户",
+    "experience.seat": "前排座椅",
+    "experience.nvh": "静谧性",
+    "experience.chassis": "底盘",
+    "experience.cockpit": "车机",
+    "experience.adas": "智驾",
+    "experience.highway": "高速稳定",
+    "experience.exterior": "外观接受度",
+    "experience.interior": "内饰高级感",
+    "qualityProfile.complaintSalesRatio": "投诉销量比",
+    "qualityProfile.threeElectricComplaintShare": "三电投诉占比",
+    "qualityProfile.recallCount": "召回/缺陷数量",
+    "qualityProfile.recallNotes": "召回备注",
+    "qualityProfile.batterySoh": "电池 SOH",
+    "qualityProfile.maintenanceStatus": "维保记录",
+    "qualityProfile.troubleCodeStatus": "故障码/一致性",
+    "qualityProfile.warrantyStatus": "三电质保",
+    "qualityProfile.batteryRepairStatus": "电池/电驱维修",
+    "qualityProfile.notes": "质量备注",
     qualityProfile: "质量档案"
   }[field] || field;
 }
@@ -6124,14 +6475,14 @@ function renderReport() {
   const quality = assessCarQuality(car);
   const openRedlines = getOpenRedlineItems(car);
   const conclusion = openRedlines.length
-    ? "可继续谈，但暂不建议下订"
+    ? "只适合取证/复检/排除"
     : workflow.decision.label;
   summary.innerHTML = `
     <div class="report-hero ${openRedlines.length ? "blocked" : "ok"}">
       <div>
         <div class="eyebrow">当前报告对象</div>
         <h2>${escapeHtml(car.name)} ${escapeHtml(car.trim || "")}</h2>
-        <p>${escapeHtml(conclusion)}。${escapeHtml(openRedlines.length ? `仍有 ${openRedlines.length} 项成交前红线未关闭。` : workflow.decision.detail)}</p>
+        <p>${escapeHtml(conclusion)}。${escapeHtml(openRedlines.length ? `红线未闭环：仍有 ${openRedlines.length} 项成交前红线未关闭。` : workflow.decision.detail)}</p>
       </div>
       <div class="report-hero-metrics">
         <div><span>质量可信度</span><strong>${escapeHtml(qualityLevelLabel(quality.confidenceLevel))}</strong></div>
@@ -6674,6 +7025,7 @@ function saveRequirementFromForm({ touch = true } = {}) {
     notes: getValue("#reqNotes"),
     updatedAt: touch ? new Date().toISOString() : state.userRequirement.updatedAt
   });
+  if (touch) ensureCurrentProfileSnapshot("保存画像");
   saveState();
   return state.userRequirement;
 }
@@ -6819,8 +7171,12 @@ function normalizeAiFailureReason(error) {
 }
 
 function buildRequirementGeminiPayload() {
+  const profileSnapshotId = ensureCurrentProfileSnapshot().id;
+  const profileSnapshot = state.profileSnapshots.find((snapshot) => snapshot.id === profileSnapshotId);
   return {
     profile: state.userRequirement,
+    profileSnapshotId: ensureCurrentProfileSnapshot().id,
+    profileSnapshot,
     garageCars: state.cars
       .map((car) => ({
         id: car.id,
@@ -6913,6 +7269,7 @@ function applyRequirementAnalysis(result, source) {
   if (result.profilePatch && typeof result.profilePatch === "object") {
     state.userRequirement = normalizeUserRequirement({ ...state.userRequirement, ...result.profilePatch });
   }
+  const snapshot = ensureCurrentProfileSnapshot("需求分析");
   state.requirementAnalysis = normalizeRequirementAnalysis({
     summary: result.summary || result.analysis?.summary || "",
     searchStrategy: result.searchStrategy || result.analysis?.searchStrategy || "",
@@ -6920,7 +7277,11 @@ function applyRequirementAnalysis(result, source) {
     source,
     lastAnalyzedAt: new Date().toISOString(),
     error: result.error || "",
-    candidates: mergeRequirementCandidates(result.candidates || [])
+    candidates: mergeRequirementCandidates(result.candidates || []).map((candidate) => ({
+      ...candidate,
+      profileSnapshotId: candidate.profileSnapshotId || snapshot.id,
+      profileVersion: candidate.profileVersion || snapshot.version
+    }))
   });
 }
 
@@ -7201,7 +7562,13 @@ function applyEvidenceAnalysis(evidenceId) {
   if (!car) return;
   const before = normalizeCar(car);
   const result = item.analysisResult;
-  applyCarPatch(car, result.carPatch || {});
+  applyCarPatch(car, result.carPatch || {}, {
+    sourceType: "ai",
+    evidenceId: item.id,
+    evidenceTitle: item.title,
+    provider: result.provider || "AI",
+    summary: result.analysis?.summary || result.infoCard?.notes || item.notes || ""
+  });
   if (result.infoCard && item.type !== "analysis") {
     if (result.infoCard.title) item.title = String(result.infoCard.title).slice(0, 80);
     if (result.infoCard.notes) item.notes = String(result.infoCard.notes);
@@ -7224,26 +7591,35 @@ function applyEvidenceAnalysis(evidenceId) {
   showToast(saved ? "分析结果已应用到候选信息。" : "分析结果已应用到当前页面，但本机保存失败，请先导出备份。", saved ? "ok" : "danger");
 }
 
-function applyCarPatch(car, patch) {
+function applyCarPatch(car, patch, sourceMeta = {}) {
   const textFields = ["name", "trim", "url", "plateDate", "city", "source", "seller", "exterior", "interior", "options", "issues", "rightsNotes", "sellerNotes", "nextAction", "notes"];
   textFields.forEach((field) => {
-    if (typeof patch[field] === "string" && patch[field].trim()) car[field] = patch[field].trim();
+    if (typeof patch[field] === "string" && patch[field].trim()) {
+      car[field] = patch[field].trim();
+      recordFieldSource(car, field, sourceMeta);
+    }
   });
   const numberFields = ["price", "newPrice", "targetPrice", "landing", "batteryMonthly", "batterySize", "range", "mileage", "transfers"];
   numberFields.forEach((field) => {
     const value = numberOrBlank(patch[field]);
-    if (value !== "") car[field] = value;
+    if (value !== "") {
+      car[field] = value;
+      recordFieldSource(car, field, sourceMeta);
+    }
   });
-  applyEnumPatch(car, patch, "stage", ["watching", "contacted", "waiting-docs", "test-drive", "negotiating", "recheck", "rejected", "purchased"]);
-  applyEnumPatch(car, patch, "recommendation", ["auto", "worthViewing", "watch", "waitDrop", "bargainOnly", "reject"]);
-  applyEnumPatch(car, patch, "battery", ["buyout", "baas", "unknown"]);
-  applyEnumPatch(car, patch, "nop", ["included", "subscription", "none", "unknown"]);
-  applyEnumPatch(car, patch, "report", ["full", "basic", "none", "unknown"]);
-  applyEnumPatch(car, patch, "certified", ["official", "platform", "dealer", "unknown"]);
+  applyEnumPatch(car, patch, "stage", ["watching", "contacted", "waiting-docs", "test-drive", "negotiating", "recheck", "rejected", "purchased"], sourceMeta);
+  applyEnumPatch(car, patch, "recommendation", ["auto", "worthViewing", "watch", "waitDrop", "bargainOnly", "reject"], sourceMeta);
+  applyEnumPatch(car, patch, "battery", ["buyout", "baas", "unknown"], sourceMeta);
+  applyEnumPatch(car, patch, "nop", ["included", "subscription", "none", "unknown"], sourceMeta);
+  applyEnumPatch(car, patch, "report", ["full", "basic", "none", "unknown"], sourceMeta);
+  applyEnumPatch(car, patch, "certified", ["official", "platform", "dealer", "unknown"], sourceMeta);
   if (patch.experience && typeof patch.experience === "object") {
     Object.keys(car.experience).forEach((key) => {
       const value = numberOrBlank(patch.experience[key]);
-      if (value !== "") car.experience[key] = Math.max(1, Math.min(10, Math.round(value)));
+      if (value !== "") {
+        car.experience[key] = Math.max(1, Math.min(10, Math.round(value)));
+        recordFieldSource(car, `experience.${key}`, sourceMeta);
+      }
     });
   }
   if (patch.qualityProfile && typeof patch.qualityProfile === "object") {
@@ -7252,6 +7628,9 @@ function applyCarPatch(car, patch) {
       ...current,
       ...patch.qualityProfile,
       updatedAt: new Date().toISOString()
+    });
+    Object.keys(patch.qualityProfile).forEach((field) => {
+      if (field !== "updatedAt") recordFieldSource(car, `qualityProfile.${field}`, sourceMeta);
     });
   }
   if (patch.marketFeedback && typeof patch.marketFeedback === "object") {
@@ -7264,8 +7643,11 @@ function applyCarPatch(car, patch) {
   }
 }
 
-function applyEnumPatch(car, patch, field, allowed) {
-  if (allowed.includes(patch[field])) car[field] = patch[field];
+function applyEnumPatch(car, patch, field, allowed, sourceMeta = {}) {
+  if (allowed.includes(patch[field])) {
+    car[field] = patch[field];
+    recordFieldSource(car, field, sourceMeta);
+  }
 }
 
 function formatGeminiAnalysisNotes(analysis, patch, result = {}) {
@@ -7468,6 +7850,7 @@ function addReleaseToGarage(seriesId) {
     nextAction: "关注北京试驾车到店、首批车主反馈、实际成交权益和7-8月价格变化。",
     notes: `来自懂车帝新车/热门车型情报。${releaseSourceText(release)}。${facts.energy ? `核心信息：${facts.energy}。` : ""}`
   });
+  recordCandidateProfileSnapshot(car, "加入新车候选");
   state.cars.unshift(car);
   selectedCarId = car.id;
   selectedCompare.add(car.id);
@@ -7531,6 +7914,7 @@ function addUsedListingToGarage(skuId) {
     nextAction: "先索要完整检测报告、出险/维保记录、权益截图，再决定是否约看和第三方复检。",
     notes: `来自懂车帝官方二手车源。排序原因：${listing.fitReasons.join("、") || "待进一步判断"}。`
   });
+  recordCandidateProfileSnapshot(car, "加入二手车源");
   state.cars.unshift(car);
   const evidence = {
     id: makeId("ev"),
@@ -7613,6 +7997,7 @@ function addRequirementCandidateToGarage(candidateId) {
     nextAction: candidate.nextAction || "先看车型页和北京门店试驾，再补齐信息墙。",
     notes: candidate.why
   });
+  recordCandidateProfileSnapshot(car, "加入需求推荐候选");
   state.cars.unshift(car);
   state.evidence.unshift({
     id: makeId("ev"),
@@ -7778,6 +8163,7 @@ document.body.addEventListener("click", (event) => {
   const workflowTaskToggle = event.target.closest("[data-workflow-task-toggle]");
   const workflowTaskEvidence = event.target.closest("[data-workflow-task-evidence]");
   const copyEvidencePackSection = event.target.closest("[data-copy-evidence-pack]")?.dataset.copyEvidencePack;
+  const evidenceActionStatus = event.target.closest("[data-evidence-action-status]");
   const riskStatusButton = event.target.closest("[data-risk-status]");
   const shouldAddEvidence = Boolean(event.target.closest("[data-add-evidence]"));
 
@@ -7817,6 +8203,15 @@ document.body.addEventListener("click", (event) => {
   if (workflowStageButton) advanceWorkflowStage(workflowStageButton.dataset.workflowCar, workflowStageButton.dataset.workflowStage);
   if (copyWorkflowQuestionsId) copyWorkflowQuestions(copyWorkflowQuestionsId);
   if (copyEvidencePackSection) copyEvidenceActionPack(copyEvidencePackSection);
+  if (evidenceActionStatus) {
+    updateEvidenceActionTaskStatus(
+      evidenceActionStatus.dataset.evidenceActionCar,
+      evidenceActionStatus.dataset.evidenceActionTask,
+      evidenceActionStatus.dataset.evidenceActionKey,
+      evidenceActionStatus.dataset.evidenceActionSection,
+      evidenceActionStatus.dataset.evidenceActionText
+    );
+  }
   if (workflowTaskToggle) toggleWorkflowTask(workflowTaskToggle.dataset.workflowCar, workflowTaskToggle.dataset.workflowTaskToggle);
   if (workflowTaskEvidence) toggleWorkflowTaskEvidence(workflowTaskEvidence.dataset.workflowCar, workflowTaskEvidence.dataset.workflowTaskEvidence, workflowTaskEvidence.dataset.evidenceId);
   if (deleteEvidenceId) {

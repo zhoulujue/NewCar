@@ -227,3 +227,65 @@ test("market feedback local fallback note does not accumulate after repeated AI 
   assert.match(app, /summary:\s*`\$\{stripMarketFeedbackFallbackNote\(local\.summary\)\}（AI 暂时失败，当前为本地速览。）`/);
   assert.doesNotMatch(app, /summary:\s*`\$\{local\.summary\}（AI 暂时失败，当前为本地速览。）`/);
 });
+
+test("profile snapshots trace requirement-dependent decisions", async () => {
+  const app = await readFile(new URL("app.js", root), "utf8");
+
+  assert.match(app, /profileSnapshots/);
+  assert.match(app, /profileVersion/);
+  assert.match(app, /profileSnapshotId/);
+  assert.match(app, /function createProfileSnapshot/);
+  assert.match(app, /function ensureCurrentProfileSnapshot/);
+  assert.match(app, /recordCandidateProfileSnapshot/);
+  assert.match(app, /profileSnapshotId:\s*ensureCurrentProfileSnapshot\(\)\.id/);
+  assert.match(app, /画像版本/);
+});
+
+test("AI field patches record and render field-level evidence provenance", async () => {
+  const app = await readFile(new URL("app.js", root), "utf8");
+
+  assert.match(app, /fieldSources/);
+  assert.match(app, /function normalizeFieldSource/);
+  assert.match(app, /function recordFieldSource/);
+  assert.match(app, /function renderFieldSourceBadges/);
+  assert.match(app, /applyCarPatch\(car, result\.carPatch \|\| \{\},/);
+  assert.match(app, /recordFieldSource\(car, field,/);
+  assert.match(app, /字段来源/);
+  assert.match(app, /来源证据/);
+});
+
+test("evidence action scripts become trackable due-diligence tasks", async () => {
+  const app = await readFile(new URL("app.js", root), "utf8");
+
+  assert.match(app, /evidenceActionTasks/);
+  assert.match(app, /function normalizeEvidenceActionTask/);
+  assert.match(app, /function getEvidenceActionTask/);
+  assert.match(app, /function updateEvidenceActionTaskStatus/);
+  assert.match(app, /data-evidence-action-status/);
+  assert.match(app, /已发送/);
+  assert.match(app, /已回复/);
+  assert.match(app, /已上传证据/);
+  assert.match(app, /已关闭风险/);
+});
+
+test("blocked purchase reports use hard redline gate language", async () => {
+  const app = await readFile(new URL("app.js", root), "utf8");
+
+  assert.doesNotMatch(app, /可继续谈，但暂不建议下订/);
+  assert.match(app, /只适合取证\/复检\/排除/);
+  assert.match(app, /红线未闭环/);
+});
+
+test("i6 benchmark matrix has mobile scan cards", async () => {
+  const app = await readFile(new URL("app.js", root), "utf8");
+  const css = await readFile(new URL("styles.css", root), "utf8");
+
+  assert.match(app, /function renderI6BenchmarkCards/);
+  assert.match(app, /i6-matrix-table-wrap/);
+  assert.match(app, /i6-card-list/);
+  assert.match(app, /i6-benchmark-card/);
+  assert.match(css, /\.i6-card-list/);
+  assert.match(css, /\.i6-benchmark-card/);
+  assert.match(css, /@media \(max-width: 640px\)[\s\S]*?\.i6-matrix-table-wrap[\s\S]*?display: none/);
+  assert.match(css, /@media \(max-width: 640px\)[\s\S]*?\.i6-card-list[\s\S]*?display: grid/);
+});
