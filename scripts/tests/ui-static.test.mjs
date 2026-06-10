@@ -289,3 +289,31 @@ test("i6 benchmark matrix has mobile scan cards", async () => {
   assert.match(css, /@media \(max-width: 640px\)[\s\S]*?\.i6-matrix-table-wrap[\s\S]*?display: none/);
   assert.match(css, /@media \(max-width: 640px\)[\s\S]*?\.i6-card-list[\s\S]*?display: grid/);
 });
+
+test("candidate detail has a persistent action cockpit for desktop and mobile", async () => {
+  const html = await readFile(new URL("index.html", root), "utf8");
+  const app = await readFile(new URL("app.js", root), "utf8");
+  const css = await readFile(new URL("styles.css", root), "utf8");
+
+  assert.match(html, /id="detailActionDock"/);
+  assert.match(html, /id="mobileDetailActions"/);
+  assert.match(app, /function renderDetailActionDock/);
+  assert.match(app, /function renderMobileDetailActions/);
+  assert.match(app, /function handleDetailQuickAction/);
+  assert.match(app, /data-detail-quick-action="feedback"/);
+  assert.match(app, /data-detail-quick-action="quality"/);
+  assert.match(css, /\.detail-action-card/);
+  assert.match(css, /\.mobile-detail-actions/);
+  assert.match(css, /body\[data-view="detail"\][\s\S]*?\.mobile-detail-actions[\s\S]*?display: grid/);
+  assert.match(css, /@media \(min-width: 821px\)[\s\S]*?\.mobile-detail-actions[\s\S]*?display: none/);
+});
+
+test("PC and mobile detail layouts keep action surfaces readable", async () => {
+  const css = await readFile(new URL("styles.css", root), "utf8");
+
+  assert.match(css, /\.decision-rail[\s\S]*?top: 88px;/);
+  assert.match(css, /\.detail-topline[\s\S]*?top: 16px;/);
+  assert.match(css, /\.detail-action-grid[\s\S]*?grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
+  assert.match(css, /body\[data-view="detail"\] \.main[\s\S]*?padding-bottom: calc\(118px \+ var\(--mobile-nav-height\)/);
+  assert.match(css, /\.mobile-detail-actions[\s\S]*?env\(safe-area-inset-bottom\)/);
+});

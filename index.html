@@ -9,7 +9,7 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="format-detection" content="telephone=no">
     <title>NewCar 购车工作台</title>
-    <link rel="stylesheet" href="./styles.css?v=20260609-v25-traceability">
+    <link rel="stylesheet" href="./styles.css?v=20260610-v26-ux-polish">
     <script src="./auth-config.js"></script>
     <script src="https://accounts.google.com/gsi/client" async defer></script>
   </head>
@@ -463,6 +463,7 @@
               </section>
             </div>
             <aside class="decision-rail" id="candidateDecisionRail">
+              <section id="detailActionDock" class="panel detail-action-card"></section>
               <section id="redlineGate" class="panel"></section>
               <section id="detailDecision" class="panel"></section>
               <section id="workflowPanel" class="panel"></section>
@@ -486,6 +487,7 @@
               </section>
             </aside>
           </div>
+          <div id="mobileDetailActions" class="mobile-detail-actions" aria-label="详情快捷操作"></div>
         </section>
 
         <section class="view" id="compareView">
@@ -781,6 +783,6 @@
       </form>
     </dialog>
 
-    <script src="./app.js?v=20260609-v25-traceability"></script>
+    <script src="./app.js?v=20260610-v26-ux-polish"></script>
   </body>
 </html>

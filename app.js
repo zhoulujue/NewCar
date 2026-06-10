@@ -4046,10 +4046,12 @@ function renderDetail() {
     document.querySelector("#detailGallery").innerHTML = "";
     document.querySelector("#decisionReportPreview").innerHTML = "";
     document.querySelector("#redlineGate").innerHTML = "";
+    document.querySelector("#detailActionDock").innerHTML = "";
     document.querySelector("#detailDecision").innerHTML = "";
     document.querySelector("#marketFeedbackPanel").innerHTML = "";
     document.querySelector("#qualityPanel").innerHTML = "";
     document.querySelector("#evidenceActionPanel").innerHTML = "";
+    document.querySelector("#mobileDetailActions").innerHTML = "";
     setQualityButtonState(false);
     setMarketFeedbackButtonState(false);
     return;
@@ -4104,6 +4106,8 @@ function renderDetail() {
   document.querySelector("#detailGallery").innerHTML = renderVehicleGallery(car);
   document.querySelector("#decisionReportPreview").innerHTML = renderDecisionReportPreview(car, workflow);
   document.querySelector("#redlineGate").innerHTML = renderRedlineGate(car);
+  document.querySelector("#detailActionDock").innerHTML = renderDetailActionDock(car, risk, rec, workflow, quality, cost);
+  document.querySelector("#mobileDetailActions").innerHTML = renderMobileDetailActions(car, risk, rec);
   document.querySelector("#detailDecision").innerHTML = `
     <div class="decision-score ${risk.level}">
       <div>
@@ -4139,6 +4143,81 @@ function renderDetail() {
   document.querySelector("#evidenceActionPanel").innerHTML = renderEvidenceActionPanel(car);
   setQualityButtonState(qualityAnalysisRunning);
   setMarketFeedbackButtonState(feedbackAnalysisRunning);
+}
+
+function renderDetailActionDock(car, risk, rec, workflow, quality, cost) {
+  const nextTask = workflow.tasks.find((task) => task.status !== "done") || workflow.tasks[0];
+  const qualityText = `${qualityLevelLabel(quality.confidenceLevel)} / ${qualityRiskLabel(quality.threeElectricRisk)}`;
+  return `
+    <div class="detail-action-card-inner">
+      <div>
+        <span class="detail-action-kicker">当前动作</span>
+        <h2>${escapeHtml(workflow.decision.label)}</h2>
+        <p>${escapeHtml(car.nextAction || nextTask?.detail || workflow.decision.detail || "先补齐关键信息，再决定是否推进。")}</p>
+      </div>
+      <div class="detail-action-metrics">
+        <div>
+          <span>风险</span>
+          <strong>${risk.score}</strong>
+        </div>
+        <div>
+          <span>匹配</span>
+          <strong>${fitScore(car)}</strong>
+        </div>
+        <div>
+          <span>三电</span>
+          <strong>${escapeHtml(qualityText)}</strong>
+        </div>
+        <div>
+          <span>3年</span>
+          <strong>${formatWan(cost.year3)}</strong>
+        </div>
+      </div>
+      <div class="detail-action-grid">
+        <button class="primary-button" data-detail-quick-action="feedback" type="button">市场反馈</button>
+        <button class="secondary-button" data-detail-quick-action="quality" type="button">质量线索</button>
+        <button class="secondary-button" data-detail-quick-action="evidence" type="button">复制取证包</button>
+        <button class="secondary-button" data-detail-quick-action="report" type="button">复制报告</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderMobileDetailActions(car, risk, rec) {
+  if (!car) return "";
+  const sourceAction = getExternalSourceUrl(car)
+    ? `<button class="secondary-button" data-detail-quick-action="source" type="button">车源</button>`
+    : `<button class="secondary-button" data-detail-quick-action="report" type="button">报告</button>`;
+  return `
+    <button class="primary-button" data-detail-quick-action="feedback" type="button">反馈</button>
+    <button class="secondary-button" data-detail-quick-action="quality" type="button">质量</button>
+    <button class="secondary-button" data-detail-quick-action="evidence" type="button">取证</button>
+    ${sourceAction}
+  `;
+}
+
+function handleDetailQuickAction(action) {
+  const car = getSelectedCar();
+  if (!car) return;
+  if (action === "feedback") {
+    fetchMarketFeedbackWithAi();
+    return;
+  }
+  if (action === "quality") {
+    fetchQualityDataWithAi();
+    return;
+  }
+  if (action === "evidence") {
+    copyEvidenceActionPack("all");
+    return;
+  }
+  if (action === "report") {
+    copyDecisionReport();
+    return;
+  }
+  if (action === "source") {
+    openSourceInApp(car.id);
+  }
 }
 
 function getSelectedCarIndex() {
@@ -8152,6 +8231,7 @@ document.body.addEventListener("click", (event) => {
   const usedListingId = event.target.closest("[data-add-used-listing]")?.dataset.addUsedListing;
   const requirementCandidateId = event.target.closest("[data-add-requirement-candidate]")?.dataset.addRequirementCandidate;
   const openSourceAppId = event.target.closest("[data-open-source-app]")?.dataset.openSourceApp;
+  const detailQuickAction = event.target.closest("[data-detail-quick-action]")?.dataset.detailQuickAction;
   const deleteEvidenceId = event.target.closest("[data-delete-evidence]")?.dataset.deleteEvidence;
   const analyzeEvidenceId = event.target.closest("[data-analyze-evidence]")?.dataset.analyzeEvidence;
   const applyEvidenceAnalysisId = event.target.closest("[data-apply-evidence-analysis]")?.dataset.applyEvidenceAnalysis;
@@ -8191,6 +8271,7 @@ document.body.addEventListener("click", (event) => {
   if (usedListingId) addUsedListingToGarage(usedListingId);
   if (requirementCandidateId) addRequirementCandidateToGarage(requirementCandidateId);
   if (openSourceAppId) openSourceInApp(openSourceAppId);
+  if (detailQuickAction) handleDetailQuickAction(detailQuickAction);
   if (event.target.closest("[data-dashboard-ai]")) analyzeDashboardBestWithGemini();
   if (qualityFetchShortcut) fetchQualityDataWithAi();
   if (riskStatusButton) {
