@@ -101,6 +101,19 @@ test("mobile bottom navigation is capped at five primary entries", async () => {
   assert.match(mobileBlock + css, /\.nav-button\[data-view="sellers"\][\s\S]*?display: none/);
 });
 
+test("mobile bottom navigation orders Today Candidates Capture Discover More", async () => {
+  const css = await readFile(new URL("styles.css", root), "utf8");
+  const mobileStart = css.indexOf("@media (max-width: 820px)");
+  const mobileEnd = css.indexOf("@media", mobileStart + 1);
+  const mobileCss = css.slice(mobileStart, mobileEnd);
+
+  assert.match(mobileCss, /\.nav-button\[data-view="dashboard"\]\s*\{[\s\S]*?order: 1;/);
+  assert.match(mobileCss, /\.nav-button\[data-view="garage"\]\s*\{[\s\S]*?order: 2;/);
+  assert.match(mobileCss, /\.capture-nav-button\s*\{[\s\S]*?order: 3;/);
+  assert.match(mobileCss, /\.nav-button\[data-view="discover"\]\s*\{[\s\S]*?order: 4;/);
+  assert.match(mobileCss, /\.nav-button\[data-view="report"\]\s*\{[\s\S]*?order: 5;/);
+});
+
 test("discovery view contains new-car and used-car segmented panels", async () => {
   const html = await readFile(new URL("index.html", root), "utf8");
 

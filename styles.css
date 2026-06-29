@@ -4989,8 +4989,25 @@ button:disabled {
     display: grid;
   }
 
+  .nav-button[data-view="dashboard"] {
+    order: 1;
+  }
+
+  .nav-button[data-view="garage"] {
+    order: 2;
+  }
+
   .capture-nav-button {
     display: grid;
+    order: 3;
+  }
+
+  .nav-button[data-view="discover"] {
+    order: 4;
+  }
+
+  .nav-button[data-view="report"] {
+    order: 5;
   }
 
   .nav-button[data-view="compare"],
