@@ -395,17 +395,35 @@ test("mobile garage candidate feed renders stage chips and detail cards", async 
   assert.match(app, /function renderMobileGarage\(/);
   assert.match(app, /function renderMobileGarageCard\(/);
   assert.match(app, /function setMobileGarageStage\(/);
+  assert.match(app, /function normalizeGarageStage\(/);
   assert.match(app, /renderGarage\(\);\s*renderMobileGarage\(\);/);
   assert.match(app, /event\.target\.closest\("\[data-mobile-stage\]"\)/);
   assert.match(app, /setMobileGarageStage\(mobileStageButton\.dataset\.mobileStage\)/);
-  assert.match(app, /class="mobile-car-card" data-detail="\$\{escapeAttr\(car\.id\)\}"/);
+  assert.match(app, /class="mobile-car-card-main" data-detail="\$\{escapeAttr\(car\.id\)\}"/);
   assert.match(app, /data-mobile-stage="\$\{escapeAttr\(stage\)\}"/);
+  assert.match(app, /const normalizedStage = normalizeGarageStage\(car\.stage\)/);
+  assert.match(app, /normalizeGarageStage\(car\.stage\) === stage/);
+  assert.match(app, /normalizeGarageStage\(a\.stage\)/);
+  assert.match(app, /stageLabel\(normalizedStage\)/);
+  assert.match(app, /const displayName = car\.name \|\| "未命名候选"/);
+  assert.match(app, /const mobileImage = getVehicleImages\(car\)\[0\]/);
+  assert.match(app, /class="mobile-car-visual \$\{mobileImage \? "" : "is-empty"\}"/);
+  assert.match(app, /<img src="\$\{escapeAttr\(mobileImage\.src\)\}" alt="\$\{escapeAttr\(mobileImage\.name \|\| displayName\)\}">/);
+  assert.match(app, /mobile-card-next-action/);
+  assert.match(app, /class="mobile-card-actions"/);
+  assert.match(app, /getExternalSourceUrl\(car\)/);
+  assert.match(app, /data-edit="\$\{escapeAttr\(car\.id\)\}"/);
+  assert.match(app, /data-detail="\$\{escapeAttr\(car\.id\)\}"/);
   assert.match(mobileCss, /body\[data-view="garage"\]\s+#carGrid[\s\S]*?display: none/);
-  assert.match(mobileCss, /body\[data-view="garage"\]\s+\.toolbar[\s\S]*?display: none/);
+  assert.match(mobileCss, /body\[data-view="garage"\]\s+#garageView \.toolbar[\s\S]*?display: none/);
+  assert.doesNotMatch(mobileCss, /body\[data-view="garage"\]\s+\.toolbar/);
   assert.match(mobileCss, /body\[data-view="garage"\]\s+\.garage-list-header[\s\S]*?display: none/);
   assert.match(mobileCss, /\.mobile-stage-chips[\s\S]*?display: flex/);
   assert.match(mobileCss, /\.mobile-car-feed[\s\S]*?display: grid/);
   assert.match(mobileCss, /\.mobile-car-card[\s\S]*?display: grid/);
+  assert.match(mobileCss, /\.mobile-car-visual[\s\S]*?aspect-ratio:/);
+  assert.match(mobileCss, /\.mobile-card-next-action/);
+  assert.match(mobileCss, /\.mobile-card-actions[\s\S]*?display: grid/);
 });
 
 test("mobile native pages have dedicated containers instead of desktop-only compression", async () => {

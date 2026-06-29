@@ -5002,7 +5002,7 @@ button:disabled {
   }
 
   body[data-view="garage"] #carGrid,
-  body[data-view="garage"] .toolbar,
+  body[data-view="garage"] #garageView .toolbar,
   body[data-view="garage"] .garage-list-header {
     display: none;
   }
@@ -5072,16 +5072,52 @@ button:disabled {
 
   .mobile-car-card {
     display: grid;
-    gap: 12px;
+    gap: 10px;
     width: 100%;
     min-width: 0;
-    padding: 14px;
+    padding: 0;
     border: 1px solid rgba(16, 24, 32, 0.08);
     border-radius: 16px;
     background: #ffffff;
     color: #101820;
-    text-align: left;
     box-shadow: 0 12px 28px rgba(21, 32, 43, 0.08);
+    overflow: hidden;
+  }
+
+  .mobile-car-card-main {
+    display: grid;
+    gap: 12px;
+    width: 100%;
+    min-width: 0;
+    padding: 12px 12px 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    text-align: left;
+  }
+
+  .mobile-car-visual {
+    display: grid;
+    min-width: 0;
+    aspect-ratio: 16 / 9;
+    place-items: center;
+    border-radius: 12px;
+    background: #e8eef0;
+    color: #60717c;
+    overflow: hidden;
+  }
+
+  .mobile-car-visual img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .mobile-car-visual.is-empty span {
+    padding: 0 12px;
+    font-size: 18px;
+    font-weight: 900;
+    text-align: center;
   }
 
   .mobile-car-card-top {
@@ -5143,6 +5179,26 @@ button:disabled {
     text-align: center;
   }
 
+  .mobile-card-next-action {
+    display: grid;
+    gap: 4px;
+    padding: 10px 11px;
+    border-radius: 12px;
+    background: #f7faf9;
+  }
+
+  .mobile-card-next-action span {
+    color: #0f766e;
+    font-size: 11px;
+    font-weight: 900;
+  }
+
+  .mobile-card-next-action strong {
+    color: #26323b;
+    font-size: 13px;
+    line-height: 1.45;
+  }
+
   .mobile-car-progress {
     height: 8px;
     border-radius: 999px;
@@ -5162,6 +5218,27 @@ button:disabled {
     color: #697986;
     font-size: 12px;
     font-weight: 700;
+  }
+
+  .mobile-card-actions {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    padding: 0 12px 12px;
+  }
+
+  .mobile-card-actions a,
+  .mobile-card-actions button {
+    display: grid;
+    min-height: 38px;
+    place-items: center;
+    border: 1px solid rgba(16, 24, 32, 0.08);
+    border-radius: 10px;
+    background: #f8fafc;
+    color: #26323b;
+    font-size: 13px;
+    font-weight: 800;
+    text-decoration: none;
   }
 
   .mobile-car-empty {

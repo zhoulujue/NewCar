@@ -547,6 +547,12 @@ function carKindClass(kind) {
   }[normalizeCarKind(kind)] || "warn";
 }
 
+const GARAGE_STAGE_ORDER = ["all", "watching", "contacted", "waiting-docs", "test-drive", "recheck", "negotiating", "rejected", "purchased"];
+
+function normalizeGarageStage(stage) {
+  return GARAGE_STAGE_ORDER.includes(stage) && stage !== "all" ? stage : "watching";
+}
+
 function normalizeCar(car) {
   const experience = car.experience || {};
   const costs = car.costs || {};
@@ -556,7 +562,7 @@ function normalizeCar(car) {
     kind,
     name: car.name || "",
     trim: car.trim || "",
-    stage: car.stage || "watching",
+    stage: normalizeGarageStage(car.stage),
     recommendation: car.recommendation || "auto",
     url: normalizeWebUrl(car.url),
     sourceSkuId: car.sourceSkuId || car.skuId || "",
@@ -1374,6 +1380,7 @@ function riskLabel(level) {
 }
 
 function stageLabel(stage) {
+  const normalizedStage = normalizeGarageStage(stage);
   return {
     watching: "观察",
     contacted: "已联系",
@@ -1383,7 +1390,7 @@ function stageLabel(stage) {
     "waiting-docs": "等材料",
     rejected: "排除",
     purchased: "已成交"
-  }[stage] || "观察";
+  }[normalizedStage] || "观察";
 }
 
 function investigationStepLabel(id) {
@@ -3415,16 +3422,16 @@ function renderMobileGarage() {
   const chips = document.querySelector("#mobileGarageStageChips");
   const feed = document.querySelector("#mobileCarFeed");
   if (!chips || !feed) return;
-  const stages = ["all", "watching", "contacted", "waiting-docs", "test-drive", "recheck", "negotiating", "rejected", "purchased"];
+  const stages = GARAGE_STAGE_ORDER;
   if (!stages.includes(mobileGarageStage)) mobileGarageStage = "all";
   const counts = Object.fromEntries(stages.map((stage) => [
     stage,
-    stage === "all" ? state.cars.length : state.cars.filter((car) => car.stage === stage).length
+    stage === "all" ? state.cars.length : state.cars.filter((car) => normalizeGarageStage(car.stage) === stage).length
   ]));
   const cars = state.cars
-    .filter((car) => mobileGarageStage === "all" || car.stage === mobileGarageStage)
+    .filter((car) => mobileGarageStage === "all" || normalizeGarageStage(car.stage) === mobileGarageStage)
     .sort((a, b) => {
-      const stageDelta = stages.indexOf(a.stage) - stages.indexOf(b.stage);
+      const stageDelta = stages.indexOf(normalizeGarageStage(a.stage)) - stages.indexOf(normalizeGarageStage(b.stage));
       if (mobileGarageStage === "all" && stageDelta !== 0) return stageDelta;
       return fitScore(b) - fitScore(a);
     });
@@ -3449,42 +3456,62 @@ function renderMobileGarage() {
 }
 
 function renderMobileGarageCard(car) {
+  const displayName = car.name || "未命名候选";
+  const normalizedStage = normalizeGarageStage(car.stage);
   const kind = carKind(car);
   const risk = analyzeCar(car);
   const rec = deriveRecommendation(car);
   const progress = getInvestigationProgress(car);
   const riskSummary = riskCompletionSummary(car);
   const quality = assessCarQuality(car);
+  const workflow = getWorkflowForCar(car);
+  const nextTask = workflow.tasks.find((task) => task.status !== "done") || workflow.tasks[0];
+  const nextAction = car.nextAction || nextTask?.detail || workflow.decision.detail || "先补齐关键信息，再决定是否推进。";
+  const sourceUrl = getExternalSourceUrl(car);
+  const mobileImage = getVehicleImages(car)[0];
   return `
-    <button class="mobile-car-card" data-detail="${escapeAttr(car.id)}" type="button">
-      <div class="mobile-car-card-top">
-        <div>
-          <span>${escapeHtml(stageLabel(car.stage))} · ${escapeHtml(carKindLabel(kind))}</span>
-          <strong>${escapeHtml(car.name)}</strong>
-          <small>${escapeHtml(car.trim || car.city || "候选车源")}</small>
+    <article class="mobile-car-card">
+      <button class="mobile-car-card-main" data-detail="${escapeAttr(car.id)}" type="button">
+        <div class="mobile-car-visual ${mobileImage ? "" : "is-empty"}">
+          ${mobileImage ? `<img src="${escapeAttr(mobileImage.src)}" alt="${escapeAttr(mobileImage.name || displayName)}">` : `<span>${escapeHtml(displayName)}</span>`}
         </div>
-        <div class="mobile-car-price">${formatWan(car.price)}</div>
+        <div class="mobile-car-card-top">
+          <div>
+            <span>${escapeHtml(stageLabel(normalizedStage))} · ${escapeHtml(carKindLabel(kind))}</span>
+            <strong>${escapeHtml(displayName)}</strong>
+            <small>${escapeHtml(car.trim || car.city || "候选车源")}</small>
+          </div>
+          <div class="mobile-car-price">${formatWan(car.price)}</div>
+        </div>
+        <div class="mobile-car-metrics">
+          <span>匹配 ${fitScore(car)}</span>
+          <span>${riskLabel(risk.level)} ${risk.score}</span>
+          <span>证据 ${quality.evidenceCompleteness}%</span>
+        </div>
+        <div class="mobile-card-next-action">
+          <span>下一步</span>
+          <strong>${escapeHtml(nextAction)}</strong>
+        </div>
+        <div class="mobile-car-progress">
+          <span style="width:${progress.percent}%"></span>
+        </div>
+        <div class="mobile-car-foot">
+          <span>${progress.done}/${progress.total} 尽调</span>
+          <span>${riskSummary.open ? `${riskSummary.open} 风险` : "风险已闭环"}</span>
+          <span>${escapeHtml(recommendationLabel(rec))}</span>
+        </div>
+      </button>
+      <div class="mobile-card-actions">
+        ${sourceUrl ? `<a href="${escapeAttr(sourceUrl)}" target="_blank" rel="noopener noreferrer">车源</a>` : ""}
+        <button data-edit="${escapeAttr(car.id)}" type="button">编辑</button>
+        <button data-detail="${escapeAttr(car.id)}" type="button">详情</button>
       </div>
-      <div class="mobile-car-metrics">
-        <span>匹配 ${fitScore(car)}</span>
-        <span>${riskLabel(risk.level)} ${risk.score}</span>
-        <span>证据 ${quality.evidenceCompleteness}%</span>
-      </div>
-      <div class="mobile-car-progress">
-        <span style="width:${progress.percent}%"></span>
-      </div>
-      <div class="mobile-car-foot">
-        <span>${progress.done}/${progress.total} 尽调</span>
-        <span>${riskSummary.open ? `${riskSummary.open} 风险` : "风险已闭环"}</span>
-        <span>${escapeHtml(recommendationLabel(rec))}</span>
-      </div>
-    </button>
+    </article>
   `;
 }
 
 function setMobileGarageStage(stage) {
-  const stages = ["all", "watching", "contacted", "waiting-docs", "test-drive", "recheck", "negotiating", "rejected", "purchased"];
-  mobileGarageStage = stages.includes(stage) ? stage : "all";
+  mobileGarageStage = stage === "all" ? "all" : normalizeGarageStage(stage);
   renderMobileGarage();
 }
 
