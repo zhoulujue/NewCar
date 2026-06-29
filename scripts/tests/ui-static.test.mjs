@@ -544,3 +544,61 @@ test("mobile capture bottom sheet has hidden desktop and open mobile sheet styli
   assert.match(mobileCss, /body\.mobile-capture-open[\s\S]*?touch-action: none/);
   assert.match(mobileCss, /env\(safe-area-inset-bottom\)/);
 });
+
+test("mobile candidate detail segment state and functions are defined", async () => {
+  const app = await readFile(new URL("app.js", root), "utf8");
+
+  assert.match(app, /let mobileDetailSegment = "overview"/);
+  assert.match(app, /function renderMobileDetailSegments/);
+  assert.match(app, /function scrollToMobileDetailSegment/);
+});
+
+test("renderDetail refreshes mobile detail segments for selected and empty states", async () => {
+  const app = await readFile(new URL("app.js", root), "utf8");
+  const renderStart = app.indexOf("function renderDetail()");
+  const renderEnd = app.indexOf("\nfunction renderDetailActionDock", renderStart);
+  const renderDetail = app.slice(renderStart, renderEnd);
+  const noCarIndex = renderDetail.indexOf("if (!car) {");
+  const returnIndex = renderDetail.indexOf("return;", noCarIndex);
+  const selectedIndex = renderDetail.lastIndexOf("renderMobileDetailSegments();");
+
+  assert.match(renderDetail.slice(noCarIndex, returnIndex), /renderMobileDetailSegments\(\)/);
+  assert.ok(selectedIndex > returnIndex, "selected-car path should render mobile detail segments after car content is refreshed");
+});
+
+test("mobile detail segment clicks delegate to scroll handler", async () => {
+  const app = await readFile(new URL("app.js", root), "utf8");
+  const bodyClickStart = app.indexOf('document.body.addEventListener("click"');
+  const bodyClickEnd = app.indexOf("\ndocument.querySelector(\"#addCar\")", bodyClickStart);
+  const bodyClick = app.slice(bodyClickStart, bodyClickEnd);
+
+  assert.match(bodyClick, /event\.target\.closest\("\[data-mobile-detail-segment\]"\)/);
+  assert.match(bodyClick, /scrollToMobileDetailSegment\(mobileDetailSegmentButton\.dataset\.mobileDetailSegment\)/);
+});
+
+test("mobile detail segments are sticky with active and safe-spacing styles", async () => {
+  const css = await readFile(new URL("styles.css", root), "utf8");
+  const mobileStart = css.indexOf("@media (max-width: 820px)");
+  const mobileEnd = css.indexOf("@media", mobileStart + 1);
+  const mobileCss = css.slice(mobileStart, mobileEnd);
+
+  assert.match(css, /\.mobile-detail-segments/);
+  assert.match(mobileCss, /\.mobile-detail-segments[\s\S]*?position: sticky/);
+  assert.match(mobileCss, /\.mobile-detail-segments[\s\S]*?top: calc\(/);
+  assert.match(mobileCss, /\.mobile-detail-segments[\s\S]*?env\(safe-area-inset-top\)/);
+  assert.match(mobileCss, /\.mobile-detail-segments button\.active/);
+  assert.match(mobileCss, /\.mobile-detail-segments button\.active[\s\S]*?background:/);
+  assert.match(mobileCss, /scroll-margin-top:/);
+});
+
+test("mobile detail view compacts topbar and hides desktop detail topline controls", async () => {
+  const css = await readFile(new URL("styles.css", root), "utf8");
+  const mobileStart = css.indexOf("@media (max-width: 820px)");
+  const mobileEnd = css.indexOf("@media", mobileStart + 1);
+  const mobileCss = css.slice(mobileStart, mobileEnd);
+
+  assert.match(mobileCss, /body\[data-view="detail"\] \.topbar/);
+  assert.match(mobileCss, /body\[data-view="detail"\] \.topbar[\s\S]*?display: none/);
+  assert.match(mobileCss, /body\[data-view="detail"\] \.detail-topline/);
+  assert.match(mobileCss, /body\[data-view="detail"\] \.detail-topline[\s\S]*?display: none/);
+});

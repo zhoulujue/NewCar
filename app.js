@@ -290,6 +290,7 @@ let state = normalizeState(loadState());
 let activeView = "dashboard";
 let activeDiscoverTab = "newcars";
 let mobileGarageStage = "all";
+let mobileDetailSegment = "overview";
 let selectedCarId = state.selectedCarId || state.cars[0]?.id || "";
 let captureSheetOpen = false;
 let lastViewedCarId;
@@ -4289,6 +4290,7 @@ function renderDetail() {
     document.querySelector("#qualityPanel").innerHTML = "";
     document.querySelector("#evidenceActionPanel").innerHTML = "";
     document.querySelector("#mobileDetailActions").innerHTML = "";
+    renderMobileDetailSegments();
     setQualityButtonState(false);
     setMarketFeedbackButtonState(false);
     return;
@@ -4378,8 +4380,51 @@ function renderDetail() {
   `).join("");
   document.querySelector("#qualityPanel").innerHTML = renderQualityPanel(car);
   document.querySelector("#evidenceActionPanel").innerHTML = renderEvidenceActionPanel(car);
+  renderMobileDetailSegments();
   setQualityButtonState(qualityAnalysisRunning);
   setMarketFeedbackButtonState(feedbackAnalysisRunning);
+}
+
+function getMobileDetailSegments() {
+  return [
+    { id: "overview", label: "概览", targetId: "detailHero" },
+    { id: "market", label: "市场", targetId: "marketFeedbackPanel" },
+    { id: "quality", label: "质量", targetId: "qualityPanel" },
+    { id: "evidence", label: "取证", targetId: "evidenceActionPanel" },
+    { id: "workflow", label: "流程", targetId: "workflowPanel" }
+  ];
+}
+
+function renderMobileDetailSegments() {
+  const container = document.querySelector("#mobileDetailSegments");
+  if (!container) return;
+  const car = getSelectedCar();
+  if (!car) {
+    container.innerHTML = "";
+    return;
+  }
+  const segments = getMobileDetailSegments();
+  if (!segments.some((segment) => segment.id === mobileDetailSegment)) {
+    mobileDetailSegment = "overview";
+  }
+  container.innerHTML = segments.map((segment) => `
+    <button
+      class="${segment.id === mobileDetailSegment ? "active" : ""}"
+      data-mobile-detail-segment="${escapeAttr(segment.id)}"
+      type="button"
+      aria-pressed="${segment.id === mobileDetailSegment}"
+    >${escapeHtml(segment.label)}</button>
+  `).join("");
+}
+
+function scrollToMobileDetailSegment(segmentId) {
+  const segment = getMobileDetailSegments().find((item) => item.id === segmentId);
+  if (!segment) return;
+  mobileDetailSegment = segment.id;
+  renderMobileDetailSegments();
+  const target = document.getElementById(segment.targetId);
+  const scrollTarget = target?.closest(".panel") || target;
+  scrollTarget?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 function renderDetailActionDock(car, risk, rec, workflow, quality, cost) {
@@ -8565,6 +8610,7 @@ document.body.addEventListener("click", (event) => {
   const mobileStageButton = event.target.closest("[data-mobile-stage]");
   const openSourceAppId = event.target.closest("[data-open-source-app]")?.dataset.openSourceApp;
   const detailQuickAction = event.target.closest("[data-detail-quick-action]")?.dataset.detailQuickAction;
+  const mobileDetailSegmentButton = event.target.closest("[data-mobile-detail-segment]");
   const deleteEvidenceId = event.target.closest("[data-delete-evidence]")?.dataset.deleteEvidence;
   const analyzeEvidenceId = event.target.closest("[data-analyze-evidence]")?.dataset.analyzeEvidence;
   const applyEvidenceAnalysisId = event.target.closest("[data-apply-evidence-analysis]")?.dataset.applyEvidenceAnalysis;
@@ -8617,6 +8663,7 @@ document.body.addEventListener("click", (event) => {
   }
   if (openSourceAppId) openSourceInApp(openSourceAppId);
   if (detailQuickAction) handleDetailQuickAction(detailQuickAction);
+  if (mobileDetailSegmentButton) scrollToMobileDetailSegment(mobileDetailSegmentButton.dataset.mobileDetailSegment);
   if (event.target.closest("[data-dashboard-ai]")) analyzeDashboardBestWithGemini();
   if (qualityFetchShortcut) fetchQualityDataWithAi();
   if (riskStatusButton) {
