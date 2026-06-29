@@ -468,6 +468,29 @@ test("mobile capture bottom sheet wires state render handlers and save path", as
   assert.match(app, /analyzeCurrentCarWithGemini\(\{ auto: true, focusInfoId: item\.id \}\)/);
 });
 
+test("mobile capture save normalizes URLs and only queues analysis after persistence", async () => {
+  const app = await readFile(new URL("app.js", root), "utf8");
+  const saveStart = app.indexOf("async function saveMobileCaptureEntry()");
+  const saveEnd = app.indexOf("\nfunction inferEvidenceType", saveStart);
+  const saveFunction = app.slice(saveStart, saveEnd);
+  const savedIndex = saveFunction.indexOf("const saved = render();");
+  const clearIndex = saveFunction.indexOf("[\"#mobileCaptureTitleInput\", \"#mobileCaptureUrl\", \"#mobileCaptureNotes\"]");
+  const closeIndex = saveFunction.indexOf("closeMobileCaptureSheet();");
+  const queueIndex = saveFunction.indexOf("markEvidenceAnalysisState(item.id, \"queued\")");
+  const analyzeIndex = saveFunction.indexOf("analyzeCurrentCarWithGemini({ auto: true, focusInfoId: item.id })");
+
+  assert.match(saveFunction, /const rawUrl = getValue\("#mobileCaptureUrl"\)/);
+  assert.match(saveFunction, /const url = normalizeWebUrl\(rawUrl\)/);
+  assert.match(saveFunction, /url,\s*\n\s*notes,/);
+  assert.doesNotMatch(saveFunction, /url: rawUrl/);
+  assert.match(saveFunction, /analysisStatus:\s*"idle"/);
+  assert.ok(savedIndex > -1, "mobile capture save should render before clearing");
+  assert.ok(clearIndex > savedIndex, "mobile capture inputs should only clear after successful render");
+  assert.ok(closeIndex > savedIndex, "mobile capture sheet should only close after successful render");
+  assert.ok(queueIndex > savedIndex, "mobile capture should queue analysis only after successful render");
+  assert.ok(analyzeIndex > queueIndex, "mobile capture should start AI after marking queued");
+});
+
 test("mobile capture bottom sheet has hidden desktop and open mobile sheet styling", async () => {
   const css = await readFile(new URL("styles.css", root), "utf8");
   const mobileStart = css.indexOf("@media (max-width: 820px)");
@@ -486,5 +509,7 @@ test("mobile capture bottom sheet has hidden desktop and open mobile sheet styli
   assert.match(mobileCss, /\.mobile-capture-backdrop[\s\S]*?position: fixed/);
   assert.match(mobileCss, /\.mobile-capture-upload/);
   assert.match(mobileCss, /\.mobile-capture-actions/);
+  assert.match(mobileCss, /body\.mobile-capture-open[\s\S]*?overflow: hidden/);
+  assert.match(mobileCss, /body\.mobile-capture-open[\s\S]*?touch-action: none/);
   assert.match(mobileCss, /env\(safe-area-inset-bottom\)/);
 });

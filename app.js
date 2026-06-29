@@ -7129,7 +7129,8 @@ async function saveMobileCaptureEntry() {
     return;
   }
   const title = getValue("#mobileCaptureTitleInput");
-  const url = getValue("#mobileCaptureUrl");
+  const rawUrl = getValue("#mobileCaptureUrl");
+  const url = normalizeWebUrl(rawUrl);
   const notes = getValue("#mobileCaptureNotes");
   const files = document.querySelector("#mobileCaptureFiles")?.files;
   let attachments = [];
@@ -7162,7 +7163,7 @@ async function saveMobileCaptureEntry() {
     notes,
     attachments,
     createdAt: new Date().toISOString().slice(0, 10),
-    analysisStatus: "queued",
+    analysisStatus: "idle",
     analysisError: "",
     analysisResult: null,
     linkedRiskIds: [],
@@ -7179,14 +7180,14 @@ async function saveMobileCaptureEntry() {
   car.updatedAt = new Date().toISOString();
   selectedCarId = candidateId;
   lastViewedCarId = candidateId;
-  ["#mobileCaptureTitleInput", "#mobileCaptureUrl", "#mobileCaptureNotes"].forEach((selector) => setValue(selector, ""));
-  if (document.querySelector("#mobileCaptureFiles")) document.querySelector("#mobileCaptureFiles").value = "";
-  closeMobileCaptureSheet();
   const saved = render();
   if (!saved) {
     showToast("信息已加入当前页面，但本机存储空间不足，刷新可能丢失；请减少图片或导出 JSON。", "danger");
     return;
   }
+  ["#mobileCaptureTitleInput", "#mobileCaptureUrl", "#mobileCaptureNotes"].forEach((selector) => setValue(selector, ""));
+  if (document.querySelector("#mobileCaptureFiles")) document.querySelector("#mobileCaptureFiles").value = "";
+  closeMobileCaptureSheet();
   if (attachmentStats.shouldWarn) {
     showToast(`信息已保存；图片合计 ${formatBytes(attachmentStats.totalBytes)}，先不自动分析，避免 AI 请求过大。`, "warn");
     markEvidenceAnalysisState(item.id, "idle");
@@ -7194,6 +7195,7 @@ async function saveMobileCaptureEntry() {
     return;
   }
   showToast("信息已保存到候选信息墙，正在调用 AI 分析。", "ok");
+  markEvidenceAnalysisState(item.id, "queued");
   analyzeCurrentCarWithGemini({ auto: true, focusInfoId: item.id });
 }
 
