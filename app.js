@@ -2847,6 +2847,23 @@ function closeMobileCaptureSheet() {
   renderMobileCaptureSheet();
 }
 
+function handleMobileCaptureMode(mode) {
+  switch (mode) {
+    case "photo":
+    case "image":
+      document.querySelector("#mobileCaptureFiles")?.click();
+      break;
+    case "link":
+      document.querySelector("#mobileCaptureUrl")?.focus();
+      break;
+    case "note":
+      document.querySelector("#mobileCaptureNotes")?.focus();
+      break;
+    default:
+      document.querySelector("#mobileCaptureTitleInput")?.focus();
+  }
+}
+
 function setActiveView(view, { scroll = "restore" } = {}) {
   const requestedView = resolveViewAlias(view);
   if (!viewMeta[requestedView]) return false;
@@ -7194,6 +7211,12 @@ async function saveMobileCaptureEntry() {
     render();
     return;
   }
+  if (geminiAnalysisRunning) {
+    markEvidenceAnalysisState(item.id, "idle");
+    render();
+    showToast("信息已保存；AI 正在分析其他内容，稍后可在信息墙点击重新分析。", "warn");
+    return;
+  }
   showToast("信息已保存到候选信息墙，正在调用 AI 分析。", "ok");
   markEvidenceAnalysisState(item.id, "queued");
   analyzeCurrentCarWithGemini({ auto: true, focusInfoId: item.id });
@@ -8557,6 +8580,7 @@ document.body.addEventListener("click", (event) => {
   const riskStatusButton = event.target.closest("[data-risk-status]");
   const mobileCaptureButton = event.target.closest("[data-mobile-capture]");
   const closeMobileCaptureButton = event.target.closest("[data-close-mobile-capture]");
+  const captureModeButton = event.target.closest("[data-capture-mode]");
   const shouldAddEvidence = Boolean(event.target.closest("[data-add-evidence]"));
 
   if (event.target.closest("[data-close-copy-fallback]")) {
@@ -8564,6 +8588,7 @@ document.body.addEventListener("click", (event) => {
   }
   if (mobileCaptureButton) openMobileCaptureSheet();
   if (closeMobileCaptureButton) closeMobileCaptureSheet();
+  if (captureModeButton) handleMobileCaptureMode(captureModeButton.dataset.captureMode);
   if (viewLink) {
     setActiveView(viewLink);
   }

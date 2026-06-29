@@ -491,6 +491,37 @@ test("mobile capture save normalizes URLs and only queues analysis after persist
   assert.ok(analyzeIndex > queueIndex, "mobile capture should start AI after marking queued");
 });
 
+test("mobile capture keeps analysis idle when Gemini is already busy", async () => {
+  const app = await readFile(new URL("app.js", root), "utf8");
+  const saveStart = app.indexOf("async function saveMobileCaptureEntry()");
+  const saveEnd = app.indexOf("\nfunction inferEvidenceType", saveStart);
+  const saveFunction = app.slice(saveStart, saveEnd);
+  const busyIndex = saveFunction.indexOf("if (geminiAnalysisRunning)");
+  const queueIndex = saveFunction.indexOf("markEvidenceAnalysisState(item.id, \"queued\")");
+  const analyzeIndex = saveFunction.indexOf("analyzeCurrentCarWithGemini({ auto: true, focusInfoId: item.id })");
+
+  assert.ok(busyIndex > -1, "mobile capture save should branch when Gemini analysis is already running");
+  assert.ok(busyIndex < queueIndex, "busy analysis guard should run before marking queued");
+  assert.ok(busyIndex < analyzeIndex, "busy analysis guard should run before starting analysis");
+  assert.match(saveFunction, /if \(geminiAnalysisRunning\) \{[\s\S]*?markEvidenceAnalysisState\(item\.id, "idle"\)/);
+  assert.match(saveFunction, /if \(geminiAnalysisRunning\) \{[\s\S]*?showToast\([^)]*稍后/);
+});
+
+test("mobile capture mode buttons target the matching capture inputs", async () => {
+  const app = await readFile(new URL("app.js", root), "utf8");
+
+  assert.match(app, /function handleMobileCaptureMode/);
+  assert.match(app, /event\.target\.closest\("\[data-capture-mode\]"\)/);
+  assert.match(app, /handleMobileCaptureMode\(captureModeButton\.dataset\.captureMode\)/);
+  assert.match(app, /case "photo":/);
+  assert.match(app, /case "image":/);
+  assert.match(app, /document\.querySelector\("#mobileCaptureFiles"\)\?\.click\(\)/);
+  assert.match(app, /case "link":/);
+  assert.match(app, /document\.querySelector\("#mobileCaptureUrl"\)\?\.focus\(\)/);
+  assert.match(app, /case "note":/);
+  assert.match(app, /document\.querySelector\("#mobileCaptureNotes"\)\?\.focus\(\)/);
+});
+
 test("mobile capture bottom sheet has hidden desktop and open mobile sheet styling", async () => {
   const css = await readFile(new URL("styles.css", root), "utf8");
   const mobileStart = css.indexOf("@media (max-width: 820px)");
