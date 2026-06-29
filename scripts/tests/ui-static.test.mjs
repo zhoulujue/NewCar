@@ -372,6 +372,9 @@ test("mobile Today decision board renders top focus and tasks", async () => {
   assert.match(app, /function renderMobileTodayFocus/);
   assert.match(app, /renderDashboard\(\);\s*renderMobileToday\(\);/);
   assert.match(app, /getDashboardWorkflowActions\(\)\.slice\(0,\s*3\)/);
+  assert.match(app, /filter\(\(car\) => !\["rejected", "purchased"\]\.includes\(car\.stage\)\)[\s\S]*?sort\(\(a, b\) => fitScore\(b\) - fitScore\(a\)\)\[0\]/);
+  assert.match(app, /class="mobile-today-task \$\{task\.level\}" data-detail="\$\{escapeAttr\(car\.id\)\}"/);
+  assert.match(app, /class="mobile-today-focus" data-detail="\$\{escapeAttr\(car\.id\)\}"/);
   assert.match(app, /id="mobileTodayAddCar"/);
   assert.match(app, /mobileTodayAddCar[\s\S]*?addRequirementCandidateToGarage/);
   assert.match(css, /\.mobile-today-hero/);

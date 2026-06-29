@@ -3253,14 +3253,16 @@ function renderMobileToday() {
   const container = document.querySelector("#mobileToday");
   if (!container) return;
   const actions = getDashboardWorkflowActions().slice(0, 3);
-  const best = [...state.cars].sort((a, b) => fitScore(b) - fitScore(a))[0];
+  const best = state.cars
+    .filter((car) => !["rejected", "purchased"].includes(car.stage))
+    .sort((a, b) => fitScore(b) - fitScore(a))[0];
   const recommendationCandidate = state.requirementAnalysis.candidates
     .filter((candidate) => !candidate.carId || !state.cars.some((car) => car.id === candidate.carId))
     .sort((a, b) => (b.fitScore || 0) - (a.fitScore || 0))[0];
   const addButtonAttrs = recommendationCandidate ? ` data-add-requirement-candidate="${escapeAttr(recommendationCandidate.id)}"` : "";
   const addButtonLabel = recommendationCandidate ? `加入 ${escapeHtml(recommendationCandidate.name)}` : "新增候选";
   const taskMarkup = actions.map(({ car, task, workflow }) => `
-    <button class="mobile-today-task ${task.level}" data-detail="${car.id}" type="button">
+    <button class="mobile-today-task ${task.level}" data-detail="${escapeAttr(car.id)}" type="button">
       <span>${escapeHtml(workflow.decision.label)}</span>
       <strong>${escapeHtml(task.title)}</strong>
       <small>${escapeHtml(car.name)} · ${escapeHtml(task.detail)}</small>
@@ -3306,7 +3308,7 @@ function renderMobileTodayFocus(car) {
   const risk = analyzeCar(car);
   const quality = assessCarQuality(car);
   return `
-    <button class="mobile-today-focus" data-detail="${car.id}" type="button">
+    <button class="mobile-today-focus" data-detail="${escapeAttr(car.id)}" type="button">
       <span class="mobile-today-kicker">焦点候选</span>
       <h3>${escapeHtml(car.name)} ${escapeHtml(car.trim || "")}</h3>
       <div class="mobile-today-score-row">
