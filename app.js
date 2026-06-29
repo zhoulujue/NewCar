@@ -3471,7 +3471,7 @@ function renderMobileGarageCard(car) {
   const mobileImage = getVehicleImages(car)[0];
   return `
     <article class="mobile-car-card">
-      <button class="mobile-car-card-main" data-detail="${escapeAttr(car.id)}" type="button">
+      <div class="mobile-car-card-main" data-detail="${escapeAttr(car.id)}" role="button" tabindex="0">
         <div class="mobile-car-visual ${mobileImage ? "" : "is-empty"}">
           ${mobileImage ? `<img src="${escapeAttr(mobileImage.src)}" alt="${escapeAttr(mobileImage.name || displayName)}">` : `<span>${escapeHtml(displayName)}</span>`}
         </div>
@@ -3500,7 +3500,7 @@ function renderMobileGarageCard(car) {
           <span>${riskSummary.open ? `${riskSummary.open} 风险` : "风险已闭环"}</span>
           <span>${escapeHtml(recommendationLabel(rec))}</span>
         </div>
-      </button>
+      </div>
       <div class="mobile-card-actions">
         ${sourceUrl ? `<a href="${escapeAttr(sourceUrl)}" target="_blank" rel="noopener noreferrer">车源</a>` : ""}
         <button data-edit="${escapeAttr(car.id)}" type="button">编辑</button>
@@ -8397,6 +8397,14 @@ document.querySelectorAll("[data-discover-tab]").forEach((button) => {
     setActiveView("discover", { scroll: "restore" });
     renderDiscover();
   });
+});
+
+document.body.addEventListener("keydown", (event) => {
+  const mobileDetailButton = event.target.closest(".mobile-car-card-main[role=\"button\"][data-detail]");
+  if (!mobileDetailButton) return;
+  if (!["Enter", " "].includes(event.key)) return;
+  event.preventDefault();
+  switchToDetail(mobileDetailButton.dataset.detail);
 });
 
 document.body.addEventListener("click", (event) => {

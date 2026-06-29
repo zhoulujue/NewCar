@@ -399,7 +399,11 @@ test("mobile garage candidate feed renders stage chips and detail cards", async 
   assert.match(app, /renderGarage\(\);\s*renderMobileGarage\(\);/);
   assert.match(app, /event\.target\.closest\("\[data-mobile-stage\]"\)/);
   assert.match(app, /setMobileGarageStage\(mobileStageButton\.dataset\.mobileStage\)/);
-  assert.match(app, /class="mobile-car-card-main" data-detail="\$\{escapeAttr\(car\.id\)\}"/);
+  assert.match(app, /<div class="mobile-car-card-main" data-detail="\$\{escapeAttr\(car\.id\)\}" role="button" tabindex="0">/);
+  assert.match(app, /document\.body\.addEventListener\("keydown", \(event\) => \{/);
+  assert.match(app, /event\.target\.closest\("\.mobile-car-card-main\[role=\\"button\\"\]\[data-detail\]"\)/);
+  assert.match(app, /if \(!\["Enter", " "\]\.includes\(event\.key\)\) return;/);
+  assert.match(app, /switchToDetail\(mobileDetailButton\.dataset\.detail\)/);
   assert.match(app, /data-mobile-stage="\$\{escapeAttr\(stage\)\}"/);
   assert.match(app, /const normalizedStage = normalizeGarageStage\(car\.stage\)/);
   assert.match(app, /normalizeGarageStage\(car\.stage\) === stage/);
@@ -423,7 +427,8 @@ test("mobile garage candidate feed renders stage chips and detail cards", async 
   assert.match(mobileCss, /\.mobile-car-card[\s\S]*?display: grid/);
   assert.match(mobileCss, /\.mobile-car-visual[\s\S]*?aspect-ratio:/);
   assert.match(mobileCss, /\.mobile-card-next-action/);
-  assert.match(mobileCss, /\.mobile-card-actions[\s\S]*?display: grid/);
+  assert.match(mobileCss, /\.mobile-card-actions[\s\S]*?display: flex/);
+  assert.match(mobileCss, /\.mobile-card-actions a,[\s\S]*?flex: 1 1 92px/);
 });
 
 test("mobile native pages have dedicated containers instead of desktop-only compression", async () => {

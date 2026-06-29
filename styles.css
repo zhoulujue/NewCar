@@ -5093,7 +5093,13 @@ button:disabled {
     border: 0;
     background: transparent;
     color: inherit;
+    cursor: pointer;
     text-align: left;
+  }
+
+  .mobile-car-card-main:focus-visible {
+    outline: 3px solid rgba(15, 118, 110, 0.28);
+    outline-offset: -3px;
   }
 
   .mobile-car-visual {
@@ -5221,8 +5227,8 @@ button:disabled {
   }
 
   .mobile-card-actions {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    display: flex;
+    flex-wrap: wrap;
     gap: 8px;
     padding: 0 12px 12px;
   }
@@ -5230,6 +5236,7 @@ button:disabled {
   .mobile-card-actions a,
   .mobile-card-actions button {
     display: grid;
+    flex: 1 1 92px;
     min-height: 38px;
     place-items: center;
     border: 1px solid rgba(16, 24, 32, 0.08);
