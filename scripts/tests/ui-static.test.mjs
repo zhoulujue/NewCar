@@ -114,6 +114,20 @@ test("mobile bottom navigation orders Today Candidates Capture Discover More", a
   assert.match(mobileCss, /\.nav-button\[data-view="report"\]\s*\{[\s\S]*?order: 5;/);
 });
 
+test("mobile capture nav button renders its plus label", async () => {
+  const css = await readFile(new URL("styles.css", root), "utf8");
+  const mobileStart = css.indexOf("@media (max-width: 820px)");
+  const mobileEnd = css.indexOf("@media", mobileStart + 1);
+  const mobileCss = css.slice(mobileStart, mobileEnd);
+  const genericLabelIndex = mobileCss.indexOf(".nav-button::after");
+  const captureOverrideIndex = mobileCss.indexOf(".capture-nav-button", genericLabelIndex);
+  const captureOverrideCss = mobileCss.slice(captureOverrideIndex);
+
+  assert.ok(captureOverrideIndex > genericLabelIndex, "capture override should follow generic mobile nav label rules");
+  assert.match(captureOverrideCss, /\.capture-nav-button\s*\{[\s\S]*?font-size:\s*(?!0\b)[^;]+;/);
+  assert.match(captureOverrideCss, /\.capture-nav-button::after\s*\{[\s\S]*?(?:content:\s*none|display:\s*none)/);
+});
+
 test("discovery view contains new-car and used-car segmented panels", async () => {
   const html = await readFile(new URL("index.html", root), "utf8");
 

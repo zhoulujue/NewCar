@@ -5047,6 +5047,22 @@ button:disabled {
     line-height: 1;
   }
 
+  .capture-nav-button {
+    font-size: 24px;
+    font-weight: 800;
+    line-height: 1;
+  }
+
+  .capture-nav-button::before {
+    content: none;
+    display: none;
+  }
+
+  .capture-nav-button::after {
+    content: none;
+    display: none;
+  }
+
   .nav-button.active,
   .nav-button:hover {
     color: var(--primary);
