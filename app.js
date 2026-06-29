@@ -4279,17 +4279,10 @@ function renderDetail() {
   if (previousButton) previousButton.disabled = carIndex <= 0;
   if (nextButton) nextButton.disabled = carIndex < 0 || carIndex >= state.cars.length - 1;
   if (!car) {
+    mobileDetailSegment = "overview";
     document.querySelector("#detailContextLabel").textContent = "暂无候选";
     document.querySelector("#detailHero").innerHTML = `<div class="muted">暂无候选。</div>`;
-    document.querySelector("#detailGallery").innerHTML = "";
-    document.querySelector("#decisionReportPreview").innerHTML = "";
-    document.querySelector("#redlineGate").innerHTML = "";
-    document.querySelector("#detailActionDock").innerHTML = "";
-    document.querySelector("#detailDecision").innerHTML = "";
-    document.querySelector("#marketFeedbackPanel").innerHTML = "";
-    document.querySelector("#qualityPanel").innerHTML = "";
-    document.querySelector("#evidenceActionPanel").innerHTML = "";
-    document.querySelector("#mobileDetailActions").innerHTML = "";
+    clearDetailPanelsForEmptyState();
     renderMobileDetailSegments();
     setQualityButtonState(false);
     setMarketFeedbackButtonState(false);
@@ -4385,6 +4378,32 @@ function renderDetail() {
   setMarketFeedbackButtonState(feedbackAnalysisRunning);
 }
 
+function clearDetailPanelsForEmptyState() {
+  [
+    "#detailGallery",
+    "#decisionReportPreview",
+    "#redlineGate",
+    "#detailActionDock",
+    "#detailDecision",
+    "#marketFeedbackPanel",
+    "#qualityPanel",
+    "#evidenceActionPanel",
+    "#mobileDetailActions",
+    "#costPanel",
+    "#priceTimeline",
+    "#i6Matrix",
+    "#workflowPanel",
+    "#investigationSteps",
+    "#evidenceWall",
+    "#decisionLog",
+    "#whyCheap",
+    "#detailChecklist"
+  ].forEach((selector) => {
+    const element = document.querySelector(selector);
+    if (element) element.innerHTML = "";
+  });
+}
+
 function getMobileDetailSegments() {
   return [
     { id: "overview", label: "概览", targetId: "detailHero" },
@@ -4420,11 +4439,12 @@ function renderMobileDetailSegments() {
 function scrollToMobileDetailSegment(segmentId) {
   const segment = getMobileDetailSegments().find((item) => item.id === segmentId);
   if (!segment) return;
-  mobileDetailSegment = segment.id;
-  renderMobileDetailSegments();
   const target = document.getElementById(segment.targetId);
   const scrollTarget = target?.closest(".panel") || target;
-  scrollTarget?.scrollIntoView({ behavior: "smooth", block: "start" });
+  if (!scrollTarget) return;
+  mobileDetailSegment = segment.id;
+  renderMobileDetailSegments();
+  scrollTarget.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 function renderDetailActionDock(car, risk, rec, workflow, quality, cost) {
@@ -4467,10 +4487,16 @@ function renderDetailActionDock(car, risk, rec, workflow, quality, cost) {
 
 function renderMobileDetailActions(car, risk, rec) {
   if (!car) return "";
+  const carIndex = getSelectedCarIndex();
+  const hasPrevious = carIndex > 0;
+  const hasNext = carIndex >= 0 && carIndex < state.cars.length - 1;
   const sourceAction = getExternalSourceUrl(car)
     ? `<button class="secondary-button" data-detail-quick-action="source" type="button">车源</button>`
     : `<button class="secondary-button" data-detail-quick-action="report" type="button">报告</button>`;
   return `
+    <button class="secondary-button" data-detail-quick-action="previous" type="button" ${hasPrevious ? "" : "disabled"}>上辆</button>
+    <button class="secondary-button" data-detail-quick-action="edit" type="button">编辑</button>
+    <button class="secondary-button" data-detail-quick-action="next" type="button" ${hasNext ? "" : "disabled"}>下辆</button>
     <button class="primary-button" data-detail-quick-action="feedback" type="button">反馈</button>
     <button class="secondary-button" data-detail-quick-action="quality" type="button">质量</button>
     <button class="secondary-button" data-detail-quick-action="evidence" type="button">取证</button>
@@ -4481,6 +4507,18 @@ function renderMobileDetailActions(car, risk, rec) {
 function handleDetailQuickAction(action) {
   const car = getSelectedCar();
   if (!car) return;
+  if (action === "edit") {
+    openCarDialog(car.id);
+    return;
+  }
+  if (action === "previous") {
+    switchDetailByOffset(-1);
+    return;
+  }
+  if (action === "next") {
+    switchDetailByOffset(1);
+    return;
+  }
   if (action === "feedback") {
     fetchMarketFeedbackWithAi();
     return;
@@ -4511,6 +4549,7 @@ function switchDetailByOffset(offset) {
   if (index < 0) return;
   const next = state.cars[index + offset];
   if (!next) return;
+  mobileDetailSegment = "overview";
   selectedCarId = next.id;
   render();
   scrollPageToTop();
@@ -8533,6 +8572,7 @@ function numberValue(selector) {
 }
 
 function switchToDetail(carId) {
+  if (selectedCarId !== carId) mobileDetailSegment = "overview";
   selectedCarId = carId;
   lastViewedCarId = carId;
   setActiveView("detail", { scroll: "top" });
@@ -8753,7 +8793,10 @@ document.querySelector("#deleteCar").addEventListener("click", () => {
   "#detailCarSelect"
 ].forEach((selector) => {
   document.querySelector(selector)?.addEventListener("input", (event) => {
-    if (selector === "#detailCarSelect") selectedCarId = event.target.value;
+    if (selector === "#detailCarSelect") {
+      if (selectedCarId !== event.target.value) mobileDetailSegment = "overview";
+      selectedCarId = event.target.value;
+    }
     render();
   });
 });

@@ -329,10 +329,38 @@ test("candidate detail has a persistent action cockpit for desktop and mobile", 
   assert.match(app, /function handleDetailQuickAction/);
   assert.match(app, /data-detail-quick-action="feedback"/);
   assert.match(app, /data-detail-quick-action="quality"/);
+  assert.match(app, /data-detail-quick-action="edit"/);
+  assert.match(app, /data-detail-quick-action="previous"[\s\S]*?\$\{hasPrevious \? "" : "disabled"\}/);
+  assert.match(app, /data-detail-quick-action="next"[\s\S]*?\$\{hasNext \? "" : "disabled"\}/);
   assert.match(css, /\.detail-action-card/);
   assert.match(css, /\.mobile-detail-actions/);
   assert.match(css, /body\[data-view="detail"\][\s\S]*?\.mobile-detail-actions[\s\S]*?display: grid/);
   assert.match(css, /@media \(min-width: 821px\)[\s\S]*?\.mobile-detail-actions[\s\S]*?display: none/);
+});
+
+test("mobile detail action bar preserves candidate navigation and edit handlers", async () => {
+  const app = await readFile(new URL("app.js", root), "utf8");
+  const renderStart = app.indexOf("function renderMobileDetailActions");
+  const renderEnd = app.indexOf("\nfunction handleDetailQuickAction", renderStart);
+  const renderMobileDetailActions = app.slice(renderStart, renderEnd);
+  const handlerStart = app.indexOf("function handleDetailQuickAction");
+  const handlerEnd = app.indexOf("\nfunction getSelectedCarIndex", handlerStart);
+  const handleDetailQuickAction = app.slice(handlerStart, handlerEnd);
+
+  assert.match(renderMobileDetailActions, /const carIndex = getSelectedCarIndex\(\)/);
+  assert.match(renderMobileDetailActions, /const hasPrevious = carIndex > 0/);
+  assert.match(renderMobileDetailActions, /const hasNext = carIndex >= 0 && carIndex < state\.cars\.length - 1/);
+  assert.match(renderMobileDetailActions, /data-detail-quick-action="previous"[\s\S]*?>上辆<\/button>/);
+  assert.match(renderMobileDetailActions, /data-detail-quick-action="edit"[\s\S]*?>编辑<\/button>/);
+  assert.match(renderMobileDetailActions, /data-detail-quick-action="next"[\s\S]*?>下辆<\/button>/);
+  assert.match(handleDetailQuickAction, /if \(action === "edit"\) \{[\s\S]*?openCarDialog\(car\.id\)/);
+  assert.match(handleDetailQuickAction, /if \(action === "previous"\) \{[\s\S]*?switchDetailByOffset\(-1\)/);
+  assert.match(handleDetailQuickAction, /if \(action === "next"\) \{[\s\S]*?switchDetailByOffset\(1\)/);
+  assert.match(handleDetailQuickAction, /if \(action === "feedback"\)/);
+  assert.match(handleDetailQuickAction, /if \(action === "quality"\)/);
+  assert.match(handleDetailQuickAction, /if \(action === "evidence"\)/);
+  assert.match(handleDetailQuickAction, /if \(action === "report"\)/);
+  assert.match(handleDetailQuickAction, /if \(action === "source"\)/);
 });
 
 test("PC and mobile detail layouts keep action surfaces readable", async () => {
@@ -564,6 +592,80 @@ test("renderDetail refreshes mobile detail segments for selected and empty state
 
   assert.match(renderDetail.slice(noCarIndex, returnIndex), /renderMobileDetailSegments\(\)/);
   assert.ok(selectedIndex > returnIndex, "selected-car path should render mobile detail segments after car content is refreshed");
+});
+
+test("empty candidate detail clears every candidate-specific panel", async () => {
+  const app = await readFile(new URL("app.js", root), "utf8");
+  const renderStart = app.indexOf("function renderDetail()");
+  const renderEnd = app.indexOf("\nfunction getMobileDetailSegments", renderStart);
+  const detailBlock = app.slice(renderStart, renderEnd);
+  const helperStart = app.indexOf("function clearDetailPanelsForEmptyState()");
+  const helperEnd = app.indexOf("\nfunction getMobileDetailSegments", helperStart);
+  const clearHelper = app.slice(helperStart, helperEnd);
+  const requiredSelectors = [
+    "#detailGallery",
+    "#decisionReportPreview",
+    "#redlineGate",
+    "#detailActionDock",
+    "#detailDecision",
+    "#marketFeedbackPanel",
+    "#qualityPanel",
+    "#evidenceActionPanel",
+    "#mobileDetailActions",
+    "#costPanel",
+    "#priceTimeline",
+    "#i6Matrix",
+    "#workflowPanel",
+    "#investigationSteps",
+    "#evidenceWall",
+    "#decisionLog",
+    "#whyCheap",
+    "#detailChecklist"
+  ];
+
+  assert.match(detailBlock, /function clearDetailPanelsForEmptyState\(\)/);
+  assert.match(detailBlock, /if \(!car\) \{[\s\S]*?clearDetailPanelsForEmptyState\(\)/);
+  assert.match(clearHelper, /element\.innerHTML = ""/);
+  for (const selector of requiredSelectors) {
+    assert.match(clearHelper, new RegExp(selector.replaceAll("#", "\\#")));
+  }
+});
+
+test("mobile detail segment resets on empty detail and candidate switches", async () => {
+  const app = await readFile(new URL("app.js", root), "utf8");
+  const renderStart = app.indexOf("function renderDetail()");
+  const renderEnd = app.indexOf("\nfunction getMobileDetailSegments", renderStart);
+  const renderDetail = app.slice(renderStart, renderEnd);
+  const switchStart = app.indexOf("function switchToDetail(carId)");
+  const switchEnd = app.indexOf("\nfunction escapeHtml", switchStart);
+  const switchToDetail = app.slice(switchStart, switchEnd);
+  const offsetStart = app.indexOf("function switchDetailByOffset");
+  const offsetEnd = app.indexOf("\nfunction renderVehicleGallery", offsetStart);
+  const switchDetailByOffset = app.slice(offsetStart, offsetEnd);
+  const listenerStart = app.indexOf("\"#detailCarSelect\"");
+  const listenerEnd = app.indexOf("\ndocument.querySelector(\"#editCurrentCar\")", listenerStart);
+  const detailSelectListener = app.slice(listenerStart, listenerEnd);
+
+  assert.match(renderDetail, /if \(!car\) \{[\s\S]*?mobileDetailSegment = "overview"/);
+  assert.match(switchToDetail, /if \(selectedCarId !== carId\) mobileDetailSegment = "overview"/);
+  assert.match(switchDetailByOffset, /mobileDetailSegment = "overview"[\s\S]*?selectedCarId = next\.id/);
+  assert.match(detailSelectListener, /if \(selectedCarId !== event\.target\.value\) mobileDetailSegment = "overview"/);
+});
+
+test("mobile detail segment scroll only activates existing targets", async () => {
+  const app = await readFile(new URL("app.js", root), "utf8");
+  const scrollStart = app.indexOf("function scrollToMobileDetailSegment");
+  const scrollEnd = app.indexOf("\nfunction renderDetailActionDock", scrollStart);
+  const scrollFunction = app.slice(scrollStart, scrollEnd);
+  const segmentIndex = scrollFunction.indexOf("const segment = getMobileDetailSegments()");
+  const targetIndex = scrollFunction.indexOf("const target = document.getElementById(segment.targetId)");
+  const guardIndex = scrollFunction.indexOf("if (!scrollTarget) return;");
+  const activeIndex = scrollFunction.indexOf("mobileDetailSegment = segment.id");
+
+  assert.ok(segmentIndex > -1, "segment lookup should be present");
+  assert.ok(targetIndex > segmentIndex, "target lookup should happen after segment lookup");
+  assert.ok(guardIndex > targetIndex, "missing target guard should happen after target lookup");
+  assert.ok(activeIndex > guardIndex, "active segment should only update after target existence is confirmed");
 });
 
 test("mobile detail segment clicks delegate to scroll handler", async () => {
