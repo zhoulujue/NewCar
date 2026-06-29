@@ -5664,6 +5664,14 @@ button:disabled {
     background: var(--primary);
   }
 
+  .capture-nav-button:hover,
+  .capture-nav-button.active,
+  .capture-nav-button:focus-visible {
+    background: var(--primary);
+    color: #fff;
+    box-shadow: 0 12px 28px rgba(15, 118, 110, 0.28);
+  }
+
   .main {
     padding: 14px 14px calc(22px + var(--mobile-nav-height) + env(safe-area-inset-bottom));
   }

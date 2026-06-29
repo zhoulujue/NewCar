@@ -394,15 +394,27 @@ test("mobile native polish keeps safe areas and desktop boundaries explicit", as
   const desktopStart = css.indexOf("@media (min-width: 821px)");
   const mobileCss = css.slice(mobileStart, desktopStart);
   const desktopCss = css.slice(desktopStart);
+  const genericStateIndex = mobileCss.indexOf(".nav-button.active,\n  .nav-button:hover");
+  const genericActiveMarkerIndex = mobileCss.indexOf(".nav-button.active::before", genericStateIndex);
+  const captureStateIndex = mobileCss.indexOf(".capture-nav-button:hover", genericStateIndex);
+  const captureStateCss = mobileCss.slice(captureStateIndex, mobileCss.indexOf("\n\n  .main", captureStateIndex));
 
   assert.ok(mobileStart > -1, "mobile media block should exist");
   assert.ok(desktopStart > mobileStart, "desktop guard should follow mobile media block");
   assert.match(css, /--mobile-nav-height: 82px/);
-  assert.match(css, /env\(safe-area-inset-bottom\)/);
   assert.match(css, /\.mobile-pill-row\s*\{/);
   assert.match(css, /\.mobile-empty-copy\s*\{/);
-  assert.match(mobileCss, /overflow-x: hidden/);
+  assert.match(mobileCss, /html,\s*\n\s*body\s*\{[\s\S]*?max-width: 100vw;[\s\S]*?overflow-x: hidden;/);
+  assert.match(mobileCss, /\.main\s*\{[\s\S]*?padding: 14px 14px calc\(22px \+ var\(--mobile-nav-height\) \+ env\(safe-area-inset-bottom\)\)/);
+  assert.match(mobileCss, /\.nav-list\s*\{[\s\S]*?padding: 8px 10px calc\(8px \+ env\(safe-area-inset-bottom\)\)/);
   assert.match(mobileCss, /grid-template-columns: 1fr 1fr 76px 1fr 1fr/);
+  assert.ok(genericStateIndex > -1, "generic nav state rule should exist");
+  assert.ok(genericActiveMarkerIndex > genericStateIndex, "generic active marker should follow generic nav state");
+  assert.ok(captureStateIndex > genericActiveMarkerIndex, "capture state override should follow generic mobile nav states");
+  assert.match(captureStateCss, /\.capture-nav-button:hover,[\s\S]*?\.capture-nav-button\.active,[\s\S]*?\.capture-nav-button:focus-visible/);
+  assert.match(captureStateCss, /background: var\(--primary\)/);
+  assert.match(captureStateCss, /color: #fff/);
+  assert.match(captureStateCss, /box-shadow: 0 12px 28px rgba\(15, 118, 110, 0\.28\)/);
   assert.match(desktopCss, /\.mobile-today,[\s\S]*?\.mobile-stage-chips,[\s\S]*?\.mobile-car-feed,[\s\S]*?\.mobile-detail-segments,[\s\S]*?\.mobile-capture-sheet,[\s\S]*?\.capture-nav-button[\s\S]*?display: none/);
 });
 
