@@ -283,6 +283,8 @@ const seedRequirement = {
   notes: "2人用车，没有小孩老人，后排需求弱；预算落地价30万左右，性能不是重点，平顺好开即可。"
 };
 
+const GARAGE_STAGE_ORDER = ["all", "watching", "contacted", "waiting-docs", "test-drive", "recheck", "negotiating", "rejected", "purchased"];
+
 let currentUser = loadAuthProfile();
 let googleAuthReady = false;
 let googleAuthAttempts = 0;
@@ -549,8 +551,6 @@ function carKindClass(kind) {
     manual: "warn"
   }[normalizeCarKind(kind)] || "warn";
 }
-
-const GARAGE_STAGE_ORDER = ["all", "watching", "contacted", "waiting-docs", "test-drive", "recheck", "negotiating", "rejected", "purchased"];
 
 function normalizeGarageStage(stage) {
   return GARAGE_STAGE_ORDER.includes(stage) && stage !== "all" ? stage : "watching";

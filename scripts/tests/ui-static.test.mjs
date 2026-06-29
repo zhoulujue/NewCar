@@ -489,6 +489,16 @@ test("mobile garage candidate feed renders stage chips and detail cards", async 
   assert.match(mobileCss, /\.mobile-card-actions a,[\s\S]*?flex: 1 1 92px/);
 });
 
+test("mobile garage stage constants initialize before persisted state normalization", async () => {
+  const app = await readFile(new URL("app.js", root), "utf8");
+  const stageOrderIndex = app.indexOf("const GARAGE_STAGE_ORDER");
+  const stateInitIndex = app.indexOf("let state = normalizeState(loadState())");
+
+  assert.ok(stageOrderIndex > -1, "garage stage order should be declared");
+  assert.ok(stateInitIndex > -1, "state initialization should be present");
+  assert.ok(stageOrderIndex < stateInitIndex, "normalizeState must not call normalizeGarageStage before GARAGE_STAGE_ORDER initializes");
+});
+
 test("mobile native pages have dedicated containers instead of desktop-only compression", async () => {
   const html = await readFile(new URL("index.html", root), "utf8");
 
