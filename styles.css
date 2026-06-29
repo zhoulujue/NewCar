@@ -4909,6 +4909,14 @@ button:disabled {
     overscroll-behavior-y: contain;
   }
 
+  body[data-view="dashboard"] {
+    background: #071016;
+  }
+
+  body[data-view="dashboard"] .main {
+    background: #071016;
+  }
+
   button,
   a,
   input,
@@ -4987,6 +4995,163 @@ button:disabled {
 
   body[data-view="dashboard"] .mobile-today {
     display: grid;
+  }
+
+  .mobile-today {
+    gap: 14px;
+    margin: -2px -14px 16px;
+    padding: 0 14px 4px;
+    color: #edf7f6;
+  }
+
+  .mobile-today-hero,
+  .mobile-today-focus,
+  .mobile-today-tasks {
+    min-width: 0;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 16px;
+    background: #101d25;
+    box-shadow: 0 18px 42px rgba(0, 0, 0, 0.28);
+  }
+
+  .mobile-today-hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 14px;
+    padding: 18px 16px 16px;
+    background:
+      linear-gradient(145deg, rgba(39, 184, 151, 0.22), rgba(252, 211, 77, 0.08)),
+      #0d1b22;
+  }
+
+  .mobile-today-hero .eyebrow {
+    color: #7dd3c7;
+  }
+
+  .mobile-today-hero h2 {
+    margin: 6px 0 8px;
+    font-size: 24px;
+    line-height: 1.18;
+    color: #ffffff;
+  }
+
+  .mobile-today-hero p,
+  .mobile-today-focus p {
+    margin: 0;
+    color: #b9c7ca;
+    font-size: 13px;
+    line-height: 1.55;
+  }
+
+  .mobile-today-add {
+    width: 100%;
+    min-height: 46px;
+    border: 0;
+    border-radius: 12px;
+    background: #f8d95a;
+    color: #172026;
+    font-weight: 800;
+  }
+
+  .mobile-today-focus {
+    display: grid;
+    gap: 10px;
+    width: 100%;
+    padding: 15px;
+    color: inherit;
+    text-align: left;
+  }
+
+  button.mobile-today-focus {
+    border-color: rgba(125, 211, 199, 0.22);
+  }
+
+  .mobile-today-kicker {
+    color: #7dd3c7;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0;
+    text-transform: uppercase;
+  }
+
+  .mobile-today-focus h3 {
+    margin: 0;
+    color: #ffffff;
+    font-size: 18px;
+    line-height: 1.3;
+  }
+
+  .mobile-today-score-row {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .mobile-today-score-row span {
+    min-width: 0;
+    padding: 8px 6px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.07);
+    color: #dce8e8;
+    font-size: 12px;
+    font-weight: 700;
+    text-align: center;
+  }
+
+  .mobile-today-tasks {
+    display: grid;
+    gap: 8px;
+    padding: 14px;
+  }
+
+  .mobile-today-section-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    color: #dce8e8;
+    font-size: 13px;
+    font-weight: 800;
+  }
+
+  .mobile-today-section-head strong {
+    color: #f8d95a;
+  }
+
+  .mobile-today-task {
+    display: grid;
+    gap: 4px;
+    width: 100%;
+    min-height: 74px;
+    padding: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    border-radius: 12px;
+    background: #14242d;
+    color: #edf7f6;
+    text-align: left;
+  }
+
+  .mobile-today-task.high,
+  .mobile-today-task.danger {
+    border-color: rgba(248, 113, 113, 0.36);
+  }
+
+  .mobile-today-task span {
+    color: #7dd3c7;
+    font-size: 11px;
+    font-weight: 800;
+  }
+
+  .mobile-today-task strong {
+    color: #ffffff;
+    font-size: 14px;
+    line-height: 1.25;
+  }
+
+  .mobile-today-task small,
+  .mobile-today-empty {
+    color: #aebdc1;
+    font-size: 12px;
+    line-height: 1.45;
   }
 
   .nav-button[data-view="dashboard"] {

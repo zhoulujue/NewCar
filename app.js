@@ -2760,6 +2760,7 @@ function render() {
   renderAuth();
   renderNav();
   renderDashboard();
+  renderMobileToday();
   renderDiscover();
   renderGarage();
   renderNewCars();
@@ -3246,6 +3247,76 @@ function renderDashboard() {
       </div>
     </div>
   `).join("");
+}
+
+function renderMobileToday() {
+  const container = document.querySelector("#mobileToday");
+  if (!container) return;
+  const actions = getDashboardWorkflowActions().slice(0, 3);
+  const best = [...state.cars].sort((a, b) => fitScore(b) - fitScore(a))[0];
+  const recommendationCandidate = state.requirementAnalysis.candidates
+    .filter((candidate) => !candidate.carId || !state.cars.some((car) => car.id === candidate.carId))
+    .sort((a, b) => (b.fitScore || 0) - (a.fitScore || 0))[0];
+  const addButtonAttrs = recommendationCandidate ? ` data-add-requirement-candidate="${escapeAttr(recommendationCandidate.id)}"` : "";
+  const addButtonLabel = recommendationCandidate ? `加入 ${escapeHtml(recommendationCandidate.name)}` : "新增候选";
+  const taskMarkup = actions.map(({ car, task, workflow }) => `
+    <button class="mobile-today-task ${task.level}" data-detail="${car.id}" type="button">
+      <span>${escapeHtml(workflow.decision.label)}</span>
+      <strong>${escapeHtml(task.title)}</strong>
+      <small>${escapeHtml(car.name)} · ${escapeHtml(task.detail)}</small>
+    </button>
+  `).join("");
+
+  container.innerHTML = `
+    <section class="mobile-today-hero">
+      <div>
+        <span class="eyebrow">Today</span>
+        <h2>${escapeHtml(mobileDecisionTitle(best))}</h2>
+        <p>${escapeHtml(best?.nextAction || state.requirementAnalysis.summary || "先放进一台真实候选，今天就有可推进的判断。")}</p>
+      </div>
+      <button class="mobile-today-add" id="mobileTodayAddCar" type="button"${addButtonAttrs}>${addButtonLabel}</button>
+    </section>
+    ${renderMobileTodayFocus(best)}
+    <section class="mobile-today-tasks" aria-label="今日待办">
+      <div class="mobile-today-section-head">
+        <span>下一步</span>
+        <strong>${actions.length || 0}</strong>
+      </div>
+      ${taskMarkup || `<div class="mobile-today-empty">暂无待关闭风险项，先补候选或刷新画像。</div>`}
+    </section>
+  `;
+}
+
+function mobileDecisionTitle(car) {
+  if (!car) return "今天先建立候选池";
+  const rec = deriveRecommendation(car);
+  return `${car.name}：${recommendationLabel(rec)}`;
+}
+
+function renderMobileTodayFocus(car) {
+  if (!car) {
+    return `
+      <section class="mobile-today-focus">
+        <span class="mobile-today-kicker">焦点候选</span>
+        <h3>还没有主推车型</h3>
+        <p>用画像推荐或手动新增一台车，移动端会把今天最该推进的候选放在这里。</p>
+      </section>
+    `;
+  }
+  const risk = analyzeCar(car);
+  const quality = assessCarQuality(car);
+  return `
+    <button class="mobile-today-focus" data-detail="${car.id}" type="button">
+      <span class="mobile-today-kicker">焦点候选</span>
+      <h3>${escapeHtml(car.name)} ${escapeHtml(car.trim || "")}</h3>
+      <div class="mobile-today-score-row">
+        <span>匹配 ${fitScore(car)}</span>
+        <span>${riskLabel(risk.level)} ${risk.score}</span>
+        <span>证据 ${quality.evidenceCompleteness}%</span>
+      </div>
+      <p>${escapeHtml(car.notes || car.issues || "继续补齐价格、权益、车况和试驾证据。")}</p>
+    </button>
+  `;
 }
 
 function metric(label, value, foot) {
@@ -8230,6 +8301,7 @@ document.body.addEventListener("click", (event) => {
   const releaseId = event.target.closest("[data-add-release]")?.dataset.addRelease;
   const usedListingId = event.target.closest("[data-add-used-listing]")?.dataset.addUsedListing;
   const requirementCandidateId = event.target.closest("[data-add-requirement-candidate]")?.dataset.addRequirementCandidate;
+  const mobileTodayAddCar = event.target.closest("#mobileTodayAddCar");
   const openSourceAppId = event.target.closest("[data-open-source-app]")?.dataset.openSourceApp;
   const detailQuickAction = event.target.closest("[data-detail-quick-action]")?.dataset.detailQuickAction;
   const deleteEvidenceId = event.target.closest("[data-delete-evidence]")?.dataset.deleteEvidence;
@@ -8270,6 +8342,11 @@ document.body.addEventListener("click", (event) => {
   if (releaseId) addReleaseToGarage(releaseId);
   if (usedListingId) addUsedListingToGarage(usedListingId);
   if (requirementCandidateId) addRequirementCandidateToGarage(requirementCandidateId);
+  if (mobileTodayAddCar && !requirementCandidateId) {
+    const mobileCandidateId = mobileTodayAddCar.dataset.addRequirementCandidate;
+    if (mobileCandidateId) addRequirementCandidateToGarage(mobileCandidateId);
+    else openCarDialog();
+  }
   if (openSourceAppId) openSourceInApp(openSourceAppId);
   if (detailQuickAction) handleDetailQuickAction(detailQuickAction);
   if (event.target.closest("[data-dashboard-ai]")) analyzeDashboardBestWithGemini();

@@ -360,6 +360,27 @@ test("mobile native shell exposes Today Candidates Capture Discover More", async
   assert.match(css, /\.nav-button\[data-view="drives"\][\s\S]*?display: none/);
 });
 
+test("mobile Today decision board renders top focus and tasks", async () => {
+  const app = await readFile(new URL("app.js", root), "utf8");
+  const css = await readFile(new URL("styles.css", root), "utf8");
+  const mobileStart = css.indexOf("@media (max-width: 820px)");
+  const mobileEnd = css.indexOf("@media", mobileStart + 1);
+  const mobileCss = css.slice(mobileStart, mobileEnd);
+
+  assert.match(app, /function renderMobileToday/);
+  assert.match(app, /function mobileDecisionTitle/);
+  assert.match(app, /function renderMobileTodayFocus/);
+  assert.match(app, /renderDashboard\(\);\s*renderMobileToday\(\);/);
+  assert.match(app, /getDashboardWorkflowActions\(\)\.slice\(0,\s*3\)/);
+  assert.match(app, /id="mobileTodayAddCar"/);
+  assert.match(app, /mobileTodayAddCar[\s\S]*?addRequirementCandidateToGarage/);
+  assert.match(css, /\.mobile-today-hero/);
+  assert.match(css, /\.mobile-today-focus/);
+  assert.match(css, /\.mobile-today-tasks/);
+  assert.match(mobileCss, /body\[data-view="dashboard"\]\s*\{[\s\S]*?background:\s*#[0-9a-fA-F]{3,6}/);
+  assert.match(mobileCss, /body\[data-view="dashboard"\]\s+\.main\s*\{[\s\S]*?background:\s*#[0-9a-fA-F]{3,6}/);
+});
+
 test("mobile native pages have dedicated containers instead of desktop-only compression", async () => {
   const html = await readFile(new URL("index.html", root), "utf8");
 
