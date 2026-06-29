@@ -291,6 +291,8 @@ let activeView = "dashboard";
 let activeDiscoverTab = "newcars";
 let mobileGarageStage = "all";
 let selectedCarId = state.selectedCarId || state.cars[0]?.id || "";
+let captureSheetOpen = false;
+let lastViewedCarId;
 let selectedCompare = new Set(state.selectedCompare?.length ? state.selectedCompare : state.cars.slice(0, 3).map((car) => car.id));
 const viewScrollPositions = {};
 
@@ -2767,6 +2769,7 @@ function render() {
   ensureSelectedCar();
   renderAuth();
   renderNav();
+  renderMobileCaptureSheet();
   renderDashboard();
   renderMobileToday();
   renderDiscover();
@@ -2804,6 +2807,44 @@ function renderNav() {
   document.querySelector("#viewSubtitle").textContent = subtitle;
   document.querySelectorAll(".view").forEach((view) => view.classList.remove("active"));
   document.querySelector(`#${activeView}View`)?.classList.add("active");
+}
+
+function renderMobileCaptureSheet() {
+  const sheet = document.querySelector("#mobileCaptureSheet");
+  if (!sheet) return;
+  const candidateSelect = document.querySelector("#mobileCaptureCandidate");
+  const defaultCandidateId = getDefaultCaptureCandidateId();
+  sheet.hidden = !captureSheetOpen;
+  sheet.classList.toggle("is-open", captureSheetOpen);
+  document.body.classList.toggle("mobile-capture-open", captureSheetOpen);
+  if (!candidateSelect) return;
+  const currentValue = candidateSelect.value || defaultCandidateId;
+  candidateSelect.innerHTML = state.cars.length
+    ? state.cars.map((car) => {
+      const label = `${car.name || "未命名候选"} ${car.trim || ""}`.trim();
+      const selected = car.id === currentValue || (!state.cars.some((item) => item.id === currentValue) && car.id === defaultCandidateId);
+      return `<option value="${escapeAttr(car.id)}" ${selected ? "selected" : ""}>${escapeHtml(label)}</option>`;
+    }).join("")
+    : `<option value="">暂无候选</option>`;
+}
+
+function getDefaultCaptureCandidateId() {
+  const hasCar = (id) => state.cars.some((car) => car.id === id);
+  if (hasCar(lastViewedCarId)) return lastViewedCarId;
+  if (hasCar(selectedCarId)) return selectedCarId;
+  return state.cars.find((car) => !["rejected", "purchased"].includes(car.stage))?.id || state.cars[0]?.id || "";
+}
+
+function openMobileCaptureSheet() {
+  captureSheetOpen = true;
+  const candidateSelect = document.querySelector("#mobileCaptureCandidate");
+  if (candidateSelect) candidateSelect.value = getDefaultCaptureCandidateId();
+  renderMobileCaptureSheet();
+}
+
+function closeMobileCaptureSheet() {
+  captureSheetOpen = false;
+  renderMobileCaptureSheet();
 }
 
 function setActiveView(view, { scroll = "restore" } = {}) {
@@ -7079,6 +7120,83 @@ async function addEvidenceFromForm() {
   analyzeCurrentCarWithGemini({ auto: true, focusInfoId: item.id });
 }
 
+async function saveMobileCaptureEntry() {
+  const candidateSelect = document.querySelector("#mobileCaptureCandidate");
+  const candidateId = candidateSelect?.value || getDefaultCaptureCandidateId();
+  const car = state.cars.find((candidate) => candidate.id === candidateId);
+  if (!car) {
+    showToast("先添加一个候选，再保存信息。", "warn");
+    return;
+  }
+  const title = getValue("#mobileCaptureTitleInput");
+  const url = getValue("#mobileCaptureUrl");
+  const notes = getValue("#mobileCaptureNotes");
+  const files = document.querySelector("#mobileCaptureFiles")?.files;
+  let attachments = [];
+  try {
+    attachments = await filesToInfoAttachments(files);
+  } catch {
+    showToast("有图片读取失败，换一张截图或保存为 JPG/PNG 后再试。", "danger");
+    return;
+  }
+  const attachmentStats = collectAttachmentPayloadStats([{ attachments }], {
+    warningBytes: INFO_ATTACHMENT_WARNING_BYTES,
+    hardLimitBytes: INFO_ATTACHMENT_HARD_BYTES
+  });
+  if (attachmentStats.tooLarge) {
+    showToast(`图片合计 ${formatBytes(attachmentStats.totalBytes)}，本机保存风险太高；请分批添加或减少截图。`, "danger");
+    return;
+  }
+  if (!title && !url && !notes && !attachments.length) {
+    showToast("先写一点信息，或上传照片/截图。", "warn");
+    return;
+  }
+  const fallbackTitle = notes ? notes.slice(0, 24) : attachments[0]?.name || url || "手机记录";
+  const item = {
+    id: makeId("ev"),
+    carId: candidateId,
+    title: title || fallbackTitle,
+    type: inferEvidenceType(title, notes, url),
+    status: "valid",
+    url,
+    notes,
+    attachments,
+    createdAt: new Date().toISOString().slice(0, 10),
+    analysisStatus: "queued",
+    analysisError: "",
+    analysisResult: null,
+    linkedRiskIds: [],
+    appliedAt: ""
+  };
+  state.evidence.unshift(item);
+  addDecisionLog(car, {
+    type: "evidence",
+    title: `手机添加信息：${item.title}`,
+    detail: notes || url || `${attachments.length} 张图片`,
+    level: "info",
+    relatedIds: [item.id]
+  });
+  car.updatedAt = new Date().toISOString();
+  selectedCarId = candidateId;
+  lastViewedCarId = candidateId;
+  ["#mobileCaptureTitleInput", "#mobileCaptureUrl", "#mobileCaptureNotes"].forEach((selector) => setValue(selector, ""));
+  if (document.querySelector("#mobileCaptureFiles")) document.querySelector("#mobileCaptureFiles").value = "";
+  closeMobileCaptureSheet();
+  const saved = render();
+  if (!saved) {
+    showToast("信息已加入当前页面，但本机存储空间不足，刷新可能丢失；请减少图片或导出 JSON。", "danger");
+    return;
+  }
+  if (attachmentStats.shouldWarn) {
+    showToast(`信息已保存；图片合计 ${formatBytes(attachmentStats.totalBytes)}，先不自动分析，避免 AI 请求过大。`, "warn");
+    markEvidenceAnalysisState(item.id, "idle");
+    render();
+    return;
+  }
+  showToast("信息已保存到候选信息墙，正在调用 AI 分析。", "ok");
+  analyzeCurrentCarWithGemini({ auto: true, focusInfoId: item.id });
+}
+
 function inferEvidenceType(title = "", notes = "", url = "") {
   const text = `${title} ${notes} ${url}`;
   if (/soh|电池健康|健康度|三电质保|故障码|电池一致性|投诉销量比|车质网|召回|缺陷|电池包|电机|电控/i.test(text)) return "quality";
@@ -8346,6 +8464,7 @@ function numberValue(selector) {
 
 function switchToDetail(carId) {
   selectedCarId = carId;
+  lastViewedCarId = carId;
   setActiveView("detail", { scroll: "top" });
 }
 
@@ -8434,11 +8553,15 @@ document.body.addEventListener("click", (event) => {
   const copyEvidencePackSection = event.target.closest("[data-copy-evidence-pack]")?.dataset.copyEvidencePack;
   const evidenceActionStatus = event.target.closest("[data-evidence-action-status]");
   const riskStatusButton = event.target.closest("[data-risk-status]");
+  const mobileCaptureButton = event.target.closest("[data-mobile-capture]");
+  const closeMobileCaptureButton = event.target.closest("[data-close-mobile-capture]");
   const shouldAddEvidence = Boolean(event.target.closest("[data-add-evidence]"));
 
   if (event.target.closest("[data-close-copy-fallback]")) {
     event.target.closest(".copy-fallback-panel")?.remove();
   }
+  if (mobileCaptureButton) openMobileCaptureSheet();
+  if (closeMobileCaptureButton) closeMobileCaptureSheet();
   if (viewLink) {
     setActiveView(viewLink);
   }
@@ -8586,6 +8709,11 @@ document.querySelector("#refreshDcdUsedCars").addEventListener("click", refreshD
 document.querySelector("#evidenceForm").addEventListener("submit", (event) => {
   event.preventDefault();
   addEvidenceFromForm();
+});
+
+document.querySelector("#mobileCaptureForm")?.addEventListener("submit", (event) => {
+  event.preventDefault();
+  saveMobileCaptureEntry();
 });
 
 document.querySelector("#driveForm").addEventListener("submit", (event) => {

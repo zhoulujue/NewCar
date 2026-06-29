@@ -442,3 +442,49 @@ test("mobile native pages have dedicated containers instead of desktop-only comp
   assert.match(html, /id="mobileCaptureFiles"/);
   assert.match(html, /id="mobileCaptureNotes"/);
 });
+
+test("mobile capture bottom sheet wires state render handlers and save path", async () => {
+  const app = await readFile(new URL("app.js", root), "utf8");
+
+  assert.match(app, /let captureSheetOpen = false/);
+  assert.match(app, /let lastViewedCarId/);
+  assert.match(app, /function renderMobileCaptureSheet/);
+  assert.match(app, /function getDefaultCaptureCandidateId/);
+  assert.match(app, /function openMobileCaptureSheet/);
+  assert.match(app, /function closeMobileCaptureSheet/);
+  assert.match(app, /async function saveMobileCaptureEntry/);
+  assert.match(app, /renderNav\(\);\s*renderMobileCaptureSheet\(\);/);
+  assert.match(app, /function switchToDetail\(carId\) \{[\s\S]*?lastViewedCarId = carId;/);
+  assert.match(app, /event\.target\.closest\("\[data-mobile-capture\]"\)/);
+  assert.match(app, /event\.target\.closest\("\[data-close-mobile-capture\]"\)/);
+  assert.match(app, /document\.querySelector\("#mobileCaptureForm"\)\?\.addEventListener\("submit",/);
+  assert.match(app, /saveMobileCaptureEntry\(\)/);
+  assert.match(app, /document\.querySelector\("#mobileCaptureCandidate"\)/);
+  assert.match(app, /document\.querySelector\("#mobileCaptureFiles"\)\?\.files/);
+  assert.match(app, /filesToInfoAttachments\(files\)/);
+  assert.match(app, /collectAttachmentPayloadStats\(\[\{ attachments \}\]/);
+  assert.match(app, /inferEvidenceType\(title, notes, url\)/);
+  assert.match(app, /addDecisionLog\(car,/);
+  assert.match(app, /analyzeCurrentCarWithGemini\(\{ auto: true, focusInfoId: item\.id \}\)/);
+});
+
+test("mobile capture bottom sheet has hidden desktop and open mobile sheet styling", async () => {
+  const css = await readFile(new URL("styles.css", root), "utf8");
+  const mobileStart = css.indexOf("@media (max-width: 820px)");
+  const mobileEnd = css.indexOf("@media", mobileStart + 1);
+  const mobileCss = css.slice(mobileStart, mobileEnd);
+
+  assert.match(css, /\.mobile-capture-sheet/);
+  assert.match(css, /\.mobile-capture-panel/);
+  assert.match(css, /\.mobile-capture-backdrop/);
+  assert.match(css, /\.mobile-capture-sheet\s*\{[\s\S]*?display: none/);
+  assert.match(mobileCss, /\.mobile-capture-sheet/);
+  assert.match(mobileCss, /\.mobile-capture-sheet\.is-open/);
+  assert.match(mobileCss, /\.mobile-capture-sheet\.is-open[\s\S]*?display: block/);
+  assert.match(mobileCss, /\.mobile-capture-panel[\s\S]*?bottom: 0/);
+  assert.match(mobileCss, /\.mobile-capture-panel[\s\S]*?max-height: calc\(100dvh/);
+  assert.match(mobileCss, /\.mobile-capture-backdrop[\s\S]*?position: fixed/);
+  assert.match(mobileCss, /\.mobile-capture-upload/);
+  assert.match(mobileCss, /\.mobile-capture-actions/);
+  assert.match(mobileCss, /env\(safe-area-inset-bottom\)/);
+});
