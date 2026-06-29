@@ -4858,6 +4858,15 @@ button:disabled {
   }
 }
 
+.mobile-today,
+.mobile-stage-chips,
+.mobile-car-feed,
+.mobile-detail-segments,
+.mobile-capture-sheet,
+.capture-nav-button {
+  display: none;
+}
+
 @media (max-width: 820px) {
   .investigation-board {
     display: flex;
@@ -4976,7 +4985,16 @@ button:disabled {
     overflow: visible;
   }
 
+  body[data-view="dashboard"] .mobile-today {
+    display: grid;
+  }
+
+  .capture-nav-button {
+    display: grid;
+  }
+
   .nav-button[data-view="compare"],
+  .nav-button[data-view="drives"],
   .nav-button[data-view="sellers"] {
     display: none;
   }

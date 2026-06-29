@@ -9,7 +9,7 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="format-detection" content="telephone=no">
     <title>NewCar 购车工作台</title>
-    <link rel="stylesheet" href="./styles.css?v=20260610-v26-ux-polish">
+    <link rel="stylesheet" href="./styles.css?v=20260629-v27-mobile-native">
     <script src="./auth-config.js"></script>
     <script src="https://accounts.google.com/gsi/client" async defer></script>
   </head>
@@ -24,9 +24,10 @@
           </div>
         </div>
         <nav class="nav-list" aria-label="主导航">
-          <button class="nav-button active" data-view="dashboard" data-mobile-label="总览" type="button">总览</button>
+          <button class="nav-button active" data-view="dashboard" data-mobile-label="今日" type="button">总览</button>
           <button class="nav-button" data-view="discover" data-mobile-label="发现" type="button">发现</button>
-          <button class="nav-button" data-view="garage" data-mobile-label="尽调" type="button">候选尽调</button>
+          <button class="nav-button" data-view="garage" data-mobile-label="候选" type="button">候选尽调</button>
+          <button class="nav-button capture-nav-button" data-mobile-capture type="button" aria-label="记录新信息">+</button>
           <button class="nav-button" data-view="compare" data-mobile-label="对比" type="button">对比</button>
           <button class="nav-button" data-view="drives" data-mobile-label="试驾" type="button">试驾</button>
           <button class="nav-button" data-view="sellers" data-mobile-label="商家" type="button">商家</button>
@@ -75,6 +76,7 @@
         </header>
 
         <section class="view active" id="dashboardView">
+          <section id="mobileToday" class="mobile-today" aria-label="今日决策"></section>
           <section class="panel requirement-panel" id="requirementPanel">
             <div class="panel-head requirement-head">
               <div>
@@ -200,6 +202,8 @@
 
         <section class="view" id="garageView">
           <section id="garageListHeader" class="panel garage-list-header"></section>
+          <div id="mobileGarageStageChips" class="mobile-stage-chips" aria-label="候选阶段"></div>
+          <div id="mobileCarFeed" class="mobile-car-feed"></div>
           <div class="toolbar">
             <input id="searchInput" class="search" type="search" placeholder="搜索车型、商家、城市、备注">
             <select id="stageFilter" class="select">
@@ -362,6 +366,7 @@
               </details>
             </div>
           </div>
+          <nav id="mobileDetailSegments" class="mobile-detail-segments" aria-label="详情分段"></nav>
           <div class="detail-layout">
             <div class="detail-stack" id="candidateDetailMain">
               <section id="detailHero" class="panel"></section>
@@ -609,6 +614,37 @@
 
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
+    <div id="mobileCaptureSheet" class="mobile-capture-sheet" hidden>
+      <div class="mobile-capture-backdrop" data-close-mobile-capture></div>
+      <section class="mobile-capture-panel" role="dialog" aria-modal="true" aria-labelledby="mobileCaptureTitle">
+        <button class="mobile-sheet-handle" data-close-mobile-capture type="button" aria-label="关闭记录面板"></button>
+        <div class="mobile-capture-head">
+          <div>
+            <h2 id="mobileCaptureTitle">记录新信息</h2>
+            <p>先保存，AI 再帮你归档和分析。</p>
+          </div>
+        </div>
+        <div class="mobile-capture-actions" role="group" aria-label="记录类型">
+          <button data-capture-mode="photo" type="button">拍照</button>
+          <button data-capture-mode="image" type="button">截图</button>
+          <button data-capture-mode="link" type="button">贴链接</button>
+          <button data-capture-mode="note" type="button">写备注</button>
+        </div>
+        <form id="mobileCaptureForm" class="mobile-capture-form">
+          <label>关联候选<select id="mobileCaptureCandidate" class="input"></select></label>
+          <input id="mobileCaptureTitleInput" class="input" placeholder="标题，可留空">
+          <input id="mobileCaptureUrl" class="input" placeholder="链接，可留空">
+          <textarea id="mobileCaptureNotes" class="input" rows="4" placeholder="聊天承诺、检测结论、自己的判断..."></textarea>
+          <label class="upload-zone mobile-capture-upload">
+            <span>上传照片/截图</span>
+            <small>支持多张手机照片、聊天截图、车源截图</small>
+            <input id="mobileCaptureFiles" type="file" accept="image/*" multiple>
+          </label>
+          <button class="primary-button" type="submit">保存到信息墙</button>
+        </form>
+      </section>
+    </div>
+
     <dialog id="carDialog" class="dialog">
       <form id="carForm" method="dialog" class="dialog-body">
         <div class="dialog-head">
@@ -783,6 +819,6 @@
       </form>
     </dialog>
 
-    <script src="./app.js?v=20260610-v26-ux-polish"></script>
+    <script src="./app.js?v=20260629-v27-mobile-native"></script>
   </body>
 </html>

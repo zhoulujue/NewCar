@@ -88,7 +88,7 @@ test("V1.3 desktop navigation is consolidated around discovery and reports", asy
   assert.doesNotMatch(nav, /data-view="usedcars"/);
   assert.doesNotMatch(nav, /data-view="risks"/);
   assert.match(html, /data-mobile-label="发现"/);
-  assert.match(html, /data-mobile-label="尽调"/);
+  assert.match(html, /data-mobile-label="候选"/);
   assert.match(html, /data-mobile-label="更多"/);
 });
 
@@ -316,4 +316,31 @@ test("PC and mobile detail layouts keep action surfaces readable", async () => {
   assert.match(css, /\.detail-action-grid[\s\S]*?grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
   assert.match(css, /body\[data-view="detail"\] \.main[\s\S]*?padding-bottom: calc\(118px \+ var\(--mobile-nav-height\)/);
   assert.match(css, /\.mobile-detail-actions[\s\S]*?env\(safe-area-inset-bottom\)/);
+});
+
+test("mobile native shell exposes Today Candidates Capture Discover More", async () => {
+  const html = await readFile(new URL("index.html", root), "utf8");
+  const css = await readFile(new URL("styles.css", root), "utf8");
+
+  assert.match(html, /data-mobile-label="今日"/);
+  assert.match(html, /data-mobile-label="候选"/);
+  assert.match(html, /data-mobile-label="发现"/);
+  assert.match(html, /data-mobile-label="更多"/);
+  assert.match(html, /data-mobile-capture/);
+  assert.match(html, /id="mobileCaptureSheet"/);
+  assert.match(css, /\.capture-nav-button/);
+  assert.match(css, /body\[data-view="dashboard"\][\s\S]*?\.mobile-today/);
+  assert.match(css, /\.nav-button\[data-view="drives"\][\s\S]*?display: none/);
+});
+
+test("mobile native pages have dedicated containers instead of desktop-only compression", async () => {
+  const html = await readFile(new URL("index.html", root), "utf8");
+
+  assert.match(html, /id="mobileToday"/);
+  assert.match(html, /id="mobileGarageStageChips"/);
+  assert.match(html, /id="mobileCarFeed"/);
+  assert.match(html, /id="mobileDetailSegments"/);
+  assert.match(html, /id="mobileCaptureCandidate"/);
+  assert.match(html, /id="mobileCaptureFiles"/);
+  assert.match(html, /id="mobileCaptureNotes"/);
 });
