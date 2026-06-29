@@ -289,6 +289,7 @@ let googleAuthAttempts = 0;
 let state = normalizeState(loadState());
 let activeView = "dashboard";
 let activeDiscoverTab = "newcars";
+let mobileGarageStage = "all";
 let selectedCarId = state.selectedCarId || state.cars[0]?.id || "";
 let selectedCompare = new Set(state.selectedCompare?.length ? state.selectedCompare : state.cars.slice(0, 3).map((car) => car.id));
 const viewScrollPositions = {};
@@ -2763,6 +2764,7 @@ function render() {
   renderMobileToday();
   renderDiscover();
   renderGarage();
+  renderMobileGarage();
   renderNewCars();
   renderUsedCars();
   renderDetail();
@@ -3407,6 +3409,83 @@ function renderGarage() {
     `;
   }).join("") || `<div class="muted">没有符合条件的候选。</div>`}
   `;
+}
+
+function renderMobileGarage() {
+  const chips = document.querySelector("#mobileGarageStageChips");
+  const feed = document.querySelector("#mobileCarFeed");
+  if (!chips || !feed) return;
+  const stages = ["all", "watching", "contacted", "waiting-docs", "test-drive", "recheck", "negotiating", "rejected", "purchased"];
+  if (!stages.includes(mobileGarageStage)) mobileGarageStage = "all";
+  const counts = Object.fromEntries(stages.map((stage) => [
+    stage,
+    stage === "all" ? state.cars.length : state.cars.filter((car) => car.stage === stage).length
+  ]));
+  const cars = state.cars
+    .filter((car) => mobileGarageStage === "all" || car.stage === mobileGarageStage)
+    .sort((a, b) => {
+      const stageDelta = stages.indexOf(a.stage) - stages.indexOf(b.stage);
+      if (mobileGarageStage === "all" && stageDelta !== 0) return stageDelta;
+      return fitScore(b) - fitScore(a);
+    });
+
+  chips.innerHTML = stages.map((stage) => {
+    const active = mobileGarageStage === stage;
+    const label = stage === "all" ? "全部" : stageLabel(stage);
+    return `
+      <button class="${active ? "active" : ""}" data-mobile-stage="${escapeAttr(stage)}" type="button" aria-pressed="${active}">
+        <span>${escapeHtml(label)}</span>
+        <strong>${counts[stage] || 0}</strong>
+      </button>
+    `;
+  }).join("");
+
+  feed.innerHTML = cars.map(renderMobileGarageCard).join("") || `
+    <div class="mobile-car-empty">
+      <strong>这个阶段还没有候选</strong>
+      <span>切回全部，或新增一台候选继续尽调。</span>
+    </div>
+  `;
+}
+
+function renderMobileGarageCard(car) {
+  const kind = carKind(car);
+  const risk = analyzeCar(car);
+  const rec = deriveRecommendation(car);
+  const progress = getInvestigationProgress(car);
+  const riskSummary = riskCompletionSummary(car);
+  const quality = assessCarQuality(car);
+  return `
+    <button class="mobile-car-card" data-detail="${escapeAttr(car.id)}" type="button">
+      <div class="mobile-car-card-top">
+        <div>
+          <span>${escapeHtml(stageLabel(car.stage))} · ${escapeHtml(carKindLabel(kind))}</span>
+          <strong>${escapeHtml(car.name)}</strong>
+          <small>${escapeHtml(car.trim || car.city || "候选车源")}</small>
+        </div>
+        <div class="mobile-car-price">${formatWan(car.price)}</div>
+      </div>
+      <div class="mobile-car-metrics">
+        <span>匹配 ${fitScore(car)}</span>
+        <span>${riskLabel(risk.level)} ${risk.score}</span>
+        <span>证据 ${quality.evidenceCompleteness}%</span>
+      </div>
+      <div class="mobile-car-progress">
+        <span style="width:${progress.percent}%"></span>
+      </div>
+      <div class="mobile-car-foot">
+        <span>${progress.done}/${progress.total} 尽调</span>
+        <span>${riskSummary.open ? `${riskSummary.open} 风险` : "风险已闭环"}</span>
+        <span>${escapeHtml(recommendationLabel(rec))}</span>
+      </div>
+    </button>
+  `;
+}
+
+function setMobileGarageStage(stage) {
+  const stages = ["all", "watching", "contacted", "waiting-docs", "test-drive", "recheck", "negotiating", "rejected", "purchased"];
+  mobileGarageStage = stages.includes(stage) ? stage : "all";
+  renderMobileGarage();
 }
 
 function renderInvestigationBoard(cars) {
@@ -8304,6 +8383,7 @@ document.body.addEventListener("click", (event) => {
   const usedListingId = event.target.closest("[data-add-used-listing]")?.dataset.addUsedListing;
   const requirementCandidateId = event.target.closest("[data-add-requirement-candidate]")?.dataset.addRequirementCandidate;
   const mobileTodayAddCar = event.target.closest("#mobileTodayAddCar");
+  const mobileStageButton = event.target.closest("[data-mobile-stage]");
   const openSourceAppId = event.target.closest("[data-open-source-app]")?.dataset.openSourceApp;
   const detailQuickAction = event.target.closest("[data-detail-quick-action]")?.dataset.detailQuickAction;
   const deleteEvidenceId = event.target.closest("[data-delete-evidence]")?.dataset.deleteEvidence;
@@ -8344,6 +8424,7 @@ document.body.addEventListener("click", (event) => {
   if (releaseId) addReleaseToGarage(releaseId);
   if (usedListingId) addUsedListingToGarage(usedListingId);
   if (requirementCandidateId) addRequirementCandidateToGarage(requirementCandidateId);
+  if (mobileStageButton) setMobileGarageStage(mobileStageButton.dataset.mobileStage);
   if (mobileTodayAddCar && !requirementCandidateId) {
     const mobileCandidateId = mobileTodayAddCar.dataset.addRequirementCandidate;
     if (mobileCandidateId) addRequirementCandidateToGarage(mobileCandidateId);

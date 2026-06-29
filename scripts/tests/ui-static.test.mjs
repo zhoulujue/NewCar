@@ -384,6 +384,30 @@ test("mobile Today decision board renders top focus and tasks", async () => {
   assert.match(mobileCss, /body\[data-view="dashboard"\]\s+\.main\s*\{[\s\S]*?background:\s*#[0-9a-fA-F]{3,6}/);
 });
 
+test("mobile garage candidate feed renders stage chips and detail cards", async () => {
+  const app = await readFile(new URL("app.js", root), "utf8");
+  const css = await readFile(new URL("styles.css", root), "utf8");
+  const mobileStart = css.indexOf("@media (max-width: 820px)");
+  const mobileEnd = css.indexOf("@media", mobileStart + 1);
+  const mobileCss = css.slice(mobileStart, mobileEnd);
+
+  assert.match(app, /let mobileGarageStage = "all"/);
+  assert.match(app, /function renderMobileGarage\(/);
+  assert.match(app, /function renderMobileGarageCard\(/);
+  assert.match(app, /function setMobileGarageStage\(/);
+  assert.match(app, /renderGarage\(\);\s*renderMobileGarage\(\);/);
+  assert.match(app, /event\.target\.closest\("\[data-mobile-stage\]"\)/);
+  assert.match(app, /setMobileGarageStage\(mobileStageButton\.dataset\.mobileStage\)/);
+  assert.match(app, /class="mobile-car-card" data-detail="\$\{escapeAttr\(car\.id\)\}"/);
+  assert.match(app, /data-mobile-stage="\$\{escapeAttr\(stage\)\}"/);
+  assert.match(mobileCss, /body\[data-view="garage"\]\s+#carGrid[\s\S]*?display: none/);
+  assert.match(mobileCss, /body\[data-view="garage"\]\s+\.toolbar[\s\S]*?display: none/);
+  assert.match(mobileCss, /body\[data-view="garage"\]\s+\.garage-list-header[\s\S]*?display: none/);
+  assert.match(mobileCss, /\.mobile-stage-chips[\s\S]*?display: flex/);
+  assert.match(mobileCss, /\.mobile-car-feed[\s\S]*?display: grid/);
+  assert.match(mobileCss, /\.mobile-car-card[\s\S]*?display: grid/);
+});
+
 test("mobile native pages have dedicated containers instead of desktop-only compression", async () => {
   const html = await readFile(new URL("index.html", root), "utf8");
 
